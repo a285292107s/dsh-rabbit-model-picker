@@ -244,10 +244,22 @@ export class ParamsStore implements ParamsFace {
   private inflight: Promise<void> | null = null
 
   /**
-   * @param face - the Host settings + provider directory faces, or null when
-   *   this deployment mounts neither (the panel then stays read-only).
+   * @param face - RESOLVES the Host settings + provider directory faces, or
+   *   returns null when this deployment mounts neither (the panel then stays
+   *   read-only).
+   *
+   *   A RESOLVER rather than the faces themselves, for the reason DESIGN §2.2
+   *   gives and `CapabilityStore` already follows: Remote namespaces are mounted
+   *   by their owners when those owners activate, so `ctx.get('remote.settings')`
+   *   answered at THIS plugin's activation can legitimately be "not yet". Captured
+   *   once, that one unlucky ordering became permanent: the panel claimed
+   *   "this deployment mounts no settings service" — a statement about the
+   *   deployment made from a race — and every write refused with
+   *   `settings are unavailable` for the rest of the page. Resolving per read
+   *   makes the answer depend on what is mounted NOW, which is the only thing the
+   *   claim was ever about.
    */
-  constructor(private readonly face: RemoteFace | null) {}
+  constructor(private readonly face: () => RemoteFace | null) {}
 
   /** Subscribe to snapshot changes. @param listener - called after any change. */
   subscribe(listener: () => void): () => void {
@@ -294,7 +306,7 @@ export class ParamsStore implements ParamsFace {
   async write(
     ns: string, ops: readonly SettingsOp[], expectedRevision: number | undefined,
   ): Promise<WriteOutcome> {
-    const face = this.face
+    const face = this.face()
     if (face === null) return { ok: false, conflict: false, message: 'settings are unavailable' }
     let response: RemoteResult<SettingsNamespaceView>
     try {
@@ -329,7 +341,10 @@ export class ParamsStore implements ParamsFace {
   /** Read the provider directory and every namespace, then publish one snapshot. */
   private read(): Promise<void> {
     if (this.inflight !== null) return this.inflight
-    const face = this.face
+    // Resolved per READ, not captured at construction: a namespace that was not
+    // mounted yet must not turn into "this deployment mounts no settings service"
+    // for the rest of the page (see the constructor).
+    const face = this.face()
     if (face === null) {
       this.publish({ ...this.snapshot, status: 'unavailable' })
       return Promise.resolve()

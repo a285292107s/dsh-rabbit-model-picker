@@ -256,6 +256,31 @@ check(
   'params: the settings faces are optional, read via ctx.get',
   entry.includes("scope.get('remote.settings')") && entry.includes("scope.get('remote.llm')"),
 )
+// …and read AT READ TIME rather than captured at activation. Remote namespaces
+// are mounted by their owners when those owners activate (DESIGN §2.2), so the
+// two `ctx.get` calls can honestly answer "not yet" here. Captured once, that
+// unlucky ordering became permanent and was then shown to the user as a claim
+// about the DEPLOYMENT ("this deployment mounts no settings service"), with every
+// write refused — the exact defect `CapabilityStore`'s own resolver exists to
+// avoid. So the face must be a RESOLVER: `settingsFaceOf` returns a function,
+// `ParamsStore` stores a function, and both read sites call it.
+{
+  // `settingsFaceOf` must return a closure, not the faces.
+  const faceOf = /function settingsFaceOf\([\s\S]*?\n\}/.exec(entry)?.[0] ?? ''
+  check(
+    'params: the settings faces are resolved per read, not captured at activation',
+    /return \(\) => \{/.test(faceOf) && !/^ {2}return \{ settings, llm \}/m.test(faceOf),
+    { faceOf: faceOf.slice(0, 220) },
+  )
+  check(
+    'params: ParamsStore stores a face RESOLVER, and its two read sites call it',
+    /constructor\(private readonly face: \(\) => RemoteFace \| null\)/.test(params)
+    && /const face = this\.face\(\)/.test(params)
+    && (params.match(/const face = this\.face\(\)/g) ?? []).length === 2
+    && !/this\.face\b(?!\()/.test(params),
+    { calls: (params.match(/const face = this\.face\(\)/g) ?? []).length },
+  )
+}
 check(
   'params: the seat inject list stays unchanged (the settings faces stay optional)',
   entry.includes("export const inject = ['slots', 'sessions', 'modelDirectories', 'remote', 'remote.session'] as const")
@@ -285,6 +310,9 @@ check(
 // read honest: it never reaches an endpoint, it is resolved late enough to
 // survive activation order, and it never becomes an edit.
 const capabilities = stripComments(read('src/client/capabilities.ts'))
+// The adapter-catalog reader: extracted from `index.ts` so the unit gate can
+// drive it, and read here for the decisions that only source text can show.
+const adapterCatalog = stripComments(read('src/client/adapterCatalog.ts'))
 check(
   'capabilities: a route the adapter only knows from configuration is never interrogated',
   capabilities.includes('entry.declared === true'),
@@ -295,8 +323,26 @@ check(
 )
 check(
   'capabilities: an adapter-owned catalog is named by the route it serves',
-  entry.includes("'dsh-opencode-go'") && entry.includes('opencodeGoModels'),
+  adapterCatalog.includes("'dsh-opencode-go'") && adapterCatalog.includes('opencodeGoModels'),
 )
+// "Not mounted yet" and "published none" are two different answers, and the
+// store consumes them differently: `[]` is an ANSWER it never re-asks, a throw
+// releases the ask for a later open. Collapsing them (returning `[]` for an
+// absent namespace) consumed the one ask of an adapter whose Remote was still
+// mounting, which is the async-mount race the store exists to absorb.
+{
+  const readFn = /export async function readCatalog[\s\S]*?\n\}/.exec(adapterCatalog)?.[0] ?? ''
+  check(
+    'capabilities: an unmounted adapter namespace throws instead of answering "published none"',
+    /typeof face\?\.read !== 'function'\)\s*\{\s*throw/.test(readFn),
+    { readFn: readFn.slice(0, 400) },
+  )
+  check(
+    'capabilities: the adapter-catalog reader is wired through the store, not inlined',
+    entry.includes('registerAdapterCatalogs(ctx, capabilities)')
+    && !/ctx\.get\(`remote\.\$\{namespace\}`\)/.test(entry),
+  )
+}
 check(
   'capabilities: the panel states a published fact beside the notice',
   read('src/client/panelCopy.ts').includes("'settings.input.capability'")
@@ -329,6 +375,31 @@ check(
   capabilities.includes('this.requeue')
     && /requeue\.delete\(provider\)[\s\S]*?ensure\(\[provider\]\)/.test(capabilities),
 )
+// …and it re-runs it on BOTH settle paths. The re-run used to hang off the
+// success branch alone, so a reader that arrived during an ask that FAILED — the
+// async-mount race this store exists to absorb — was never re-run: mount order
+// decided whether its facts ever arrived, and the parked entry stayed in the
+// requeue set forever, later forcing a second read of an already-answered
+// provider. The catch arm must therefore fall THROUGH to the settle, which is
+// exactly what an early `return` there would prevent.
+{
+  const readBody = /private async read\([\s\S]*?\n  \}/.exec(capabilities)?.[0] ?? ''
+  const catchBody = /catch\s*\{([\s\S]*?)\n {4}\}/.exec(readBody)?.[1] ?? null
+  check(
+    'capabilities: the failing arm does not return early (it settles like the answering one)',
+    catchBody !== null && !/\breturn\b/.test(catchBody),
+    { catchBody },
+  )
+  // The settle sits after the try/catch, not inside the success branch: the text
+  // following the try/catch is where the re-run has to appear.
+  const afterTryCatch = readBody.slice(readBody.indexOf(catchBody === null ? '\u0000' : catchBody))
+  check(
+    'capabilities: the re-run is a single settle after the try/catch, not a success-path tail',
+    (readBody.match(/requeueRacingReader\(provider\)/g) ?? []).length === 1
+    && afterTryCatch.includes('requeueRacingReader(provider)'),
+    { calls: (readBody.match(/requeueRacingReader\(provider\)/g) ?? []).length },
+  )
+}
 
 // --- 8. copy: every key used exists, every key defined is used --------------
 // A stale `t('settings.openEdited')` after a rename renders the raw key, and a

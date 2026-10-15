@@ -16,8 +16,9 @@
  */
 
 import type {
-  ClientContext, DiscoveredModel, RemoteCatalogFace, RemoteFace, RemoteLlmFace, RemoteSettingsFace,
+  ClientContext, RemoteFace, RemoteLlmFace, RemoteSettingsFace,
 } from './contract.ts'
+import { ADAPTER_CATALOGS, readCatalog } from './adapterCatalog.ts'
 import { CapabilityStore } from './capabilities.ts'
 import { dictionaries, localTranslate, NS } from './dictionary.ts'
 import { ParamsStore } from './params.ts'
@@ -51,52 +52,45 @@ export const inject = ['slots', 'sessions', 'modelDirectories', 'remote', 'remot
  * the whole entry abdicate to the shipped seat instead. A deployment without
  * them still gets the picker — its parameter panel just reports that the Host
  * settings are unavailable.
+ *
+ * A FUNCTION returning the faces, not the faces: `ParamsStore` calls it per read,
+ * because the Remote namespaces are mounted by their owners when those owners
+ * activate (DESIGN §2.2) and so may legitimately be "not yet" at this plugin's
+ * own activation. Asked once and kept, that ordering would be reported to the
+ * user as "this deployment mounts no settings service" for the rest of the page.
  * @param scope - the injected client scope.
- * @returns both faces, or null when either is not mounted.
+ * @returns the resolver `ParamsStore` reads on every read.
  */
-function settingsFaceOf(scope: ClientContext): RemoteFace | null {
-  const settings = scope.get('remote.settings') as RemoteSettingsFace | undefined
-  const llm = scope.get('remote.llm') as RemoteLlmFace | undefined
-  if (typeof settings?.describe !== 'function' || typeof settings.mutate !== 'function') return null
-  if (typeof llm?.listConfigurableProviders !== 'function') return null
-  return { settings, llm }
+function settingsFaceOf(scope: Pick<ClientContext, 'get'>): () => RemoteFace | null {
+  return () => {
+    const settings = scope.get('remote.settings') as RemoteSettingsFace | undefined
+    const llm = scope.get('remote.llm') as RemoteLlmFace | undefined
+    if (typeof settings?.describe !== 'function' || typeof settings.mutate !== 'function') return null
+    if (typeof llm?.listConfigurableProviders !== 'function') return null
+    return { settings, llm }
+  }
 }
 
 /**
- * Adapter-owned catalogs this plugin reads, and the route each one serves.
+ * Register every adapter-owned catalog this plugin reads.
  *
- * `dsh-opencode-go` is the reason this table exists rather than a generic sweep
- * of `llm/discoverModels`: it never registers a configurable provider (verified
- * in its `lib/index.js`, which calls no `registerConfigurableProviders`), so its
- * route is absent from every settings directory, `resolveRoute` can never
- * address it, and its own `opencodeGoModels/read` — the catalog it publishes
- * over Remote — is the only way to the facts. The route id is the adapter's own
- * `PROVIDER_ID` (`lib/provider-identity.ts`), pinned here because an out-of-repo
- * client plugin cannot value-import the package it is naming.
- */
-const ADAPTER_CATALOGS: readonly { readonly providers: readonly string[], readonly namespace: string }[] = [
-  { providers: ['dsh-opencode-go'], namespace: 'opencodeGoModels' },
-]
-
-/**
- * Read one adapter-owned catalog, or report that it published nothing.
- *
- * The namespace is looked up on every read rather than captured at activation:
- * the Remote namespaces mount asynchronously, so a capture at activation would
- * depend on plugin activation order. A namespace that is not mounted at all —
- * the adapter is not installed — yields an empty list, which is exactly "nothing
- * published" and leaves every route unstated.
+ * The READ itself lives in `adapterCatalog.ts` — it is the one part of this
+ * wiring with a decision in it that a machine can settle (what an adapter that
+ * has not finished mounting is allowed to look like), and the unit gate drives it
+ * there. This only joins that reader to the store, once per activation.
  * @param ctx - client root context.
- * @param namespace - the adapter's Remote namespace name.
- * @returns the models that adapter published, or an empty list.
+ * @param capabilities - the store every seat shares.
  */
-async function readCatalog(ctx: ClientContext, namespace: string): Promise<readonly DiscoveredModel[]> {
-  const face = ctx.get(`remote.${namespace}`) as RemoteCatalogFace | undefined
-  if (typeof face?.read !== 'function') return []
-  const result = await face.read()
-  if (!result.ok) return []
-  const models = result.value?.models
-  return Array.isArray(models) ? models : []
+function registerAdapterCatalogs(ctx: ClientContext, capabilities: CapabilityStore): void {
+  for (const catalog of ADAPTER_CATALOGS) {
+    capabilities.addSource({
+      providers: catalog.providers,
+      // The namespace is resolved per READ, not captured here: the Remote
+      // namespaces mount asynchronously, so a capture at activation would make
+      // the facts depend on plugin activation order.
+      read: () => readCatalog(ctx, catalog.namespace),
+    })
+  }
 }
 
 /**
@@ -124,12 +118,7 @@ export function apply(ctx: ClientContext): void {
   const capabilities = new CapabilityStore(
     () => (ctx.get('remote.llm') as RemoteLlmFace | undefined) ?? null,
   )
-  for (const catalog of ADAPTER_CATALOGS) {
-    capabilities.addSource({
-      providers: catalog.providers,
-      read: () => readCatalog(ctx, catalog.namespace),
-    })
-  }
+  registerAdapterCatalogs(ctx, capabilities)
 
   ctx.inject(['slots', 'sessions', 'modelDirectories', 'remote', 'remote.session'], (scope) => {
     const models = scope.modelDirectories

@@ -177,6 +177,12 @@ export class CapabilityStore implements CapabilityFace {
 
   /**
    * Interrogate one provider, once.
+   *
+   * Both outcomes — an answer and a failure — settle the ask the same way, so the
+   * settle is written once at the end rather than per branch. That is not
+   * tidiness: the requeue below is a decision about the ASK, and it is exactly as
+   * true of an ask that failed as of one that answered (see
+   * {@link requeueRacingReader}).
    * @param provider - provider route id.
    */
   private async read(provider: string): Promise<void> {
@@ -184,7 +190,7 @@ export class CapabilityStore implements CapabilityFace {
     this.inflight.add(provider)
     this.status = 'loading'
     this.publish()
-    let models: readonly DiscoveredModel[]
+    let models: readonly DiscoveredModel[] | null = null
     try {
       models = await this.fetch(provider)
     } catch {
@@ -194,28 +200,56 @@ export class CapabilityStore implements CapabilityFace {
       // nothing for the rest of the page is the exact failure an asynchronously
       // mounted Remote makes possible. An ANSWERED provider — "published none"
       // included — is still asked exactly once (see `fetch`).
-      this.inflight.delete(provider)
       this.unanswered.add(provider)
-      this.status = this.inflight.size === 0 ? 'ready' : 'loading'
-      this.publish()
-      return
     }
     this.inflight.delete(provider)
-    for (const model of models) {
-      if (typeof model?.id !== 'string' || model.id.length === 0) continue
-      const capability = routeCapabilityOf(model)
-      if (capability !== null) this.routes[rowKey(provider, model.id)] = capability
+    // `models !== null` is the "the fetch answered" half; `Array.isArray` is the
+    // trust boundary. Each field of every model is already probed, but the LIST
+    // itself arrives from an adapter's own Remote, and `fetch`'s discovery arm
+    // hands back `result.value` exactly as the adapter typed it. One adapter
+    // answering `undefined` where the contract promises an array would otherwise
+    // throw out of a released ask and take the whole seat's render with it.
+    if (models !== null && Array.isArray(models)) {
+      for (const model of models) {
+        if (typeof model?.id !== 'string' || model.id.length === 0) continue
+        const capability = routeCapabilityOf(model)
+        if (capability !== null) this.routes[rowKey(provider, model.id)] = capability
+      }
     }
     this.status = this.inflight.size === 0 ? 'ready' : 'loading'
     this.publish()
-    // A reader registered while THIS ask was in flight re-runs it here: the
-    // racing read went out without that reader, and without this re-run its
-    // facts would never arrive.
-    if (this.requeue.delete(provider)) {
-      this.asked.delete(provider)
-      this.unanswered.delete(provider)
-      this.ensure([provider])
-    }
+    this.requeueRacingReader(provider)
+  }
+
+  /**
+   * Re-run an ask that a reader registered while it was in flight could not see.
+   *
+   * THE RACE THIS CLOSES. A reader is registered by the wiring, which may land
+   * after the picker has already asked for the routes that reader answers for —
+   * `addSource` documents that as the ordinary case, not an edge one. The running
+   * read cannot carry the reader's facts, so it is parked and re-run once it
+   * settles.
+   *
+   * It is called on BOTH settle paths, and that is the whole point. Hanging it off
+   * the success path alone left two defects in one place: a reader that arrived
+   * during an ask that FAILED — which is precisely the async-mount race this
+   * store exists to absorb, an unmounted LLM face or a dead transport — was never
+   * re-run, so the mount order the store promises to be independent of decided
+   * whether the facts ever arrived; and the parked entry stayed in the requeue set
+   * forever, so it later forced a SECOND read of a provider that had already been
+   * answered, breaking the one-call-per-provider-per-page-load budget below.
+   *
+   * `asked` and `unanswered` are both cleared before the re-ask so it is a real
+   * fresh ask: `ensure` skips a provider it believes it has already asked, and the
+   * re-run must not inherit either verdict from the read that went out without
+   * this reader.
+   * @param provider - the provider whose ask just settled.
+   */
+  private requeueRacingReader(provider: string): void {
+    if (!this.requeue.delete(provider)) return
+    this.asked.delete(provider)
+    this.unanswered.delete(provider)
+    this.ensure([provider])
   }
 
   /**

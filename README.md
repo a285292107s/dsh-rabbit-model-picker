@@ -30,7 +30,8 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
 - **四个事实是一张表**：四列固定、缺失的事实留空位，卡内表头把四列说一次（文字 / 图片 / 思考 / 窗口），
   所以列表能上下比较同一件事，模型名的省略号落点也逐行一致。详见 DESIGN.md §5.24。
 - **内置目录也照样陈述**：模型来自适配器内置目录、配置里没有声明条目时，模态与窗口从**适配器自己
-  发布的目录**读（`llm/discoverModels` / 适配器自有 Remote），而不是留白或猜。
+  发布的目录**读（`llm/discoverModels` / 适配器自有 Remote），而不是留白或猜。**适配器还没挂载**与
+  **适配器什么都没发布**是两件事：前者留着下次重试，所以开卡早于适配器挂载也读得到事实（DESIGN §5.27）。
 - **对比度达标**：面板文字全部过 WCAG AA，由 `npm run contrast` 逐样式量出（含提供商栏的每一行）。
 - **动效有一条声线**：卡片入场（从锚点角 scale 落定）、悬停过渡、按压缩放、选中勾弹跳共用一条
   减速曲线，只动 transform 与背景色；`prefers-reduced-motion` 下全部关掉，键盘滚动只在
@@ -192,6 +193,7 @@ src/client/BadgeIcons.tsx  四个徽章图标（只有"具备这个事实"一种
 src/client/facts.ts        徽章词汇表（渲染层与推导层共用）
 src/client/badges.ts       行内事实推导（纯函数）
 src/client/capabilities.ts 适配器发布的能力目录（只读事实 + 读取策略）
+src/client/adapterCatalog.ts 适配器自有目录的读取器与路由表（"没挂载"≠"什么都没发布"）
 src/client/format.ts       徽章专用窗口写法（整数 + K/M）
 src/client/effort.ts       强度档位命名与列表
 src/client/SettingsMenu.tsx 模型参数面板
@@ -229,13 +231,14 @@ scripts/_squeeze-probe.cjs     窄输入条压测（开发用，只读）
 | 座位面 `{ available, directory, load, select }` | 直接读注入面，无中间层 |
 | `remote` + `remote.session` 必须自己 inject | `directoryFor()` 读 `this.ctx.remote.session`；不声明则座位让位（静默回退） |
 | `remote.settings` / `remote.llm` 用 `ctx.get` 取，不进 inject | 精简/旧部署可能没有；写进必需注入会让整个座位让位。取不到时面板降级为只读 |
+| 这两个面**每次读时**才 `ctx.get`（`settingsFaceOf` 返回取值函数） | remote 命名空间是异步挂载的：激活时抓到 `null` 会变成"这个部署没有设置服务"这个**假的事实**，且整页只读。真不挂的部署仍然照实报只读 |
 | `llm/listConfigurableProviders` → `{ provider, settingsNs, settingsPath }` | 路由 → 配置位置的唯一权威映射 |
 | `settings/describe` → `{ value, user, revision }` | `value` 是真值，`user`（profile patch）判断是否自己声明过 |
 | `settings/mutate` 只接受 volatile 路径，冲突码 `settings/conflict` | 写入唯一入口；冲突要重读重试，拒绝显示原话 |
 | 适配器把模型参数声明为 volatile | 非 volatile 路径会被拒绝；本插件只改这两类字段 |
 | `llm/discoverModels(settingsNs, { provider })` 是 `@Remote`，返回 `contextWindow / maxTokens / inputModalities` | 内置目录路由的只读事实来源；`declared !== true` 才调用——适配器自称"只从配置知道"时这次调用会去打 endpoint |
 | 适配器自有的 remote 命名空间（如 `opencodeGoModels/read`） | 有的适配器（`dsh-opencode-go`）不注册 configurable provider，这条是唯一读得到它的路 |
-| remote 命名空间一律是 `remote.<namespace>` 服务，且**异步挂载** | 读取时按需 `ctx.get`，才不会把插件激活顺序变成事实来源 |
+| remote 命名空间一律是 `remote.<namespace>` 服务，且**异步挂载** | 读取时按需 `ctx.get`，才不会把插件激活顺序变成事实来源；**命名空间还没挂载时"读不到"**（不是"适配器什么都没发布"），这样开卡早于挂载也不会把唯一一次询问消耗掉 |
 | 宿主 `--dsh-composer-model-text-display` / `--…-icon-display` | 窄屏折成图标；不消费就挤爆工具行 |
 | 宿主 label 令牌对比度（caption 2.08:1 / dimmed 1.23:1） | 不能用来写面板说明文字；`npm run contrast` 即为此存在 |
 | `MenuSurface` 底色是半透明子元素 | 对比度取决于合成到哪一层；门按两种底层里较差的那层判 |
@@ -251,12 +254,12 @@ scripts/_squeeze-probe.cjs     窄输入条压测（开发用，只读）
   - **思考强度** → 走会话选择 `directory.select()`，参数面板是唯一入口。
   - 写入**乐观不了**：面板显示来自 Host `describe`，拒绝时显示原话并保持原值；revision 冲突自动重读重试。
 - **行内徽章只陈述读得到的事**：声明 → 适配器发布的目录 → provider 级默认；三者都没有的内容**不渲染**（不是画成"不支持"）。强度徽章始终有，未声明档位时是划掉的。徽章整句同时是行的 `aria-label`。
-- **能力目录每个已答复的 provider 每页读一次，不轮询**：一个 provider 一次 Remote 调用（`ensure` 合并重复请求、结果缓存在插件实例里），页面刷新才会重读。行内徽章在**菜单打开时**才触发读取，从不开菜单的会话不花这次调用。没读到答案的询问（LLM remote 还没挂载、目录读失败、传输失败）不算答复——provider 被释放，下次打开菜单/面板会重试；适配器自己拒绝的 discovery 仍算答复，不重试。
+- **能力目录每个已答复的 provider 每页读一次，不轮询**：一个 provider 一次 Remote 调用（`ensure` 合并重复请求、结果缓存在插件实例里），页面刷新才会重读。行内徽章在**菜单打开时**才触发读取，从不开菜单的会话不花这次调用。没读到答案的询问（LLM remote 还没挂载、目录读失败、传输失败）不算答复——provider 被释放，下次打开菜单/面板会重试；适配器自己拒绝的 discovery 仍算答复，不重试。**判据是"这次询问有没有得到答复"，而不是"哪个 provider"**：适配器自有的目录 Remote 还没挂载时同样算没答复（不是"什么都没发布"），所以开卡早于适配器挂载也读得到事实；反过来，已经答复过的 provider 不会再被读第二次——即使中途有新 reader 登记，重跑也只会发生在那次**尚未答复**的询问上（DESIGN §5.27）。
 - **`declared === true` 的路由不读**：那是适配器自己承认"只从配置知道这个路由"，它的 discovery 会去打 endpoint（联网 + 用凭据），不是选模型菜单该悄悄付的代价。这类路由保持"什么都没公布"。
 - **适配器即时重解析**是读代码确认的（`llm-pi-ai` / `llm-deepseek` 把参数声明为 `.volatile()` 并监听 `loader/volatile-update`），不是 UI 观测——目录至今只发布 `{ provider, model, reasoning }`。
 - **粘性分组头**：宿主观察器在页签隐藏时不回调，滚到头下会重叠。本插件改为始终填 `--dsw-alias-menu-group-header-fill`，代价是分组头一直有 22px 底色带。详见 DESIGN.md §5.8。
 - 目录加载失败、选择被拒、subagent 会话、`locked` 禁用态、pending 菊花已实现但**未在本机实测**。
-- 参数面板**只读分支**（路由不可寻址 / profile 不接受表单编辑 / 部署没挂设置服务）已实现，只做了单元层覆盖，**未在真实 Host 上构造**。
+- 参数面板**只读分支**（路由不可寻址 / profile 不接受表单编辑 / 部署没挂设置服务）已实现，只做了单元层覆盖，**未在真实 Host 上构造**。其中"部署没挂设置服务"这一支的**判据已收紧**（DESIGN §5.27）：设置面是每次读时取的，所以"还没挂上"不会再被误报成"这个部署没有"。真不挂的部署仍然照实说只读。
 - 设置快照在挂载时读一次、**菜单和参数面板每次打开时重读**、写入后用 Host 返回值更新；**没有订阅 host 的设置推送**——面板开着的时候去「设置 → 模型」页改，要等下次打开菜单/面板或本插件写入才看得到。
 - **两栏的宽度是算出来的，不是调出来的**（DESIGN §5.25）：卡片 `min(520px, 100vw - 32px)`；模型列必须留够四轨事实表要的 320px，左栏的盒子实际占 181px（176 的 flex basis + 内边距 + 1px 分隔线）。实测：模型列 331px、模型名列每行 **175px**（单栏时是 ~160px）、左栏最长名 132px 无省略号、13 行不滚动。**视口 ≤536px 时两栏折成一栏**（左栏变横向条），同一份 DOM、同一套 role，只有 flex 方向变。
 - **触发器说模型的身份**（DESIGN §5.26）：`提供商/模型名`，右侧跟思考强度。提供商前缀在这里是因为

@@ -161,12 +161,13 @@ dsh-rabbit-model-picker/
   package.json             # exports "."/"./client"/"./package.json"；dsh.client.platform=web
   tsconfig.json            # 仅用于 tsc --noEmit 类型检查
   src/index.ts             # 宿主半边：空 apply（行必须存在，行为为空）
-  src/client/index.ts      # inject 声明（含 remote/remote.session）；ctx.get 取 settings/llm 面；slots.inject → register(priority:-10)
+  src/client/index.ts      # inject 声明（含 remote/remote.session）；ctx.get 取 settings/llm 面（取值函数，非激活时抓取）；slots.inject → register(priority:-10)
   src/client/contract.ts   # 外部结构类型（座位面/目录 store/插槽 registry/settings+llm remote/locale 面）+ 行身份 `rowKey`（原住 recent.ts，§5.21）
   src/client/Picker.tsx    # 触发器（`提供商/模型名 · 强度`）+ 齿轮 + 单层菜单（搜索 / 分组 / 行内只读事实徽章）
   src/client/BadgeIcons.tsx# 四个徽章图标（16×16 自绘；只有"具备这个事实"一种形态）
   src/client/badges.ts     # 行内事实推导（纯函数）：resolveRoute + 能力目录 + reasoning → 该行能说的 1–4 条事实
   src/client/capabilities.ts # 适配器发布的能力目录（只读）：登记 reader、按需读取、按 rowKey 索引（§5.19）
+  src/client/adapterCatalog.ts # 适配器自有目录的路由表与读取器（"还没挂载"≠"什么都没发布"，§5.27）
   src/client/effort.ts     # 强度档位的命名与列表（参数面板与行内徽章共用同一套说法）
   src/client/SettingsMenu.tsx # 模型参数面板（输入类型 / 上下文窗口 / 思考强度 + 写入位置与失败原话）
   src/client/params.ts     # 参数寻址与读写：show 快照 ← describe，resolveRoute(route) → 地址，write() → mutate
@@ -1767,6 +1768,61 @@ Tab 跳过 disabled 全部保留）。§15 的 identity 门从"持久化键不�
 点 `全部` → 64 行且该行选中；再关闭再打开 → 仍是 `opencode-go`（6 行）；
 `Object.keys(localStorage).filter(k => k.startsWith('dsh-model-picker.provider'))` 前后都是 `[]`。
 座位行宽度 324 → 311（chip 消失后 composer 的固有宽度变化），截图 `shots/composer-with-gear.png`。
+
+### 5.27 架构健壮性迭代（2026-10-16）：三处"还没准备好"被当成了答案
+
+**动因**：不来自新的界面反馈，而是对"哪些状态被当成答案消费掉"做一次体检。§5.20 修过一次
+这个类别的缺陷（询问被永久消耗），但修的是**同一个 read 的失败分支**；这次把同一把尺子
+量到另外三处，量出三个仍然存在的洞——它们的共同形状是：**"还没准备好"被读成了"答复是空的"
+（或"这个部署没有"）**，而 Remote 命名空间由各自的所有者在激活时 `$mount`，所以"还没准备好"
+是常态而不是异常。
+
+| 洞 | 原来的行为 | 为什么是缺陷 | 现在 |
+|---|---|---|---|
+| A. racing reader 只在**成功路径**被重跑 | `read()` 的 catch 分支 `return` 得早，`requeue` 的重跑挂在成功分支尾部。reader 在"读在途"时登记，而那次读**失败**时，`requeue` 里的 provider 永远没人清 | ① 事实永远不来：`addSource` 承诺"挂载顺序无关"，而这一支正好让挂载顺序决定答案（未挂载的 LLM 面 / 传输失败正是它要吸收的那个竞态）；② `requeue` 里的陈旧条目还在，下一次 `ensure` 会把它当成"还在排队"，于是**对同一个已答复的 provider 再读一次**，破坏 §5.19 立下的"每 provider 每页一次"预算 | `try/catch` 之后**统一 settle**：`models` 挂在 `null` 上区分"答复了"与"没答复"，`catch` 只记录 `unanswered` 不返回；`requeueRacingReader()` 在两条路上都跑，并在重跑前同时清掉 `asked` / `unanswered`（否则 `ensure` 会以为自己问过了） |
+| B. 适配器自有目录的"没挂载"被当成"什么都没发布" | `readCatalog` 在 `remote.<ns>` 不存在时 `return []`。而 store 把 `[]` 当**答案**：一次定终身 | 适配器的 Remote 是异步挂载的。开卡时它还没挂上 → 那**唯一一次**询问被消费 → 整页都没有该 provider 的事实徽章。这与 README、§5.19 和 store 自己的文档许诺的"吸收竞态"直接矛盾 | 未挂载时 **throw**（`the <ns> remote is not mounted`）：与 `fetch()` 里 LLM 面缺席同一形状，store 会把它释放给下次打开重试。适配器真正没安装也走这一支，代价是每次打开多一次属性查找——比"永久失去事实"便宜得多 |
+| C. 设置面在**激活时抓一次**，之后永久是那一份 | `settingsFaceOf(scope)` 返回 `{ settings, llm }` **值**，`new ParamsStore(...)` 在 `ctx.inject` 回调里构造一次 | 同一个异步挂载事实（§2.2 最后一行**明写**"只能按需 `ctx.get`，不能激活时抓一次"）。命名空间在插件激活时还没挂上 → 抓到的 `null` 被当成"这个部署没有设置服务"，面板整页只读、每次写入回 `settings are unavailable`。**这是把一次竞态的结果说成了关于部署的事实**——面板文案 `settings.unavailable` 正是这么写的。而 `CapabilityStore` 从一开始就用取值函数躲开了同一个坑，只有 ParamsStore 漏了 | `settingsFaceOf` 改为**返回取值函数**；`ParamsStore` 的构造参数改成 `() => RemoteFace \| null`，两处读点（`read()` / `write()`）**每次调用**。真正不挂设置服务的部署仍然正确报 `unavailable`（负例已被单测钉住） |
+
+**顺带的架构改动**：`readCatalog` 与 `ADAPTER_CATALOGS` 从 `index.ts` 抽到
+`src/client/adapterCatalog.ts`。理由是这门里**有唯一一处机器可判定的决策**（"没挂载"长什么样），
+留在座位注册旁边就只能靠读源码来断言；独立成模块后 `test-params.mjs` 能把它 bundle 起来、
+拿一个假 client context 驱动它。`index.ts` 只剩 `registerAdapterCatalogs(ctx, capabilities)`
+这个接线动作。
+
+**没做的**（想过、否掉）：把 `readCatalog` 的"没装适配器"与"还在挂载"分开（需要 store 提供
+一个"永久不重试"的答复通道，为一个探测不到的差别加一条接口不划算——重试只是属性查找）；
+给 `CapabilityStore` 加"每 provider 只重试 N 次"的退避（同一个 provider 的事实缺席是良性的，
+加计数的状态比它防的问题更复杂）；把 `requeue` 换成 `Map<provider, Set<source>>` 做精确重跑
+（现在的粒度是 provider，重跑一次多读一次已经答复的 source，代价是一次缓存过的读）。
+
+**边界（实测，不是推断）**：把重跑挪到两条 settle 路径之后，唯一值得警惕的是"循环"。
+对一个**永远抛错**的 reader 实测：每次 `ensure` 恰好读一次（登记时一次、下次打开一次），
+状态停在 `ready` 而不是卡在 `loading`，没有任何风暴。另一个方向也钉住了：
+reader 落地事实后连开 10 次菜单，读数仍是 **1**（"已答复的 provider 不再读"这条预算没有因为
+重跑而失守）；同一 provider 三个座位同时 `ensure`，读数仍是 1（合并请求照旧）。
+
+**门**：`npm test` 五道门全绿。
+
+- `test-params.mjs` 新增 **16 条**：3 条钉 A（racing reader 在**失败**的 settle 后仍被重跑、
+  它的事实落地、且**不留下**陈旧询问导致二次读——最后这条正是"重跑只挂成功路径"会同时
+  踩中的第二半）；8 条钉 B（未挂载必须 throw、挂载后给出模型、挂载但为空是答案、
+  适配器自己的拒绝是答案、有面但无 `read()` 仍算未挂载、路由表指向 `dsh-opencode-go`，
+  以及端到端两条：挂载前的首次询问什么都不陈述、下一次打开的询问把事实落地）；
+  5 条钉 C（未挂载时读成 `unavailable` 而非 error、挂上后 `refresh()` 恢复 `ready`、
+  读到的命名空间就是新挂上的那个、通过这个迟到面写入成功、以及负例：**真的**不挂的部署
+  仍报 `unavailable`）。
+- `selfcheck-static.mjs` 新增 **6 条**：§7b 四条（catch 分支不得早 `return`、重跑必须是
+  try/catch **之后**的单一 settle 且全文只有一处调用、未挂载必须 throw、reader 必须经由
+  `registerAdapterCatalogs` 接线而不是内联回 `index.ts`）；§7 两条（`settingsFaceOf`
+  必须返回闭包而不是面本身、`ParamsStore` 必须存取值函数且两处读点都调用它、全文不得有
+  不调用的 `this.face`）。
+- **变异测试**（三条都实测过）：把重跑改回成功路径尾部 → selfcheck 2 条 FAIL、`test-params`
+  同时炸出 5 条（含 `addSource` 的两条既有断言）；把未挂载改回 `return []` → 新增的 3 条
+  adapter-catalog 断言 FAIL；把 `settingsFaceOf` 改回抓取值 → 新增的 resolver 断言 FAIL。
+  三次变异后源文件都按 hash 校验还原。
+
+**没有回归的**：§5.20 的既有契约全部原样成立（`asked` 的释放、目录读失败不缓存成空答案、
+适配器拒绝仍然一次定终身）；`lib/` 已重建，`test:fresh` 通过，git 安装拿到的是同一份。
 
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 

@@ -57,6 +57,7 @@ try {
         "export * from './src/client/dictionary.ts'",
         "export * from './src/client/panelCopy.ts'",
         "export * from './src/client/capabilities.ts'",
+        "export * from './src/client/adapterCatalog.ts'",
       ].join('\n'),
       resolveDir: root,
       sourcefile: 'unit-entry.ts',
@@ -77,6 +78,7 @@ try {
     noticeOf, inputHintOf, contextHintOf, contextFieldOf, shownInputOf, showsContextField, capacityAction,
     showsInputSection, routeCapabilityOf, CapabilityStore, ParamsStore,
     restoreIsEmpty,
+    readCatalog, ADAPTER_CATALOGS,
   } = await import(pathToFileURL(outfile).href)
 
   /** A translator over the real dictionary, the way the shell binds it. */
@@ -894,6 +896,112 @@ try {
     equal('capabilities: and the re-run lands the reader\'s facts',
       store.getSnapshot().routes, { 'p/m': { contextWindow: 4000 } })
   }
+  {
+    // The SAME mid-flight race, settled the OTHER way. The re-run above used to
+    // hang off the success path alone, so a reader that arrived during the ask
+    // that FAILS — which is precisely the async-mount race this store is built
+    // around, an unmounted LLM face or a dead transport — was left in the
+    // requeue set forever. Two defects in one: its facts never arrived (the
+    // mount order the store promises to be independent of decided the answer
+    // instead), and the stale entry later forced a SECOND read of a provider
+    // that had already been answered, breaking the "one call per provider per
+    // page load" budget.
+    const log = []
+    const store = new CapabilityStore(() => null) // the LLM face is not mounted yet
+    store.ensure(['p']) // the racing ask goes out against nothing
+    store.addSource({ // the reader mounts while that ask is still in flight
+      providers: ['p'],
+      read: async () => { log.push('source:p'); return [{ id: 'm', contextWindow: 4000 }] },
+    })
+    await settle()
+    equal('capabilities: a reader registered mid-flight survives a FAILING settle', log, ['source:p'])
+    equal('capabilities: and its facts land',
+      store.getSnapshot().routes, { 'p/m': { contextWindow: 4000 } })
+    // The re-run consumed the ask: the next open must not send a second read.
+    store.ensure(['p'])
+    await settle()
+    equal('capabilities: the failing re-run leaves no stale ask to read again', log, ['source:p'])
+  }
+
+  // --- the adapter-owned catalog reader: "not mounted" vs "published none" ----
+  // The reader is the join between this plugin and an adapter's OWN Remote, and
+  // the one place where two answers that look alike are not: `[]` is an ANSWER
+  // the store never re-asks, while a throw releases the ask for a later open. An
+  // absent namespace used to return `[]`, so an adapter whose Remote was still
+  // mounting when the card first opened had its single ask consumed — no facts
+  // for the rest of the page, the exact race the store is built to absorb.
+  {
+    const catalogFace = (models) => ({
+      read: async () => ({ ok: true, value: { models } }),
+    })
+    // A client context whose namespaces mount on demand.
+    const faces = {}
+    const ctx = { get: (name) => faces[name] }
+
+    equal('adapter catalog: names the adapter route it answers for',
+      ADAPTER_CATALOGS.map(entry => [...entry.providers]), [['dsh-opencode-go']])
+
+    // 1. Not mounted yet: a THROW, not an empty list.
+    let threw = false
+    try {
+      await readCatalog(ctx, 'opencodeGoModels')
+    } catch {
+      threw = true
+    }
+    equal('adapter catalog: an unmounted namespace is NOT reported as "published none"', threw, true)
+
+    // 2. Mounted and answering: its models come through.
+    faces['remote.opencodeGoModels'] = catalogFace([{ id: 'm', contextWindow: 1000 }])
+    equal('adapter catalog: a mounted namespace yields its models',
+      await readCatalog(ctx, 'opencodeGoModels'), [{ id: 'm', contextWindow: 1000 }])
+
+    // 3. Mounted and empty: an ANSWER, distinct from case 1.
+    faces['remote.opencodeGoModels'] = catalogFace([])
+    equal('adapter catalog: a mounted but empty catalog is an answer', await readCatalog(ctx, 'opencodeGoModels'), [])
+
+    // 4. A refusal the adapter itself returned is also an answer.
+    faces['remote.opencodeGoModels'] = {
+      read: async () => ({ ok: false, error: { code: 'x', message: 'no' } }),
+    }
+    equal('adapter catalog: the adapter\'s own refusal is an answer',
+      await readCatalog(ctx, 'opencodeGoModels'), [])
+
+    // 5. A face that is mounted but not yet callable: still "not mounted yet".
+    faces['remote.opencodeGoModels'] = {}
+    let threwNoRead = false
+    try {
+      await readCatalog(ctx, 'opencodeGoModels')
+    } catch {
+      threwNoRead = true
+    }
+    equal('adapter catalog: a face without read() is not yet answerable', threwNoRead, true)
+  }
+
+  {
+    // End to end through the store: the mount race a user actually hits. The
+    // card opens before the adapter's Remote is up; the fact must still arrive,
+    // either through the mid-flight re-run or through the next open.
+    const faces = {}
+    const ctx = { get: (name) => faces[name] }
+    const store = new CapabilityStore(() => null)
+    store.addSource({
+      providers: ['dsh-opencode-go'],
+      read: () => readCatalog(ctx, 'opencodeGoModels'),
+    })
+    store.ensure(['dsh-opencode-go'])
+    await settle()
+    equal('adapter catalog: the first ask, before the namespace mounts, states nothing',
+      store.getSnapshot().routes, {})
+    faces['remote.opencodeGoModels'] = {
+      read: async () => ({ ok: true, value: { models: [{ id: 'flash', contextWindow: 1000000 }] } }),
+    }
+    // The next open, which is what the store's retry contract is for.
+    store.ensure(['dsh-opencode-go'])
+    await settle()
+    equal('adapter catalog: the ask survives the mount race and lands the facts',
+      store.getSnapshot().routes,
+      { 'dsh-opencode-go/flash': { contextWindow: 1000000 } })
+  }
 
   // --- the write path: a transport failure is an outcome, not a hang ---------
   // `settings/mutate` REJECTS on a dead transport instead of answering
@@ -901,13 +1009,13 @@ try {
   // the store itself must never reject: a rejection would leave `writing` set
   // forever — every control disabled, no message, no way out.
   {
-    const store = new ParamsStore({
+    const store = new ParamsStore(() => ({
       settings: {
         describe: async () => ({ ok: true, value: { writable: true, hasDocument: true, namespaces: [] } }),
         mutate: async () => { throw new Error('transport down') },
       },
       llm: { listConfigurableProviders: async () => ({ ok: true, value: [] }) },
-    })
+    }))
     equal('params store: a transport failure fails the write instead of rejecting',
       await store.write('ns', [{ op: 'set', path: ['a'], value: 1 }], 3),
       { ok: false, conflict: false, message: 'transport down' })
@@ -916,7 +1024,7 @@ try {
     // The documented retry: a revision conflict re-reads and re-applies once,
     // with the revision the fresh read answered.
     const calls = []
-    const store = new ParamsStore({
+    const store = new ParamsStore(() => ({
       settings: {
         describe: async () => ({
           ok: true,
@@ -930,14 +1038,60 @@ try {
         },
       },
       llm: { listConfigurableProviders: async () => ({ ok: true, value: [] }) },
-    })
+    }))
     equal('params store: a revision conflict retries against the fresh revision',
       await store.write('ns', [{ op: 'set', path: ['a'], value: 1 }], 1), { ok: true })
     equal('params store: the retry went out with the re-read revision', calls, [1, 2])
   }
   equal('params store: no settings face fails the write softly',
-    await new ParamsStore(null).write('ns', [], 1),
+    await new ParamsStore(() => null).write('ns', [], 1),
     { ok: false, conflict: false, message: 'settings are unavailable' })
+
+  // --- the settings faces are RESOLVED per read, not captured at activation ---
+  // Remote namespaces are mounted by their owners when those owners activate
+  // (DESIGN §2.2), so `ctx.get('remote.settings')` at THIS plugin's activation
+  // can honestly be "not yet". Captured once, that ordering became permanent and
+  // was then reported to the user as a fact about the deployment: "this
+  // deployment mounts no settings service", with every write refused. The
+  // CapabilityStore already took a resolver for exactly this reason; these pin
+  // that ParamsStore does too.
+  {
+    const settings = {
+      describe: async () => ({
+        ok: true,
+        value: { writable: true, namespaces: [{ ns: 'ns', revision: 4, value: { a: 1 } }] },
+      }),
+      mutate: async (ns) => ({ ok: true, value: { ns, revision: 5, value: {} } }),
+    }
+    const llm = { listConfigurableProviders: async () => ({ ok: true, value: [] }) }
+    // Not mounted yet when the store is built — the race.
+    let mounted = false
+    const store = new ParamsStore(() => (mounted ? { settings, llm } : null))
+
+    store.ensure()
+    await settle()
+    equal('params store: an unmounted settings face reads as unavailable, not as an error',
+      store.getSnapshot().status, 'unavailable')
+
+    // The namespaces mount; the user opens the menu and the panel.
+    mounted = true
+    await store.refresh()
+    await settle()
+    equal('params store: the panel recovers once the faces mount (no permanent "no settings service")',
+      store.getSnapshot().status, 'ready')
+    equal('params store: and the namespaces it read are the ones now mounted',
+      Object.keys(store.getSnapshot().namespaces), ['ns'])
+    equal('params store: a write works through the late-mounted face',
+      await store.write('ns', [{ op: 'set', path: ['a'], value: 2 }], 4), { ok: true })
+
+    // The negative case must still hold: a deployment that never mounts them
+    // keeps reporting exactly that.
+    const none = new ParamsStore(() => null)
+    none.ensure()
+    await settle()
+    equal('params store: a deployment that mounts none is still reported as unavailable',
+      none.getSnapshot().status, 'unavailable')
+  }
   // A model an adapter published nothing about yields NO facts rather than an
   // empty fact set, which would read as "this model takes nothing".
   equal('capabilities: a model with no published fact is not indexed',
