@@ -23,8 +23,10 @@
  *      first for icons drawn too narrow, then for capsules that left the model
  *      name ~two characters) and the icon family draws one on-screen weight
  *      across its two viewBox grids;
- *  11. the provider narrowing is remembered PER SESSION, re-read on the session
- *      boundary, and the chip inherits the session model's own provider;
+ *  11. the provider scope is NOT persisted: the seat neither reads nor writes a
+ *      stored filter, every open starts from the conversation's own provider, the
+ *      scope follows the session boundary, and the keys an older build wrote are
+ *      swept once under their pre-rename spelling;
  *  12. the component acts on every verdict the pure layer hands it;
  *  12b. the parameter panel's focus: where opening it lands, and the order `Tab`
  *      walks the controls in (which must be the order they are rendered in);
@@ -34,16 +36,20 @@
  *  14. the §5.18 anchor-loss rule: popovers dismiss when the seat root stops
  *      occupying the page;
  *  15. one package identity in the three places that must agree (bundle entry
- *      id, Loader row, locale namespace) while the persisted `localStorage` keys
- *      deliberately keep their pre-rename spelling.
+ *      id, Loader row, locale namespace) while the swept `localStorage` prefix
+ *      deliberately keeps its pre-rename spelling.
+ *
+ * The TRIGGER, not a chip, carries the provider: §5.26 folded the read-only
+ * provider chip into the trigger's own `provider/model` label, so there is no
+ * second surface to keep in sync with it.
  *
  * Run: node scripts/selfcheck-static.mjs
  *
  * @module dsh-rabbit-model-picker/selfcheck-static
  */
 
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -65,6 +71,11 @@ function read(relative) {
   return readFileSync(resolve(root, relative), 'utf8')
 }
 
+/** Whether one project file is on disk at all. */
+function exists(relative) {
+  return existsSync(resolve(root, relative))
+}
+
 /** Remove block and line comments so prose never satisfies a check. */
 function stripComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
@@ -77,7 +88,7 @@ const stylesCode = stripComments(stylesSource)
 const tsxFiles = [
   'src/client/Picker.tsx',
   'src/client/BadgeIcons.tsx',
-  'src/client/ProviderMenu.tsx',
+  'src/client/ProviderRail.tsx',
   'src/client/SettingsMenu.tsx',
 ]
 // The non-TSX modules are scanned too, for the copy keys they ask for and the
@@ -110,6 +121,24 @@ const badRadius = [...stylesCode.matchAll(/border-radius:\s*([^;]+);/g)]
   .map(m => m[1].trim())
   .filter(value => !(value === '0' || value === '0px' || value === '50%' || value.startsWith('var(')))
 check('border-radius: only 0 / 50% / var(...)', badRadius.length === 0, { badRadius })
+
+// --- 2a. the sheet is a TEMPLATE LITERAL, so it may not contain one ---------
+// A backtick anywhere inside the sheet ends the literal early and the CSS that
+// follows is parsed as JavaScript: the build then fails with a ReferenceError
+// about a fragment of prose (`card is not defined`, from a comment naming
+// `.dmp-card`), which reads like a component bug and not like a typo in a
+// comment. Hit twice while writing §5.25, once in each direction. A comment is
+// documentation, not a place to quote a class with the delimiter that happens to
+// build the file, so this is a hard rule rather than a style preference: the
+// names are written plain, and this gate is why they can be.
+const cssBody = stylesCode.slice(stylesCode.indexOf('const CSS = ') + 12)
+const cssOpen = cssBody.indexOf('`')
+const cssClose = cssBody.lastIndexOf('`')
+check(
+  'sheet: the CSS template literal contains no backtick of its own',
+  cssOpen >= 0 && cssClose > cssOpen && !cssBody.slice(cssOpen + 1, cssClose).includes('`'),
+  { backticks: [...cssBody.matchAll(/`/g)].length, cssOpen, cssClose },
+)
 
 // --- 2b. nothing may dim text behind the colour's back ----------------------
 // `scripts/check-contrast.mjs` proves each style's own ink clears AA, but it
@@ -410,6 +439,50 @@ check(
   { badgePadding },
 )
 
+// --- 10b. the fact grid: four fixed tracks, one source of widths ------------
+// The 2026-10-15 pass turned the right-packed strip into a table: every row draws
+// all four tracks in BADGE_FACTS order so the columns agree across rows and an
+// absent fact shows as an empty track instead of shifting its neighbours. The
+// budget therefore moved from "the capsules must be small" to "the four tracks,
+// always reserved, must fit the same 320px card": 3 icons + 3 gaps + the window
+// track. These assertions keep a later edit from either dropping the reserved
+// tracks (which would silently restore the ragged strip) or re-inflating them.
+const gridBlock = /\.dmp-badges\s*\{([^}]*)\}/.exec(stylesCode)?.[1] ?? ''
+const gridTracks = /grid-template-columns:\s*([^;]+);/.exec(gridBlock)?.[1]?.replace(/\s+/g, ' ').trim() ?? ''
+/** One `--dmp-col-*` token's px value, read from the sheet. */
+const columnPx = token => {
+  const value = new RegExp(`${token}\\s*:\\s*([\\d.]+)px`).exec(stylesCode)?.[1]
+  return value === undefined ? NaN : Number.parseFloat(value)
+}
+const iconCol = columnPx('--dmp-col-icon')
+const windowCol = columnPx('--dmp-col-window')
+const colGap = columnPx('--dmp-col-gap')
+const stripPx = 3 * iconCol + 3 * colGap + windowCol
+check(
+  'badges: the strip is four tracks — three icons then the window — in one rule',
+  /var\(--dmp-col-icon\)\s+var\(--dmp-col-icon\)\s+var\(--dmp-col-icon\)\s+var\(--dmp-col-window\)/
+    .test(gridTracks),
+  { gridTracks },
+)
+check(
+  'badges: every row draws all four tracks through BADGE_FACTS',
+  picker.includes('BADGE_FACTS.map'),
+)
+check(
+  'badges: the always-reserved strip still fits the compact budget',
+  Number.isFinite(stripPx) && stripPx <= 120,
+  { stripPx, iconCol, windowCol, colGap },
+)
+// The key under the search field is the other half of the same decision: the
+// strip is only readable if the card names its columns, so the key has to exist
+// in the sheet AND be rendered (the dead-class gate covers the reverse).
+check(
+  'badges: the card states which column is which, in the columns order',
+  /\.dmp-legend\s*\{/.test(stylesCode) && picker.includes('dmp-legend-item')
+    && /const legend[\s\S]*?'text'[\s\S]*?'image'[\s\S]*?'effort'[\s\S]*?'context'/.test(picker),
+  { legendRule: /\.dmp-legend\s*\{/.test(stylesCode), legendOrder: /badge\.key\.text/.test(picker) },
+)
+
 // The glyphs live on two different grids (16 units for the three drawn here, 24
 // for the host's brain), so the stroke width is per-grid and only comparable
 // after the render scale. Reading both constants and checking their on-screen
@@ -438,14 +511,22 @@ if (gridStroke !== null && brainStroke !== null && brainView !== null && iconSiz
     { drawn16: drawn16.toFixed(3), drawn24: drawn24.toFixed(3), size, brainUnits },
   )
 }
-// The slash is per-grid for the same reason the stroke is: a path is written in
-// its own viewBox's units, so one shared string would render a stub parked in
-// the corner of whichever grid it was not written for.
-const slashBlock = /const SLASH[^=]*=\s*\{([\s\S]*?)\n\}/.exec(icons)
+// The icon family has exactly ONE state per fact: "the model has it". The
+// slashed "not available" variant was removed because nothing could ever render
+// it — the row keeps only `!off` facts (see `badges.ts`), so an `off` glyph was
+// unreachable artwork that the design record still described as shipped. If a
+// slash ever comes back it must come back with a render site, which is what this
+// asserts: no `off` prop, no slash path, and the row still filtering on `off`.
+const iconOffBranch = /readonly off\?|artworkOf\([^)]*,\s*off\)|\boff\s*=\s*false/.test(icons)
 check(
-  'badges: the slash is stated once per grid',
-  slashBlock !== null && /16:/.test(slashBlock[1]) && /24:/.test(slashBlock[1]),
-  { slash: slashBlock?.[1]?.replace(/\s+/g, ' ').trim() ?? null },
+  'badges: the icon family draws only the "has this fact" state',
+  !iconOffBranch && !/SLASH/.test(icons),
+  { offBranch: iconOffBranch, slash: /const SLASH[^=]*=/.exec(icons)?.[0] ?? null },
+)
+check(
+  'badges: the row still drops `off` facts before drawing them',
+  /specs\.filter\(spec => !spec\.off\)/.test(picker),
+  { filter: /specs\.filter\([^)]*\)/.exec(picker)?.[0] ?? null },
 )
 
 // --- 11. the three 2026-10-02 follow-ups, each as an anti-regression gate ----
@@ -466,70 +547,146 @@ check(
   /\.dmp-settings-body\s*\{[^}]*overflow-y:\s*auto/.test(stylesCode)
     && read('src/client/SettingsMenu.tsx').includes('className="dmp-settings-body"'),
 )
-// b. The trigger labels the model alone. The effort in force is a parameter:
-//    the row states it and the panel edits it, so the chip must not repeat it
-//    beside the name (that was the feedback), and the two classes that used to
-//    render the " · effort" tail must stay gone.
+// b. The trigger labels the model AND the effort in force beside it (the stock
+//    picker's "name · level"). Two invariants the reversal must keep:
+//      - the effort renders as TEXT, so it carries the readable ink, not the
+//        chevron's caption grey — a future "make it subtler" edit would drop it
+//        under AA, and the contrast gate only catches that if the rule exists;
+//      - the middot is a CSS ::before, never a DOM node or accessible-name text,
+//        so a screen reader hears trigger.ariaEffort's sentence, not a stray dot.
+//    (This check once asserted the opposite — that the chip must NOT repeat the
+//    effort. That decision was reversed on request; the classes are back on
+//    purpose, so the gate now guards how they render rather than their absence.)
 check(
-  'trigger: the chip states the model, not the effort',
-  !/dmp-trigger-effort|dmp-trigger-sep/.test(picker + stylesCode),
-  { classes: [...(picker + stylesCode).matchAll(/dmp-trigger-(?:effort|sep)/g)].map(m => m[0]) },
-)
-// c. The provider narrowing is a remembered preference, not component state: it
-//    is read per session and written on every change (the same storage the recent
-//    list uses); the catalog decides whether a remembered id is still real.
-check(
-  'filter: the provider narrowing is persisted',
-  /readProviderFilter\(sessionId\)/.test(picker) && /rememberProviderFilter\(filterSession, providerFilter\)/.test(picker),
+  'trigger: the chip states the model and the effort in readable ink',
+  /dmp-trigger-effort/.test(picker)
+    && /\.dmp-trigger-effort\s*\{[^}]*color:\s*var\(--dsw-alias-label-(?:primary|secondary)\)/.test(stylesCode)
+    && !/dmp-trigger-sep/.test(picker + stylesCode),
   {
-    read: /readProviderFilter\([^)]*\)/.exec(picker)?.[0] ?? null,
-    write: /rememberProviderFilter\([^)]*\)/.exec(picker)?.[0] ?? null,
+    rendered: /dmp-trigger-effort/.test(picker),
+    ink: /\.dmp-trigger-effort\s*\{[^}]*color:\s*var\((--dsw-alias-label-[a-z]+)\)/.exec(stylesCode)?.[1] ?? null,
   },
 )
-// d. …and it is remembered PER SESSION. A single unscoped key made every
-//    window inherit the first one's narrowing. The key must be composed with the
-//    session id rather than being a constant, and the seat must re-read it on
-//    the session boundary — the seat is not remounted when the conversation
-//    changes, so a `useState` initializer alone would never run again.
-const prefsCode = stripComments(read('src/client/prefs.ts'))
+// c. The provider scope is NOT remembered any more (§5.26). It used to be a
+//    per-session preference (§5.13): read on mount, written on every change.
+//    §5.26 removed it, because the trigger beside the list now names
+//    `provider/model` itself — a remembered scope would disagree with it the
+//    moment a session resumed on another provider, and every open is supposed to
+//    answer "what can I switch to from here" first. So the seat must neither read
+//    nor write a stored scope, and the module that used to hold it must be gone.
+const retiredScope = stripComments(read('src/client/retiredScope.ts'))
 check(
-  'filter: the narrowing key is composed per session, not one global key',
-  /`\$\{PROVIDER_KEY_PREFIX\}\$\{sessionId\}`/.test(prefsCode)
-    && /removeItem\(LEGACY_PROVIDER_KEY\)/.test(prefsCode),
-  { prefix: /PROVIDER_KEY_PREFIX = '([^']+)'/.exec(prefsCode)?.[1] ?? null },
+  'filter: the provider scope is not read from or written to storage',
+  !/readProviderFilter|rememberProviderFilter/.test(picker + retiredScope)
+    && !/localStorage/.test(picker)
+    && /setProviderFilter\(currentProviderId\)/.test(picker),
+  {
+    writes: /localStorage[^\n]*/.exec(picker)?.[0] ?? null,
+    openScope: /setProviderFilter\(currentProviderId\)/.exec(picker)?.[0] ?? null,
+  },
 )
+// c2. …and it still follows the SESSION boundary. The seat is not remounted when
+//     the conversation changes, so a scope left over from the previous one would
+//     point at a provider the new conversation has nothing to do with; the new
+//     session's own provider is the answer (there is nothing remembered to read).
 check(
-  'filter: the seat re-reads the narrowing when the session changes',
-  /if \(filterSession !== sessionId\)/.test(picker) && /setProviderFilter\(readProviderFilter\(sessionId\)\)/.test(picker),
-  { boundary: /if \(filterSession !== sessionId\)[\s\S]{0,160}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
+  'filter: the scope follows the session boundary',
+  /if \(scopeSession !== sessionId\)/.test(picker)
+    && /setProviderFilter\(state\.current\?\.provider \?\? null\)/.test(picker),
+  { boundary: /if \(scopeSession !== sessionId\)[\s\S]{0,200}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
-// e. The chip names the LIST'S SCOPE and nothing else. It once also claimed to
-//    know the session's provider, which made the chip contradict its own menu —
-//    "全部 ✓" beside a chip reading "commandcode", a pair with no true reading.
-//    A chip that can represent the menu's radio group must be able to say every
-//    member of it, including the two that are not providers; and it must not
-//    read the session, whose provider is marked on the menu row instead.
+// c2. …and the modules that held the removed mechanisms are GONE FROM DISK, not
+//     merely unreferenced. This is a separate assertion because "nothing imports
+//     it" and "nothing calls it" are different failures, and only the second was
+//     covered: a file that comes back — a bad merge, a `checkout` of the wrong
+//     tree, an editor restoring a deletion — is invisible to every check above,
+//     since a dead module by definition calls nothing the other gates can see.
+//     These three were all deleted deliberately: `ProviderMenu.tsx` (the provider
+//     popover §5.25 folded into the rail), `prefs.ts` (the remembered scope §5.26
+//     removed, replaced by `retiredScope.ts`'s one-way sweep) and `recent.ts`
+//     ("recently used" §5.21/§5.16 removed). Their absence is the contract.
+const REMOVED_MODULES = [
+  'src/client/ProviderMenu.tsx',
+  'src/client/prefs.ts',
+  'src/client/recent.ts',
+]
+const resurrected = REMOVED_MODULES.filter(exists)
 check(
-  'filter: the chip names the list scope, never the session',
-  /const activeProviderId = providerFilter\s*$/m.test(picker)
-    && /const activeProviderLabel = activeProviderId === null/.test(picker)
-    && !/activeProviderId = providerFilter[^\n]*state\.current/.test(picker),
-  { label: /const activeProviderId[\s\S]{0,400}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
+  'removed: the deleted modules stay deleted',
+  resurrected.length === 0,
+  { cameBack: resurrected },
 )
-// e2. …and the session's provider is still answered, on the menu row that names
-//     it. Dropping the chip's second job without moving the fact would have
-//     answered §5.15 by deleting the answer.
-const providerMenu = stripComments(read('src/client/ProviderMenu.tsx'))
+// c3. …and nothing re-introduces them by import either. `existsSync` cannot see a
+//     rename, and an import of a missing file would only fail at bundle time — so
+//     this walks every source file rather than the handful already read above,
+//     which keeps it independent of where in this script it runs.
+const sourceFiles = readdirSync(resolve(root, 'src'), { recursive: true, encoding: 'utf8' })
+  .filter(name => /\.tsx?$/.test(name))
+const reimported = REMOVED_MODULES.filter((module) => {
+  const specifier = `'./${module.split('/').pop().replace(/\.tsx?$/, '')}`
+  return sourceFiles.some(name => read(`src/${name.split(sep).join('/')}`).includes(specifier))
+})
 check(
-  'filter: the session\'s provider is marked on its own menu row',
+  'removed: nothing imports the deleted modules',
+  reimported.length === 0,
+  { imported: reimported, scanned: sourceFiles.length },
+)
+
+// d. …and what is left of that record is a DATA contract: the keys an older build
+//    wrote still exist in users' browsers, so the plugin sweeps them ONCE at
+//    activation. Activation rather than a seat's mount, because the sweep is a data
+//    migration: it is idempotent, it has nothing to do with a conversation, and a
+//    session that never opens the card should not carry the dead entries either.
+//    The prefix must be a PREFIX sweep under the OLD spelling, because the record
+//    has two shapes (the per-session keys and the single unscoped key before them)
+//    and a sweep looking for the new package name would miss every key it exists to
+//    remove. (That second half is asserted in §15, where `pkg` is in scope.)
+check(
+  'filter: the retired scope record is swept once, under its old key spelling',
+  /RETIRED_SCOPE_PREFIX = '([^']+)'/.test(retiredScope)
+    && /key\.startsWith\(RETIRED_SCOPE_PREFIX\)/.test(retiredScope)
+    && /ctx\.effect\(\(\) => retireStoredScope\(\), /.test(entry)
+    && !/retireStoredScope/.test(picker),
+  {
+    prefix: /RETIRED_SCOPE_PREFIX = '([^']+)'/.exec(retiredScope)?.[1] ?? null,
+    wiring: /ctx\.effect\(\(\) => retireStoredScope[^\n]*/.exec(entry)?.[0] ?? null,
+  },
+)
+// e. The TRIGGER states the identity of the model in use: `provider/model` (§5.26).
+//    The provider is a prefix rather than a chip beside it, and it is not a second
+//    control: it exists because two providers really do offer the same model names,
+//    so the seat has to say which one this conversation is on. With no model
+//    selected there is no provider to prefix, and the label falls back to the
+//    "select a model" / "loading" copy alone.
+check(
+  'trigger: the label is `provider/model`, and only when there is a provider',
+  /const triggerLabel = currentProviderLabel === null \? modelName : `\$\{currentProviderLabel\}\/\$\{modelName\}`/.test(picker)
+    && /const currentProviderLabel = currentProviderId === null \? null : providerNameOf\(currentProviderId\)/.test(picker)
+    && /<span className="dmp-trigger-label">\{triggerLabel\}<\/span>/.test(picker),
+  { label: /const triggerLabel[\s\S]{0,160}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
+)
+// e2. …and the card says the same thing about the same provider, WITHOUT the
+//     words 「当前会话」: at rail width those words beside a name, a count and the
+//     check squeeze the provider name into an ellipsis, which would gut the one job
+//     this pane has. The marker is `aria-current` plus one step of font weight, and
+//     §5.26 leaves the words nowhere else to live — the trigger's own label is the
+//     subject of the seat now, and the rail's selected row (usually the same
+//     provider, since every open starts there) is what agrees with it.
+const providerRail = stripComments(read('src/client/ProviderRail.tsx'))
+check(
+  'filter: the session\'s provider is marked on its own rail row',
   /session: group\.id === state\.current\?\.provider/.test(picker)
-    && /option\.session && <span className="dmp-provider-session">/.test(providerMenu)
-    && dictionaryKeys.has('provider.sessionHere'),
-  { mark: /option\.session &&[\s\S]{0,120}/.exec(providerMenu)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
+    && /aria-current=\{option\.session \? 'true' : undefined\}/.test(providerRail)
+    && /\.dmp-rail-row\[aria-current='true'\] \.dmp-rail-name\s*\{[^}]*font-weight/.test(stylesCode)
+    && !dictionaryKeys.has('provider.sessionHere'),
+  { mark: /aria-current=\{option\.session[\s\S]{0,90}/.exec(providerRail)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
-// f. …while narrowing the LIST is still only ever the user's own choice. If the
-//    session-derived provider also narrowed the list, the chip would silently
-//    hide models the user never asked to hide, and "show all" would be a lie.
+// f. …while narrowing the LIST is still only ever the user's own choice — an
+//    explicit one, held in `providerFilter`. §5.26 seeds that state from the
+//    session's provider when the card opens, but the LIST must not read
+//    `state.current` itself: a scope recomputed from the session on every render
+//    would snap back the moment the user scoped to another provider, and the other
+//    providers would be unreachable for the length of a conversation.
 const groupsMemo = /const groups = useMemo<DisplayGroup\[\]>\(\(\) => \{[\s\S]*?\n  \}, \[[^\]]*\]\)/.exec(picker)?.[0] ?? ''
 check(
   'filter: only an explicit narrowing scopes the model list',
@@ -537,71 +694,213 @@ check(
     && !/state\.current\?\.provider/.test(groupsMemo),
   { groups: groupsMemo.replace(/\s+/g, ' ').trim() },
 )
-// g. "Recently used" is a choice in the PROVIDER MENU, not a group bolted onto
-//    the top of the list. Prepending a `recent` group is what it replaced, and
-//    it must not creep back: the catalog branch may not mention a recent group
-//    at all, and the only route into `recentGroupsFor` is the RECENT_ID test.
-const recentCode = stripComments(read('src/client/recent.ts'))
+// g. The rail holds every SCOPE, and its members come from exactly three places:
+//    the unfiltered row, the loaded catalog, and the failures list. §5.21 removed
+//    the unfiltered row from the popover because a menu row that is not a provider
+//    is indistinguishable from one that is; §5.25 puts it back deliberately on a
+//    surface where that objection does not hold — the rail IS a scope list, so
+//    "everything" is a scope like any other, and it is the way back out of a
+//    narrowing that the in-card strip used to provide. The retired "recently used"
+//    pseudo-provider stays gone: it named pulsed history, not the catalog, and its
+//    module was deleted outright rather than hidden.
+//
+//    What the gate protects is therefore the SHAPE of the list, not the absence of
+//    a row: exactly three top-level elements, in this order — the literal
+//    unfiltered row (id null, the total count), then the catalog spread, then the
+//    failures spread — and no fourth row smuggled in behind either spread.
+//
+//    The memo's ELEMENT LIST is what is asserted, not a pattern over its text.
+//    The body is split on its depth-0 commas, so every top-level element is one
+//    row, and the claim becomes the plain one: element 0 is a literal carrying
+//    `id: null`, elements 1 and 2 are whole spreads over the catalog and the
+//    failure list, and there is nothing else.
+//    Pattern-matching object literals instead was tried twice and was wrong both
+//    times: `!/\{\s*id:\s*null/` without `m` anchored to the slice start, so a
+//    re-added row on the next line stayed GREEN (caught by sabotage, 2026-10-04);
+//    widening it to "no literal row at all" also matched the object bodies of the
+//    two legitimate spreads and made the gate fail on correct code (same day).
+//    Splitting on depth-0 commas cannot be fooled by either, and it catches a
+//    handwritten row whatever id it carries.
+//
+//    The splitter walks the body character by character and skips over string and
+//    template literals, so a comma inside a `'a},b'` cannot split an element in
+//    half. Without that, such a comma makes the gate go RED on correct code —
+//    fail-safe, never a false pass, but a gate that cries wolf gets deleted by
+//    the next person. Comments need no handling here: `picker` was already run
+//    through `stripComments` above, so a `// a, b` note has become empty text by
+//    the time this runs (verified 2026-10-04 — handling them inside the splitter
+//    would be unreachable code). Audited against string literals, `${x},${y}`,
+//    nested generics and trailing commas (2026-10-04).
+const optionsBody = /const providerOptions = useMemo<ProviderOption\[\]>\(\(\) => \[([\s\S]*?)\n  \], \[[^\]]*\]\)/.exec(picker)?.[1] ?? ''
+/**
+ * Split an expression body on its depth-0 commas: one element per top-level row.
+ * String and template literals are traversed but never split on.
+ */
+function topLevelElements(body) {
+  const elements = []
+  let depth = 0
+  let start = 0
+  let index = 0
+  while (index < body.length) {
+    const char = body[index]
+    // A string/template literal is stepped over wholesale: only its LENGTH matters.
+    if (char === "'" || char === '"' || char === '`') {
+      let cursor = index + 1
+      while (cursor < body.length) {
+        if (body[cursor] === '\\') cursor += 2
+        else if (body[cursor] === char) break
+        else cursor += 1
+      }
+      index = cursor + 1
+      continue
+    }
+    if ('([{'.includes(char)) depth += 1
+    else if (')]}'.includes(char)) depth -= 1
+    else if (char === ',' && depth === 0) {
+      elements.push(body.slice(start, index).trim())
+      start = index + 1
+    }
+    index += 1
+  }
+  const tail = body.slice(start).trim()
+  if (tail !== '') elements.push(tail)
+  return elements.filter(element => element !== '')
+}
+const optionRows = topLevelElements(optionsBody)
+/**
+ * The spread each element is (`orderedGroups`/`state.failures`), or null when the
+ * element is not exactly one whole spread.
+ *
+ * "Exactly" is load-bearing, and it is the third thing this gate got wrong. An
+ * element that merely STARTS with `...orderedGroups.map(` can still smuggle rows
+ * in behind it: `...orderedGroups.map(g => ({…})).concat([{ id: null, … }])` was
+ * one top-level element whose first characters matched, so a re-added "all" row
+ * passed under a green gate (adversarial probe, 2026-10-04).
+ *
+ * A regex cannot decide this: `^\.\.\.(\w+)\.map\(([\s\S]*)\)\s*$` matches the
+ * smuggled element too, because the greedy group backtracks to the LAST `)` and
+ * swallows `.concat([…])` whole. The `map(` call's closing paren has to be found
+ * by DEPTH, and whatever follows it must be whitespace alone. So the call is
+ * scanned parenthesis by parenthesis instead.
+ */
+function spreadCallOf(element) {
+  const head = /^\.\.\.([\w.]+)\.map\(/.exec(element)
+  if (head === null) return null
+  let depth = 0
+  for (let index = head[0].length - 1; index < element.length; index += 1) {
+    // The literal arguments are stepped over, so a `)` inside them is not counted.
+    if (element[index] === "'" || element[index] === '"' || element[index] === '`') {
+      const quote = element[index]
+      let cursor = index + 1
+      while (cursor < element.length) {
+        if (element[cursor] === '\\') cursor += 2
+        else if (element[cursor] === quote) break
+        else cursor += 1
+      }
+      index = cursor
+      continue
+    }
+    if (element[index] === '(') depth += 1
+    else if (element[index] === ')') {
+      depth -= 1
+      // Back at depth 0: the `map(` call just closed. Only whitespace may follow.
+      if (depth === 0) return /^\s*$/.test(element.slice(index + 1)) ? head[1] : null
+    }
+  }
+  return null
+}
+const spreadRows = optionRows.map(spreadCallOf)
+const literalRows = optionRows.filter((element, index) => spreadRows[index] === null)
 check(
-  'recent: it is a provider-menu option, not a group in the list',
-  groupsMemo.includes('providerFilter === RECENT_ID')
-    && !/id: 'recent'/.test(groupsMemo)
-    && (groupsMemo.match(/recentGroupsFor\(/g) ?? []).length === 1,
-  { groups: groupsMemo.replace(/\s+/g, ' ').trim() },
+  'provider rail: the unfiltered scope, then the catalog, then the failures — and nothing else',
+  optionsBody !== ''
+    && optionRows.length === 3
+    // The unfiltered row is a literal, and it is the one addressed by `id: null`;
+    // the other two are whole spreads, catalog first, failures last. Nothing is
+    // prepended to the first and nothing is appended after the last.
+    && literalRows.length === 1
+    && literalRows[0] === optionRows[0]
+    && /\bid:\s*null\b/.test(literalRows[0])
+    && spreadRows[1] === 'orderedGroups'
+    && spreadRows[2] === 'state.failures'
+    && !/\bRECENT_ID\b/.test(optionsBody),
+  {
+    spreadRows,
+    literalRows: literalRows.map(element => element.replace(/\s+/g, ' ').slice(0, 120)),
+    memo: optionsBody.replace(/\s+/g, ' ').trim().slice(0, 220) || null,
+  },
 )
-// h. …listed directly under "all providers", and the list it produces is still
-//    grouped by the catalog's own providers AND keeps every remembered route.
-//    All three halves matter: an option anywhere but second buries the one row
-//    that is not a provider; flat rows would make every row repeat its provider;
-//    and bucketing that keeps only the newest route per provider would quietly
-//    shrink the very list the user asked to walk back through.
-const optionsMemo = /const providerOptions = useMemo<ProviderOption\[\]>\(\(\) => \[[\s\S]*?\n  \], \[[^\]]*\]\)/.exec(picker)?.[0] ?? ''
-const optionRows = [...optionsMemo.matchAll(/\{ id: ([^,]+), label: ([^,]+), count: ([^,]+), failed: ([^}]+)\}/g)]
-  .map(m => m[1].trim())
+// h. …and no CHIP comes back beside the trigger. §5.25 stated the model's provider
+//    as a separate read-only fact chip; §5.26 folded it into the trigger's own
+//    label, so a second element naming the same provider would be the seat saying
+//    the same thing twice — and it would cost the model name the width it does not
+//    have. The class, its two inner parts and its copy key must all stay gone.
 check(
-  'recent: the provider menu lists it right below "all providers"',
-  optionRows[0] === 'null' && optionRows[1] === 'RECENT_ID' && optionRows.length >= 2,
-  { order: optionRows },
+  'trigger: no separate provider chip beside the trigger',
+  !/dmp-provider(?![-a-z])/.test(picker + stylesCode)
+    && !dictionaryKeys.has('provider.chipTip')
+    && !/provider\.chipTip/.test(picker),
+  {
+    inPicker: /dmp-provider(?![-a-z])[\s\S]{0,60}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null,
+    inSheet: /\.dmp-provider(?![-a-z])[\s\S]{0,60}/.exec(stylesCode)?.[0]?.replace(/\s+/g, ' ').trim() ?? null,
+  },
 )
-// h2. The count next to "recently used" must be what the list will actually
-//     show. The store keeps more routes than the list shows on purpose (so a
-//     model leaving the catalog still leaves the list full), and reading that
-//     surplus into the menu produced "最近使用 8" over a list of 5 — the only
-//     row in the menu whose number was not the number of rows you get.
+// h2. The way OUT of a scope is the rail's own unfiltered row — the one row of
+//     the rail that is a scope rather than a provider. §5.26 made the scope
+//     transient (every open starts from the session's provider), so 「全部」 is no
+//     longer the state a fresh open lands in; that makes this row MORE load-bearing,
+//     not less: it is the only way to see every provider at once, and the target of
+//     the hidden-hits strip below.
 check(
-  'recent: the menu counts what opens, not what is remembered',
-  /recentRowsFor\(catalogRows, recent, '', RECENT_VISIBLE\)\.length/.test(picker)
-    && /const groups = useMemo[\s\S]*?recentRowsFor\(catalogRows, recent, trimmedQuery\)/.test(picker),
-  { count: /presentRecentCount = useMemo\([\s\S]{0,140}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
+  'filter: the rail carries the way back to every provider',
+  /t\('provider\.all'\)/.test(optionsBody)
+    && /\bid:\s*null\b/.test(optionRows[0] ?? '')
+    && /onPick\(option\.id\)/.test(providerRail)
+    && !/RECENT_ID|'recent'/.test(picker + providerRail),
+  { all: /id: null[\s\S]{0,160}/.exec(optionsBody)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
-const bucketFn = /export function recentGroupsFor\([\s\S]*?\n\}/.exec(recentCode)?.[0] ?? ''
+// h3. …and the in-card strip is no longer a scope label: the rail states the
+//     scope, so the strip exists for the one case the rail cannot cover — a query
+//     whose hits the scope is hiding. That is not decoration: without it, typing a
+//     model name while scoped reads as "no such model", and the way back is a pane
+//     the user has no reason to look at. Pinned by the count it states, the copy
+//     key, and the unfiltered write its button performs.
 check(
-  'recent: its rows keep the provider headings and every remembered route',
-  bucketFn.includes('label: label(group.id, group.name)')
-    // The accumulate step: without it each provider keeps only its newest route.
-    && /rows: existing === undefined \? \[row\] : \[\.\.\.existing\.rows, row\]/.test(bucketFn)
-    // Order comes from the Map's insertion order, never a sort — this is the
-    // function that promises recency.
-    && bucketFn.includes('[...groups.values()]')
-    && !/\.sort\(/.test(bucketFn),
-  { bucket: bucketFn.replace(/\s+/g, ' ').trim() },
+  'filter: hidden hits under another provider are counted, with a way back',
+  /className="dmp-filter-hint"/.test(picker)
+    && /elsewhereCount > 0 &&/.test(picker)
+    && /t\('provider\.elsewhere', \{ count: String\(elsewhereCount\) \}\)/.test(picker)
+    && /className="dmp-filter-clear"[\s\S]{0,160}pickProvider\(null\)/.test(picker)
+    && dictionaryKeys.has('provider.elsewhere')
+    && dictionaryKeys.has('provider.showAll'),
+  { hint: /elsewhereCount > 0[\s\S]{0,260}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
-// i. The id is reserved. The stale-filter cleanup judges a remembered id against
-//    the catalog's provider list, so a pseudo-provider that collided with a real
-//    one would make "recently used" and that provider the same menu row.
+// h4. …and scoping keeps the card OPEN and hands the keyboard to the list it just
+//     scoped. The old popover closed itself and re-opened the model card through
+//     `show()`, which cost a round trip; the rail lives inside that card, so the
+//     pick must land focus on the search box where the next keystroke belongs —
+//     and must go through the one `pickProvider` path rather than setting the
+//     scope in place (a second write path is how the scope and the list drift).
 check(
-  'recent: the pseudo-provider id cannot collide with a catalog provider',
-  /export const RECENT_ID = '__[^']*__'/.test(recentCode),
-  { id: /RECENT_ID = '([^']+)'/.exec(recentCode)?.[1] ?? null },
+  'filter: a rail pick scopes the list and hands focus to the search box',
+  /const pickProvider = \(providerId: string \| null\): void => \{[\s\S]*?setProviderFilter\(providerId\)[\s\S]*?searchRef\.current\?\.focus\(\)/.test(picker)
+    && /onPick=\{pickProvider\}/.test(picker)
+    && !/closeProviderMenu|providerAt/.test(picker),
+  { pick: /const pickProvider = [\s\S]{0,320}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
-// j. Two ways to reach an empty recent list — nothing was ever used, and every
-//    remembered route has left the catalog — get one sentence that covers both.
-//    "This provider has no models" would blame the wrong thing for either.
+
+// h5. …and the `Tab` chain skips DISABLED controls. The rail is one tab stop whose
+//     row is a real `disabled` button whenever a selection is in flight, and
+//     `.focus()` on a disabled button does nothing: a chain that kept it would
+//     swallow `Shift+Tab` off the search box for the length of the write. The
+//     model rows are `div`s carrying `aria-disabled` precisely so the keyboard is
+//     NOT dropped during a selection, so filtering on the attribute rather than on
+//     `aria-disabled` is the distinction that matters here.
 check(
-  'recent: an empty recent list says so, without blaming a provider',
-  /providerFilter === RECENT_ID[\s\S]{0,160}empty\.recent/.test(picker)
-    && dictionaryKeys.has('empty.recent'),
-  { empty: /providerFilter === RECENT_ID[\s\S]{0,160}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
+  'filter: the Tab chain skips disabled controls',
+  /const elements = chain\.filter\([\s\S]{0,200}element\.disabled/.test(picker)
+    && /moveTab\(event\.shiftKey \? -1 : 1\)/.test(picker),
+  { chain: /const elements = chain\.filter\([\s\S]{0,200}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
 
 // --- 12. the component has to CONSUME the decisions the pure layer makes -----
@@ -794,9 +1093,9 @@ check(
   /=> rootRef\.current/.test(picker) && !/observeSeatLoss\(\s*\(\)\s*=>\s*triggerRef/.test(picker),
   { probe: /observeSeatLoss\(\s*\(\)\s*=>\s*(\w+)/.exec(picker)?.[1] ?? null },
 )
-// All three surfaces are one unit: they already share the one-at-a-time
-// contract, and a model list left floating over a vanished composer is the same
-// defect as a parameter panel over one.
+// Both surfaces are one unit: they already share the one-at-a-time contract, and
+// a model card left floating over a vanished composer is the same defect as a
+// parameter panel over one.
 // The `useEffect(` is pinned with a backreference so the capture cannot start at
 // an earlier effect and run to the first matching dependency list — which, with
 // the outside-click effect sharing this exact guard and dependency list, is
@@ -804,14 +1103,14 @@ check(
 // so what is checked is the anchor-loss effect's own body and not the two
 // effects concatenated; otherwise `closeOutside`'s `setSettingsAt(false)` masks
 // a deletion from the other one. Each closing call is checked on its own, so
-// dropping exactly one of the three is caught.
-const lossSpan = /useEffect\(\(\) => \{\s*if \(!open && !providerAt && !settingsAt\) return[\s\S]*?observeSeatLoss\([\s\S]*?\}, \[open, providerAt, settingsAt\]\)/.exec(picker)?.[0] ?? ''
+// dropping exactly one of the two is caught.
+const lossSpan = /useEffect\(\(\) => \{\s*if \(!open && !settingsAt\) return[\s\S]*?observeSeatLoss\([\s\S]*?\}, \[open, settingsAt\]\)/.exec(picker)?.[0] ?? ''
 const lossCall = lossSpan.slice(lossSpan.indexOf('return observeSeatLoss(') === -1
   ? 0
   : lossSpan.lastIndexOf('useEffect('))
-const closes = ['setOpen(false)', 'setProviderAt(false)', 'setSettingsAt(false)']
+const closes = ['setOpen(false)', 'setSettingsAt(false)']
 check(
-  '§5.18: all three popovers are dismissed together, with no focus restore',
+  '§5.18: both popovers are dismissed together, with no focus restore',
   closes.every(call => lossCall.includes(call))
     && !/triggerRef\.current\?\.focus\(\)|lastActionRef/.test(lossCall),
   { missing: closes.filter(call => !lossCall.includes(call)), call: lossCall.replace(/\s+/g, ' ').trim().slice(0, 200) || null },
@@ -822,7 +1121,7 @@ check(
 // exists to catch.
 check(
   '§5.18: the observer is armed only while a popover is open',
-  /useEffect\(\(\) => \{\s*if \(!open && !providerAt && !settingsAt\) return\s*return observeSeatLoss/.test(picker),
+  /useEffect\(\(\) => \{\s*if \(!open && !settingsAt\) return\s*return observeSeatLoss/.test(picker),
   null,
 )
 check(
@@ -851,19 +1150,19 @@ check(
   { pkg: pkg.name, rowId: patchRow?.[1] ?? null, rowName: patchRow?.[2] ?? null },
 )
 check('identity: the locale namespace is the package name', new RegExp(`export const NS = '${pkg.name}'`).test(read('src/client/dictionary.ts')))
-// The persisted keys are a DATA contract, not an identity: `localStorage` is
-// shared across plugins and these hold a user's remembered provider filter and
-// recent-model list. They keep their original spelling through any rename, so
-// assert that they did NOT follow the package name — a rename that swept them up
-// would silently discard every existing user's preferences.
-const prefs = read('src/client/prefs.ts')
-const recent = read('src/client/recent.ts')
+// The swept key is a DATA contract, not an identity: `localStorage` is shared
+// across plugins, and the keys this prefix matches were written by an older build
+// under the OLD package name. The sweep therefore has to look for the old spelling
+// — a "tidy up the rename" edit that pointed it at `pkg.name` would leave every
+// existing user's dead entry in place forever, which is the exact opposite of what
+// the sweep is for. (Two records preceded this one: the "recently used" keys, gone
+// with the module that read them, and the per-session scope keys §5.26 retired.)
+const retiredScopeCode = read('src/client/retiredScope.ts')
 check(
-  'identity: the persisted localStorage keys do NOT follow the package name',
-  !new RegExp(`'${pkg.name}\\.(?:provider|recent)`).test(prefs + recent)
-    && /'dsh-model-picker\.provider\.v1:'/.test(prefs)
-    && /'dsh-model-picker\.recent\.v1'/.test(recent),
-  { prefsKey: /const PROVIDER_KEY_PREFIX = '([^']+)'/.exec(prefs)?.[1] ?? null, recentKey: /const STORAGE_KEY = '([^']+)'/.exec(recent)?.[1] ?? null },
+  'identity: the swept localStorage prefix does NOT follow the package name',
+  !new RegExp(`'${pkg.name}\\.provider`).test(retiredScopeCode)
+    && /'dsh-model-picker\.provider\.'/.test(retiredScopeCode),
+  { sweptPrefix: /const RETIRED_SCOPE_PREFIX = '([^']+)'/.exec(retiredScopeCode)?.[1] ?? null },
 )
 
 console.log(failures === 0 ? 'static selfcheck: all good' : `static selfcheck: ${failures} failure(s)`)

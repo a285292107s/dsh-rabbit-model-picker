@@ -1,6 +1,6 @@
 /**
  * The read-only facts a model row states: whether it takes text, whether it
- * takes images, the reasoning effort in force, and the context window.
+ * takes images, whether it can reason, and the context window.
  *
  * WHAT THIS REPLACES. The row used to carry an interactive effort pill: clicking
  * it opened a small anchored menu that submitted a whole
@@ -9,16 +9,20 @@
  * and this module is the single place that decides *which* facts are known.
  *
  * WHERE THE FACTS COME FROM. The composer catalog publishes only
- * `{ provider, model, reasoning }`, so effort is read from the catalog entry
- * while modalities and capacity are read from the settings snapshot the panel
+ * `{ provider, model, reasoning }`, so the ability to reason is read from the
+ * catalog entry (its `reasoning` metadata is present or not) while modalities
+ * and capacity are read from the settings snapshot the panel
  * uses (`resolveRoute` over `describe`) and, where the settings document cannot
  * answer, from what the adapter PUBLISHED about its own route
- * (`capabilities.ts`). Nothing is guessed: a fact neither source can answer is
- * left out rather than rendered as "unsupported", which is the same rule the
- * panel follows when it refuses to offer a switch that would do nothing. `off`
- * therefore always means "a declaration, an adapter default, or the adapter's
- * own published catalog really does not list this" — never "we could not find
- * out".
+ * (`capabilities.ts`). Modalities follow one rule with one exception: a fact
+ * neither source can answer is left out rather than rendered as "unsupported"
+ * — the same rule the panel follows when it refuses to offer a switch that
+ * would do nothing — EXCEPT text. Text is the floor capability of every
+ * conversational model, so an unanswered modality list still states "supports
+ * text"; leaving it out made the strip fall silent on models whose modalities
+ * the adapter had not published yet. `off` therefore means "an explicit
+ * declaration, adapter default, or published catalog really omits this" for
+ * every fact but text, and for text it means only an explicit non-text list.
  *
  * THE PRECEDENCE IS THE ADAPTERS' OWN, not this plugin's taste. Both adapters
  * resolve a route as `declared field ?? installed catalog ?? configured default`
@@ -34,8 +38,11 @@
  * the strip read as a bag of parts. Every fact is now the same capsule — one
  * square icon cell plus a text cell — which is what lets `.dmp-badges` line the
  * four up on one baseline and what makes "a badge is a fact" true by shape
- * rather than by convention. The two facts that are true/false state whose
- * truth (`text`, `image`), the two that name a value print it (`Default`, `1M`).
+ * rather than by convention. Three of the four facts are true/false and state
+ * whose truth (`text`, `image`, `effort` — the last means the model CAN reason,
+ * not how hard it is set), and only the one that names a value prints it
+ * (`1M`). The effort in force is a setting, so it lives on the trigger and in
+ * the panel, never in the row.
  *
  * THE WINDOW VALUE IS ROUNDED FOR READING, NEVER FOR WRITING: the row prints
  * `1M` / `128K`, while `parseContext` (the parameter panel's own reader) keeps
@@ -45,7 +52,6 @@
  */
 
 import type { ModelReasoning, RouteAddress, RouteCapability, Translate } from './contract.ts'
-import { effortLabelOf } from './effort.ts'
 import type { BadgeFact } from './facts.ts'
 import { formatWindow } from './format.ts'
 
@@ -61,7 +67,7 @@ export const BADGE_FACTS: readonly BadgeFact[] = ['text', 'image', 'effort', 'co
 export interface BadgeSpec {
   /** Which fact this badge states (also the icon's identity). */
   readonly fact: BadgeFact
-  /** The fact is unsupported or absent: slashed glyph, quiet tone. */
+  /** The fact is absent: the row drops it (see `Picker`'s `!off` filter). */
   readonly off: boolean
   /** Text after the icon; '' renders the icon alone (nothing to name). */
   readonly value: string
@@ -77,8 +83,6 @@ export interface BadgeInput {
   readonly capability?: RouteCapability | undefined
   /** The catalog entry's reasoning metadata, when the adapter declares any. */
   readonly reasoning: ModelReasoning | undefined
-  /** The effort in force for this row (Host-accepted on the selected row, else the adapter default). */
-  readonly effort: string | undefined
   /** Translator for the plugin namespace. */
   readonly t: Translate
 }
@@ -119,33 +123,47 @@ function capacityOf(
  * @param input - see {@link BadgeInput}.
  * @returns 1–4 badges; the sections whose facts are not readable are omitted.
  */
-export function badgeSpecsOf({ address, capability, reasoning, effort, t }: BadgeInput): BadgeSpec[] {
+export function badgeSpecsOf({ address, capability, reasoning, t }: BadgeInput): BadgeSpec[] {
   const specs: BadgeSpec[] = []
 
   const modalities = modalitiesOf(address, capability)
-  if (modalities !== undefined) {
-    const text = modalities.includes('text')
-    specs.push({
-      fact: 'text',
-      off: !text,
-      value: '',
-      sentence: t(text ? 'badge.text.on' : 'badge.text.off'),
-    })
-    const image = modalities.includes('image')
-    specs.push({
-      fact: 'image',
-      off: !image,
-      value: '',
-      sentence: t(image ? 'badge.image.on' : 'badge.image.off'),
-    })
-  }
+
+  // TEXT IS THE FLOOR, NOT A CLAIM THAT CAN BE UNKNOWN. A conversational model
+  // takes text by definition, so a modality list no source can answer states
+  // "supports text" — it never erases the one capability that is never absent.
+  // (That is the deliberate exception to the "leave an unread fact out" rule
+  // below: leaving text out made the strip fall silent on models the adapter
+  // had simply not published modalities for yet, which read as "no text input".)
+  // Only a list that explicitly omits text can mark it absent.
+  const text = modalities === undefined || modalities.includes('text')
+  specs.push({
+    fact: 'text',
+    off: !text,
+    value: '',
+    sentence: t(text ? 'badge.text.on' : 'badge.text.off'),
+  })
+
+  // IMAGES ARE A REAL, OPTIONAL CAPABILITY, SO UNKNOWN MEANS NO CLAIM. When no
+  // source can answer whether the route takes them, the badge rides `off`, and
+  // the row's `!off` filter drops it — the strip stays silent rather than
+  // guessing either way. An explicit list that omits image reads the same way.
+  const image = modalities !== undefined && modalities.includes('image')
+  specs.push({
+    fact: 'image',
+    off: !image,
+    value: '',
+    sentence: t(image ? 'badge.image.on' : 'badge.image.off'),
+  })
 
   if (reasoning === undefined) {
-    // No levels are declared, so there is no level name to state.
-    specs.push({ fact: 'effort', off: true, value: '', sentence: t('badge.effort.none') })
+    // No levels are declared, so the model states no thinking ability at all.
+    specs.push({ fact: 'effort', off: true, value: '', sentence: t('badge.effort.off') })
   } else {
-    const label = effortLabelOf(reasoning, effort, t)
-    specs.push({ fact: 'effort', off: false, value: label, sentence: t('badge.effort', { level: label }) })
+    // A declared ladder of levels is the whole fact: the row says the model CAN
+    // reason, not how hard it is currently set. The effort in force belongs to
+    // the trigger (which names the model and its level) and the parameter panel
+    // (which edits it), never to the row — a row is a fact, not a setting.
+    specs.push({ fact: 'effort', off: false, value: '', sentence: t('badge.effort.on') })
   }
 
   const capacity = capacityOf(address, capability)

@@ -21,7 +21,6 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
   /** Shared menu material; the portal/placement rules live with the caller. */
   export function MenuSurface(
     props: ComponentPropsWithoutRef<'div'> & {
-      compact?: boolean
       ref?: Ref<HTMLDivElement> | RefObject<HTMLDivElement | null> | undefined
     },
   ): ReactElement
@@ -46,7 +45,6 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
     state: 'done' | 'warning' | 'ongoing' | 'error' | 'idle'
     size?: number
     className?: string
-    appearance?: 'dot' | 'step'
   }): ReactElement
 
   /** Controlled toggle switch; its accessible name is the caller's. */
@@ -73,10 +71,7 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
   export function Toast(props: {
     text: string
     icon?: ReactNode
-    tone?: 'success'
     anchor?: HTMLElement | null
-    holdMs?: number
-    actions?: readonly { label: string; prefix?: string; onClick: () => void }[]
     onDone: () => void
   }): ReactElement
 
@@ -85,13 +80,9 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
     label: string | (() => string)
     side?: 'right' | 'bottom' | 'top'
     align?: 'center' | 'end'
-    delayMs?: number
-    focusDelayMs?: number
     gap?: number
     disabled?: boolean
     portal?: boolean
-    maxWidth?: number
-    openOnClick?: boolean
     children: ReactElement
   }): ReactElement
 
@@ -114,7 +105,6 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
 
   /** Icon atoms (regular weight, currentColor). */
   type IconProps = SVGProps<SVGSVGElement> & { size?: number }
-  export function IconApiOutlineRegular(props: IconProps): ReactElement
   export function IconCheckOutlineRegular(props: IconProps): ReactElement
   export function IconChevronDownOutlineRegular(props: IconProps): ReactElement
   export function IconCloseFillRegular(props: IconProps): ReactElement

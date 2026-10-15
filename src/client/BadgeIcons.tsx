@@ -1,6 +1,5 @@
 /**
- * The badge icon family: four line glyphs for the four model facts a row states,
- * plus the slash that marks an unsupported or absent one.
+ * The badge icon family: four line glyphs for the four model facts a row states.
  *
  * WHY THIS ARTWORK IS DRAWN HERE. The host icon set
  * (`@deepseek-ai/dsh-client-ui-primitives`) ships no text-modality and no
@@ -10,27 +9,38 @@
  * one `viewBox` for the family — which is what makes the strip read as part of
  * the shell.
  *
- * THE FOUR GLYPHS, and the metaphor each one commits to:
+ * THE FOUR GLYPHS, and the metaphor each one commits to. The text and image
+ * marks follow the reference style the user pointed at (commandcode.ai): a page
+ * for text, an eye for vision — both drawn here on the same 16 grid, one weight.
  *
- *   text    the letterform "T": the modality itself, not a page and not a
- *           paragraph. Drawn WITHOUT a foot serif, which in a zh UI turns it
- *           into the CJK character 工.
- *   image   a framed picture: rounded frame, one horizon, one sun dot. The sun
- *           is what separates "image" from "rectangle border", so it is the one
- *           detail dropped when the badge is slashed.
+ *   text    a page with a folded corner and two lines of text: the document
+ *           itself, the mark the reference uses for "Text input". It replaced an
+ *           earlier bare letterform "T", which in a zh UI read as the CJK
+ *           character 工.
+ *   image   an eye: the reference's "Vision" mark for image input.
  *   effort  a brain's silhouette, the two lobes meeting at a stem — the mark the
  *           rest of this product already uses for "thinking" (the chat's
- *           reasoning disclosure and the composer's own effort chip). Drawn
+ *           reasoning disclosure and the composer's own effort chip), and the
+ *           same mark the reference uses for "Reasoning". Drawn
  *           from the same 24-unit artwork the host ships for that mark, so a
- *           reader who has seen a thinking row recognises this one; the level's
- *           *name* rides next to it as text. Earlier versions used three
- *           ascending bars, which said "how many levels" and nothing about what
- *           they were levels *of*.
+ *           reader who has seen a thinking row recognises this one. Earlier
+ *           versions used three ascending bars, which said "how many levels" and
+ *           nothing about what they were levels *of*.
  *   context a window: a rounded frame with its title bar and one line of
  *           content inside. Chosen over the width/span marks (`[—]`, `|—|`) that
  *           were tried first, because those read as a minus sign at small sizes
  *           while this one says 窗口/window outright — and it stays distinct
- *           from the image glyph, which has a horizon and a sun instead of lines.
+ *           from the image glyph, which is an eye, not a frame.
+ *
+ * ONLY THE "HAS THIS FACT" STATE HAS A GLYPH. There used to be a second state —
+ * the same glyph with a diagonal "not available" slash, minus the detail that
+ * turned to mush under it, in the quiet tone — and it is gone, because nothing
+ * ever rendered it: the row drops every `off` fact before drawing the strip
+ * (`specs.filter(spec => !spec.off)`, so the four tracks show only what the
+ * model HAS, and the absence is stated by the row's `aria-label` and `title`
+ * instead). Colour was never the only signal even then. A missing ability is
+ * therefore not drawn at all — see the `off` field of `BadgeSpec` for the data
+ * half, which the aria sentence still uses.
  *
  * THE GRID. The first three glyphs are drawn on the host's 16-unit grid, which
  * is the grid the icons around them use; the brain is the host's own 24-unit
@@ -41,15 +51,6 @@
  * brain's own 2 units would draw 1.17px — 17% lighter than its three
  * neighbours, which is visible as a thinner mark in the same strip. Inheriting
  * the host's 1px would be worse still: 0.58px across 24 units.)
- *
- * THE SLASH is the usual "not available" mark: one stroke from top-left to
- * bottom-right across the glyph, carried by the glyph itself (one path in the
- * artwork's own units) rather than painted over the cell by the stylesheet — a
- * mark drawn twice, once per mechanism, is how the two end up crossing at
- * different angles. An unsupported fact keeps its own glyph, drops the detail
- * that would turn to mush under the slash (the sun, the window's content line),
- * and switches to the quiet tone — so "unsupported" is legible without relying
- * on color alone.
  *
  * @module dsh-rabbit-model-picker/client/BadgeIcons
  */
@@ -66,17 +67,6 @@ const BADGE_STROKE = 1.6
  * makes all four glyphs draw the same 1.4px at the row's 14px.
  */
 const BRAIN_STROKE = 2.4
-
-/**
- * The "not available" mark: top-left to bottom-right, the common slash, stated
- * once per grid because a path's units are its own viewBox's units. The 24-unit
- * mark is exactly 1.5× the 16-unit one, so the two draw the same diagonal: the
- * slash the brain carries is the same slash its three neighbours carry.
- */
-const SLASH: Readonly<Record<16 | 24, string>> = {
-  16: 'M3.8 3.8 L12.2 12.2',
-  24: 'M5.7 5.7 L18.3 18.3',
-}
 
 /** The brain: two lobes around a stem, the mark this product already uses for thinking. */
 const BRAIN: readonly string[] = [
@@ -95,8 +85,6 @@ const BRAIN: readonly string[] = [
 export interface BadgeIconProps {
   /** Which fact the badge states. */
   readonly fact: BadgeFact
-  /** The fact is unsupported or absent: the glyph is slashed and loses its fill detail. */
-  readonly off?: boolean
   /** Square edge in px; the badges run the family at 14 so the strip reads at a glance. */
   readonly size?: number
   /** Layout class from the render site. */
@@ -104,28 +92,29 @@ export interface BadgeIconProps {
 }
 
 /**
- * The strokes of one glyph, in the state the badge is in.
+ * The strokes of one glyph.
  * @param fact - which fact the badge states.
- * @param off - whether the fact is unsupported/absent.
  * @returns the glyph's paths.
  */
-function artworkOf(fact: BadgeFact, off: boolean): ReactNode {
+function artworkOf(fact: BadgeFact): ReactNode {
   switch (fact) {
     case 'text':
-      // No off-variant: the letterform is already the whole statement, and the
-      // slash is what carries "unsupported".
+      // A page with a folded corner and two lines of text — the site's "Text
+      // input" mark.
       return (
         <>
-          <path d="M4.1 5.2 H11.9" />
-          <path d="M8 5.2 V11.4" />
+          <path d="M5.4 2.5 H8.5 L12 6 V12.1 A1.4 1.4 0 0 1 10.6 13.5 H5.4 A1.4 1.4 0 0 1 4 12.1 V3.9 A1.4 1.4 0 0 1 5.4 2.5 Z" />
+          <path d="M8.5 2.5 V6 H12" />
+          <path d="M6.5 9 H9.5" />
+          <path d="M6.5 11 H9.5" />
         </>
       )
     case 'image':
+      // An eye — the site's "Vision" mark for image input.
       return (
         <>
-          <rect x="2.75" y="3.75" width="10.5" height="8.5" rx="1.5" />
-          <path d="M3.7 10.9 L6.6 7.7 L8.9 9.9 L10.3 8.3 L12.3 10.4" />
-          {!off && <circle cx="5.8" cy="6.5" r="0.85" />}
+          <path d="M2.75 8 C4.6 4.8 6.5 3.5 8 3.5 C9.5 3.5 11.4 4.8 13.25 8 C11.4 11.2 9.5 12.5 8 12.5 C6.5 12.5 4.6 11.2 2.75 8 Z" />
+          <circle cx="8" cy="8" r="1.6" />
         </>
       )
     case 'effort':
@@ -136,7 +125,7 @@ function artworkOf(fact: BadgeFact, off: boolean): ReactNode {
           <rect x="2.75" y="3.75" width="10.5" height="8.5" rx="1.5" />
           {/* Title bar: the line that makes the frame a window rather than a picture. */}
           <path d="M2.75 6.5 H13.25" />
-          {!off && <path d="M5.1 8.9 H10.9" />}
+          <path d="M5.1 8.9 H10.9" />
         </>
       )
   }
@@ -147,7 +136,7 @@ function artworkOf(fact: BadgeFact, off: boolean): ReactNode {
  * @param props - see {@link BadgeIconProps}.
  * @returns the inline SVG; it is decorative, the surrounding badge carries the copy.
  */
-export function BadgeIcon({ fact, off = false, size = 14, className }: BadgeIconProps): ReactElement {
+export function BadgeIcon({ fact, size = 14, className }: BadgeIconProps): ReactElement {
   // The brain keeps the host's 24-unit artwork (and its own stroke weight); the
   // other three are drawn on the 16-unit grid the icons around them use.
   const brain = fact === 'effort'
@@ -166,8 +155,7 @@ export function BadgeIcon({ fact, off = false, size = 14, className }: BadgeIcon
       focusable="false"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {artworkOf(fact, off)}
-      {off && <path d={brain ? SLASH[24] : SLASH[16]} />}
+      {artworkOf(fact)}
     </svg>
   )
 }

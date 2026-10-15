@@ -1,8 +1,9 @@
 /**
  * dsh-rabbit-model-picker, browser half.
  *
- * One job: occupy the composer's `conversation.input.model` seat with a
- * single-level list, and read the SAME per-session directory `ui-model-selection`
+ * One job: occupy the composer's `conversation.input.model` seat with a card whose
+ * two panes are the provider scope and the model list, and read the SAME
+ * per-session directory `ui-model-selection`
  * gives the `/model` popup — that shared instance is what makes the two entries
  * one state, with no synchronization code here.
  *
@@ -20,8 +21,8 @@ import type {
 import { CapabilityStore } from './capabilities.ts'
 import { dictionaries, localTranslate, NS } from './dictionary.ts'
 import { ParamsStore } from './params.ts'
-import { retireLegacyProviderFilter } from './prefs.ts'
 import { Picker } from './Picker.tsx'
+import { retireStoredScope } from './retiredScope.ts'
 import { injectStyles } from './styles.ts'
 
 /**
@@ -110,10 +111,12 @@ export function apply(ctx: ClientContext): void {
     ctx.effect(() => locale.register(NS, dictionaries), 'dsh-rabbit-model-picker: dictionaries')
   }
   ctx.effect(() => injectStyles(), 'dsh-rabbit-model-picker: styles')
-  // The provider narrowing is remembered per session now; the single unscoped
-  // key the earlier shape wrote would otherwise sit in the store forever,
-  // unread and unexplained.
-  ctx.effect(() => retireLegacyProviderFilter(), 'dsh-rabbit-model-picker: legacy prefs')
+  // The provider scope is no longer remembered (§5.26); the keys older builds
+  // wrote would otherwise sit in the store forever, unread and unexplained. The
+  // sweep belongs to ACTIVATION rather than to a seat's mount: it is a data
+  // migration, it is idempotent, and a session that never opens the card should
+  // still not carry the dead entries.
+  ctx.effect(() => retireStoredScope(), 'dsh-rabbit-model-picker: retired scope record')
 
   // One adapter-catalog reader for the whole plugin, shared by every seat. The
   // LLM face is resolved lazily (see `CapabilityStore`) while each adapter's own

@@ -39,11 +39,10 @@
  * @module dsh-rabbit-model-picker/client/capabilities
  */
 
-import type {
-  CapabilityFace, CapabilitySnapshot, CapabilitySource, ConfigurableProvider, DiscoveredModel,
-  RemoteLlmFace, RouteCapability,
+import {
+  rowKey, type CapabilityFace, type CapabilitySnapshot, type CapabilitySource, type ConfigurableProvider,
+  type DiscoveredModel, type RemoteLlmFace, type RouteCapability,
 } from './contract.ts'
-import { rowKey } from './recent.ts'
 
 /** The snapshot before the first read: nothing asked, nothing claimed. */
 const INITIAL_SNAPSHOT: CapabilitySnapshot = { status: 'idle', routes: {} }

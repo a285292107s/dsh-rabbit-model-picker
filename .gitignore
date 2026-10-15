@@ -11,3 +11,16 @@ node_modules/
 
 # Local browser-automation scratch from manual verification.
 .playwright-cli/
+
+# Design-iteration working files (tasteskill v2): probe scripts, notes and the
+# before/after screenshots the pass looked at. The record that ships is
+# DESIGN.md §5.24 plus the refreshed shots/ images; this folder is scratch.
+.taste-skill/
+
+# Scratch under shots/, never authored: the extracted sheet (`_extract-css.cjs`),
+# the two HTML harnesses the row/trigger scripts render and then screenshot, and
+# the one-off probes and pixel-diff images written beside them. All of it rebuilds
+# from `src/` on demand, so committing it only adds weight to every git install.
+# The surfaces a reviewer is meant to open are the plain and `accept-*` / `audit-*`
+# shots; anything named `_…` is an intermediate.
+shots/_*

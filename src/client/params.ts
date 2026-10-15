@@ -49,9 +49,6 @@ export const CONTEXT_PLACEHOLDER = '128K'
 /** The modalities the panel exposes, in display order. */
 export const PANEL_MODALITIES = ['text', 'image'] as const
 
-/** One modality the panel can switch. */
-export type PanelModality = (typeof PANEL_MODALITIES)[number]
-
 /**
  * The schema field each known adapter declares its input modalities in. The
  * value actually present on the entry wins over this table (see

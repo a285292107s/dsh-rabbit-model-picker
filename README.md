@@ -1,32 +1,52 @@
 # dsh-rabbit-model-picker
 
-DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 → 各自二级面板」换成**一层列表**——
-搜索常驻、每行用只读徽章陈述事实（文字 / 图片 / 思考强度 / 上下文窗口），
-触发器左侧加一个提供商 chip，菜单里还有「最近使用」视图。`/model` 与 Host 侧逻辑不动。
+DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 → 各自二级面板」换成**一张卡、两个窗格**——
+左边是提供商栏，右边是模型列表：
 
-设计依据与逐条契约见 [DESIGN.md](DESIGN.md)。
+- **触发器说出模型的身份**：`模型提供商/模型名 · 思考强度`（例如 `opencode-go/DeepSeek V4.1 Flash · Default`）。
+  提供商前缀不是装饰：两个 provider 真的有同名模型，座位必须说清这个会话在哪一个上。
+- **左侧提供商栏**：`全部` + 每个真实 provider（带模型数）。**每次打开面板都从当前会话正在用的
+  提供商开始**（不是上次选过的那个，也不持久化），点一行就把右栏收窄到它，卡片**不关**、焦点直接
+  落到搜索框；要看全部就点第一行 `全部`。
+- **右侧模型列表**：搜索常驻、按 provider 分组、每行用只读徽章陈述事实
+  （文字 / 图片 / 思考强度 / 上下文窗口）。
+- `/model` 与 Host 侧逻辑不动。
+
+设计依据与逐条契约见 [DESIGN.md](DESIGN.md)（本次改版：§5.26 + §8.12；两栏本身见 §5.25 + §8.11）。
 
 ## 特性
 
 - **不改 DSH 安装目录**：profile 依赖 + 一个 Loader 行即可。
 - **完全可回退**：删掉那一行（或把 `priority` 改成 `> 0`）即恢复原控件。
 - **不复制状态**：目录 / 选择 / pending / 错误全部读同一个 per-session store，任一处切换立刻同步。
-- **筛选只影响视图**：提供商筛选是纯前端状态，不写 Host，`/model` 与触发器不受影响。
+- **范围只影响视图**：提供商范围是纯前端状态（连本地存储都不写），不写 Host，`/model` 与触发器不受影响。
+- **每次打开都回答"我从哪儿切"**:面板一开就是当前会话的提供商和它的模型列表，高亮落在当前模型上；
+  想横向比较再点 `全部`——**范围的生命周期就是这一次打开**，因此它永远不会和触发器说的身份打架。
+- **搜索不被范围吃掉**：在一个 provider 里搜不到、但别的 provider 有时，卡片会写出
+  「其他提供商还有 N 个匹配」并给一个「显示全部」——不会读成"没有这个模型"。
+- **窄屏同一份 DOM**：视口窄到装不下两栏（≤536px）时，提供商栏折成**横向条**放在列表上方，
+  范围照样看得见、点得到；roving focus / ARIA 结构不变。
 - **行内无控件**：徽章只说事实，点行 = 选模型；**思考强度只在齿轮参数面板里改**。
+- **四个事实是一张表**：四列固定、缺失的事实留空位，卡内表头把四列说一次（文字 / 图片 / 思考 / 窗口），
+  所以列表能上下比较同一件事，模型名的省略号落点也逐行一致。详见 DESIGN.md §5.24。
 - **内置目录也照样陈述**：模型来自适配器内置目录、配置里没有声明条目时，模态与窗口从**适配器自己
   发布的目录**读（`llm/discoverModels` / 适配器自有 Remote），而不是留白或猜。
-- **对比度达标**：面板文字全部过 WCAG AA，由 `npm run contrast` 逐样式量出。
+- **对比度达标**：面板文字全部过 WCAG AA，由 `npm run contrast` 逐样式量出（含提供商栏的每一行）。
+- **动效有一条声线**：卡片入场（从锚点角 scale 落定）、悬停过渡、按压缩放、选中勾弹跳共用一条
+  减速曲线，只动 transform 与背景色；`prefers-reduced-motion` 下全部关掉，键盘滚动只在
+  no-preference 下平滑。透明度淡入被对比度门天然禁止——理由见 DESIGN.md §5.23。
 
 ## 效果
 
 | | 深色 | 浅色 |
 |---|---|---|
-| 模型卡 | ![模型卡（深色）](shots/row-badges-dark.png) | ![模型卡（浅色）](shots/row-badges-light.png) |
-| 提供商面板 | ![提供商面板（深色）](shots/provider-dark.png) | ![提供商面板（浅色）](shots/provider-light.png) |
+| 模型卡：打开即落在当前会话的提供商 | ![模型卡（深色）](shots/row-badges-dark.png) | ![模型卡（浅色）](shots/row-badges-light.png) |
+| 模型卡：左栏切到别的提供商，右栏只列它 | ![提供商栏收窄（深色）](shots/provider-dark.png) | ![提供商栏收窄（浅色）](shots/provider-light.png) |
+| 窄屏：提供商栏折成横向条 | ![窄屏两栏折叠（深色）](shots/rail-stacked-dark.png) | ![窄屏两栏折叠（浅色）](shots/rail-stacked-light.png) |
 | 参数面板 | ![参数面板（深色）](shots/panel-dark.png) | ![参数面板（浅色）](shots/panel-light.png) |
 | 参数面板：模型来自适配器内置目录（§5.19 实测） | ![内置目录模型](shots/accept-capabilities-panel.png) | — |
 
-| 座位行（chip · 触发器 · 齿轮） |
+| 座位行（触发器 · 齿轮） |
 |---|
 | ![座位行](shots/composer-with-gear.png) |
 
@@ -34,39 +54,48 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
 
 | 动作 | 结果 |
 |---|---|
-| 点提供商 chip | 打开提供商菜单：搜索 + `全部` / `最近使用` / 各 provider（带模型计数，失败的排最后且不可选）。当前会话的 provider 行尾标「当前会话」 |
-| 选「最近使用」 | 只列最近用过的模型（最多 5 条），仍按 provider 分组，排序为 recency |
-| 选一个 provider | 只列它的模型，chip 显示「仅显示 {name}」；按会话记忆 |
-| 点「显示全部」 | 恢复全部 provider（记忆同时清掉） |
-| 点模型 chip / 某行 | 单层列表：常驻搜索 + provider 分组 + 每行四个只读事实徽章；点某行 = 切模型，点已选中的行 = 关闭 |
+| 座位上的触发器 | 写 `提供商/模型名`，右侧跟当前思考强度；窄屏按 composer 的显示变量整段折成图标。悬停气泡给出完整身份；`aria-label` 同样带提供商与强度 |
+| 点触发器 | 打开卡片：**左栏选中当前会话的提供商**，右栏只列它的模型、高亮落在当前模型上；左栏同时列出 `全部` 与其它 provider（带模型数，加载失败的排最后且不可选） |
+| 点左栏某一行 | 右栏只列该 provider 的模型；这一行 `aria-selected` 并带选中勾；**卡片保持打开**，焦点落到搜索框 |
+| 点左栏「全部」 | 显示全部 provider（这一次打开有效）。**如果你想找的模型在别的提供商，这是唯一出口** |
+| 关闭再打开 | **回到当前会话的提供商**——不管上次停在哪个 provider，也不管上次是不是停在 `全部`（不写 localStorage） |
+| 左栏的「当前会话」标记 | 这个会话真正在用的那个 provider：`aria-current` + 名字重一档（**不写字**——一行里再塞「当前会话」会把 provider 名挤成省略号，而那正是这一栏唯一的活） |
+| 点模型行 | 切模型，卡片关闭；点已选中的行 = 关闭 |
+| 搜索 | 常驻、跨 provider 模糊匹配；**范围不影响搜索**——在收窄状态下搜到别处的模型会显示「其他提供商还有 N 个匹配」+「显示全部」 |
 | 悬停某行 | `title` 给出整句事实（模型名、输入类型、强度、上下文窗口） |
-| 悬停触发器 | 气泡里只有模型名；`aria-label` 仍带「推理等级 {effort}」 |
 | 点齿轮 | 打开参数面板：输入类型、上下文窗口、思考强度；profile 已声明的项带小圆点标记 |
 | 参数面板改输入类型 / 上下文窗口 | **真写进 Host**：改适配器对模型的声明，立即生效；底部写明写入位置 |
 | 参数面板填上下文窗口 | 接受 `128K` / `1M` / `262144`；留空 = 撤掉声明回到适配器默认 |
 | 参数面板点「恢复默认」 | 撤掉本 profile patch 里的声明；无声明时按钮禁用 |
 | 参数面板点思考强度 | **唯一改强度的地方**：走 `directory.select()`，改完行内徽章同步 |
 | 无法寻址的路由 | 面板写明原因，并**陈述适配器目录公布的事实**（可编辑的控件仍然全部禁用）；适配器什么都没公布时，对应分区整块不渲染，不画成"不支持" |
-| 键盘 | `↑↓` 移高亮、`Enter` 选中；`Tab` 在 chip → 搜索 → 各行间走；`Esc` 逐层退出 |
-| 问答/审批/只读子代理顶掉输入条时 | 三个弹窗一起关掉（不还焦点）。判据是座位根有没有盒子，窄布局不误关。详见 DESIGN.md §5.18 |
+| 键盘（列表） | `↑↓` 移高亮、`Home`/`End` 跳首尾行、`Enter` 选中；`←` 进提供商栏；`Tab` 在 左栏 → 搜索 → 各行 之间走 |
+| 键盘（左栏） | `↑↓` 在行间移焦点、`Home`/`End` 跳首尾、`Enter`/`空格` 采纳并回到搜索框、`→` 回搜索框；`Esc` 关卡片 |
+| 问答/审批/只读子代理顶掉输入条时 | 两个弹窗一起关掉（不还焦点）。判据是座位根有没有盒子，窄布局不误关。详见 DESIGN.md §5.18 |
 
 ## 行内徽章
 
 每行右侧四个只读徽章，顺序固定。前三个自绘于宿主 16 单位网格，思考强度用宿主 24×24 大脑，
 两套网格线重均为 1.4px。
 
+**四列固定**：每行始终画出四条轨道（`文字 / 图片 / 思考 / 窗口`），模型没有的事实**在它自己的列里留空**，
+不画斜线、也不把邻居左移。所以四列逐行对齐、模型名那一列逐行等宽（实测 10 行全是 160px），
+眼睛可以上下比较同一件事。搜索框下面那行**表头**把四列各是什么说一次（11px、次级墨色、不滚动）。
+
 | 徽章 | 含义 | 值 |
 |---|---|---|
-| 文字输入 | 该模型接受文字 | 不支持时图标加斜杠、降到 quiet 色调 |
+| 文字输入 | 该模型接受文字 | 不支持时该列留空 |
 | 图片输入 | 该模型接受图片 | 同上 |
-| 思考强度 | 该行生效的档位 | 档位名（无默认档位时是 `Default`）；未声明档位 → 划掉的图标 |
+| 思考强度 | 该模型能不能思考（不是当前档位） | 同上 |
 | 上下文窗口 | 该模型声明/默认的窗口 | 整数 + K/M（`1M` / `128K`，不出现 `1048576` 或小数） |
 
 读取顺序就是适配器自己的顺序——**声明 → 适配器发布的目录 → 适配器的 provider 级默认**
 （pi-ai 的 `entry.contextWindow ?? base?.contextWindow ?? defaultContextWindow`，
 opencode-go 的 `modelInfo()` 同序），所以徽章和适配器实际用的值一致。
 
-- **紧凑**：纯图标胶囊 22px、`Default` 60px、`1M` 41px，四枚合计约 151px；320px 卡片里模型名能分到 ~122px。详见 DESIGN §5.12。
+- **紧凑**：四条轨道固定为 14 + 8 + 14 + 8 + 14 + 8 + 47 = **113px**（窗口列 = 14px 字形 + 3px 间距 +
+  30px 值），320px 卡片里模型名恒有 160px。改造前常见三事实行约 107px、四事实行约 129px——
+  **最坏情况反而变窄**，而且名字列的宽度不再逐行变化。详见 DESIGN §5.24（正文）与 §5.12（历史）。
 - **不猜**：模态与窗口先读 Host 设置快照，设置里查不到的再读适配器发布的目录；两者都查不到的**不显示**，不会画成"不支持"。
 - **只读**：适配器目录来的事实没有任何可写目标，参数面板里对应分区禁用并写明来源。
 - **可读**：徽章条带 `title`，整句同时是行的 `aria-label`，屏幕阅读器听到的是整句而非裸数字。
@@ -111,32 +140,39 @@ plugin_manager { action: "install_bundle", target: "C:/Users/28529/Desktop/dsh-r
 ```bash
 npm install          # esbuild + typescript + @types/react
 npm run build        # esbuild → lib/index.js（宿主）+ lib/client.js（客户端）
-npm run typecheck    # tsc --noEmit
-npm run test:fresh   # lib/ 与 src/ 是否一致（产物漂移门）
-npm run selfcheck    # 静态禁令 + 座位契约 + 文案键 + 面板/触发器/筛选契约
+npm run typecheck    # tsc --noEmit（含 noUnusedLocals/Parameters）
+npm run test:fresh   # 已提交的 lib/ 是否是已提交的 src/ 的忠实产物（产物漂移门）
+npm run selfcheck    # 静态禁令 + 座位契约 + 文案键 + 两栏/提供商栏/触发器契约
 npm run contrast     # 文字对比度门：两个主题下按真实字号判 WCAG AA
 npm run test:params  # 参数寻址/容量 + 行内事实推导 + 面板文案决策的单元门
-npm test             # build + test:fresh + selfcheck + contrast + test:params
+npm test             # typecheck + build + test:fresh + selfcheck + contrast + test:params
 ```
 
-> 这五道门在 GitHub Actions 上随每次 push 跑一遍（`.github/workflows/test.yml`）：
+> 这六道门在 GitHub Actions 上随每次 push 跑一遍（`.github/workflows/test.yml`）：
 > `lib/` 漂移会在 push 阶段被拦下，而不是等某次 git 安装装到旧行为。
 
 > `lib/` 是提交进仓库的（见「安装」）。**动过 `src/` 就要把重建后的 `lib/` 一起提交**，
-> `npm run test:fresh` 会在 `lib/` 与 `src/` 不一致时失败。
+> `npm run test:fresh` 会在两者不一致时失败。它比较的是 **HEAD 里的那一对**
+> （`git archive HEAD src tsconfig.json` 重新构建，对上 `git show HEAD:lib/…`），
+> 也就是 git 安装真正收到的东西——所以它不关心门跑在 `build` 之前还是之后，
+> 也不会因为工作区改了一半就报警。
 
-`npm run contrast` 需要本机装有 DSH；找不到时 `skip`。它量的是两种下层底色里较差的那种，
+`npm run contrast` 优先读本机装的 DSH 主题表；没装时回落到仓库里提交的
+`scripts/theme-tokens.json`（`npm run theme:fixture` 可重新生成），因此在 CI 上
+也是真的在量，而不是打一行 `skip` 就绿。它量的是两种下层底色里较差的那种，
 面板浮在哪一层都不影响结论。
 
 浏览器端验收（页面需已用 `dsh web` 打印的 URL 完成认证）：
 
 ```bash
 playwright-cli -s=verify open 'http://127.0.0.1:3080/?token=<token>'
-playwright-cli -s=verify --raw run-code --filename=./scripts/_accept-anchor-loss.cjs
+playwright-cli -s=verify --raw run-code --filename=./scripts/_accept-provider-rail.cjs   # §5.25/§5.26 两栏 + 触发器身份 + 范围
+playwright-cli -s=verify --raw run-code --filename=./scripts/_accept-anchor-loss.cjs     # §5.18 锚点消失
 ```
 
 > ⚠ 改了 `src/` 后 **`location.reload()` 不够**：Loader 用 `rev` 键给 client 模块，浏览器可能返回旧 body。
 > 先 `Network.setCacheDisabled` 再 reload，并在记录结论前断言 bundle 里确实有改动。
+> `_accept-provider-rail.cjs` 的第 0 步就是这条断言（还顺带断言旧 popover 的符号已经不在了）。
 >
 > ⚠ 本目录自 2026-10-02 起有 git 历史（`master` → `origin`），但早期被误删的几个验收脚本
 > （`_badges-probe.cjs` / `_icons-probe.cjs` / `_verify-fixes.cjs` / `_verify-settings.cjs`）不在任何提交里，
@@ -150,31 +186,36 @@ playwright-cli -s=verify --raw run-code --filename=./scripts/_accept-anchor-loss
 ```
 src/index.ts               宿主半边：空 apply
 src/client/index.ts        入口：inject 声明 + slots.inject → register(priority:-10)
-src/client/Picker.tsx      chip + 触发器 + 齿轮 + 单层菜单
-src/client/BadgeIcons.tsx  四个徽章图标 + 斜杠"不支持"变体
+src/client/Picker.tsx      触发器（`提供商/模型名 · 强度`）+ 齿轮 + 两栏模型卡
+src/client/ProviderRail.tsx 左栏：范围列表（全部 + 各 provider + 失败行），listbox + roving focus
+src/client/BadgeIcons.tsx  四个徽章图标（只有"具备这个事实"一种形态；缺失的事实不画）
 src/client/facts.ts        徽章词汇表（渲染层与推导层共用）
 src/client/badges.ts       行内事实推导（纯函数）
 src/client/capabilities.ts 适配器发布的能力目录（只读事实 + 读取策略）
 src/client/format.ts       徽章专用窗口写法（整数 + K/M）
 src/client/effort.ts       强度档位命名与列表
-src/client/ProviderMenu.tsx provider 筛选菜单
 src/client/SettingsMenu.tsx 模型参数面板
 src/client/panelCopy.ts     面板文案（纯数据）
 src/client/anchorLoss.ts    座位离开版面判据（纯逻辑）
 src/client/params.ts        参数寻址与读写（含 revision 冲突重试）
-src/client/recent.ts        最近使用（localStorage）+ 伪 provider 分桶
-src/client/prefs.ts         视图偏好（localStorage）
+src/client/retiredScope.ts  旧范围记录的键前缀 + 一次性清理（数据契约，不含行为）
 src/client/dictionary.ts    zh/en 文案 + 本地兜底
 src/client/styles.ts        注入样式表（全部走 --dsw-* 令牌）
-src/client/contract.ts      外部结构类型
+src/client/contract.ts      外部结构类型 + `rowKey`（行身份 `${provider}/${model}`，
+                            原住在已删除的 recent.ts，现在归这里）
 src/client/primitives.d.ts  唯一运行时基线依赖类型边界
 scripts/build-client.mjs    esbuild 构建 + 接线自检
 scripts/selfcheck-static.mjs 静态禁令 + 契约 + 徽章紧凑预算等
 scripts/check-contrast.mjs  文字对比度门
-scripts/test-params.mjs     参数寻址/事实推导/文案决策单元门
+scripts/test-params.mjs     参数寻址/事实推导/文案决策 + 旧范围键清理的单元门
 scripts/mutate-anchor-loss.mjs §5.18 改坏验证
+scripts/_accept-provider-rail.cjs §5.25/§5.26 浏览器验收（两栏、触发器身份、范围每次重来、越界搜索、窄屏折叠、键盘）
 scripts/_accept-anchor-loss.cjs §5.18 浏览器验收
 scripts/_accept-capabilities.cjs §5.19 浏览器验收（只读：内置目录的模型到底读到了什么）
+scripts/_verify-settings-layout.cjs 参数面板仍是"头在上、正文在下"的列（材质类共用的守卫，§5.25）
+scripts/_audit-shots.cjs      品质自查截图（两张主题 × 四类表面；当前宿主跟随系统深色，浅色走「设置 → 外观」）
+scripts/_taste-readme-shots.cjs 重拍 README 用的表面，含窄屏折叠那张（深/浅两套，见 DESIGN §5.24/§5.25）
+scripts/_dump-tokens.cjs      按主题打印宿主令牌原值（设计改动前查 --dsw-* 用，只读）
 scripts/_anchor-loss-probe.cjs  复现锚点消失（开发用，只读）
 scripts/_squeeze-probe.cjs     窄输入条压测（开发用，只读）
 ```
@@ -217,8 +258,15 @@ scripts/_squeeze-probe.cjs     窄输入条压测（开发用，只读）
 - 目录加载失败、选择被拒、subagent 会话、`locked` 禁用态、pending 菊花已实现但**未在本机实测**。
 - 参数面板**只读分支**（路由不可寻址 / profile 不接受表单编辑 / 部署没挂设置服务）已实现，只做了单元层覆盖，**未在真实 Host 上构造**。
 - 设置快照在挂载时读一次、**菜单和参数面板每次打开时重读**、写入后用 Host 返回值更新；**没有订阅 host 的设置推送**——面板开着的时候去「设置 → 模型」页改，要等下次打开菜单/面板或本插件写入才看得到。
-- **最近使用**是全局共享（不按会话隔离），只记录目录里仍存在的项；列表最多显示 5 条，存储保留 12 条。`__recent__` 是保留 id，不是 provider。无记录时 chip 仍停在「最近使用」。
-- **provider chip 只回答"列表被窄化成了什么"**，不回答"会话在用哪个 provider"——后者在菜单里标「当前会话」。
-- **provider 筛选持久化但只记 id、按会话隔离**：`localStorage['dsh-model-picker.provider.v1:<会话 id>']`，不同窗口互不影响，旧的全局键挂载时清掉。回到「全部」时记忆清掉。筛选仍**只影响视图**。
+- **两栏的宽度是算出来的，不是调出来的**（DESIGN §5.25）：卡片 `min(520px, 100vw - 32px)`；模型列必须留够四轨事实表要的 320px，左栏的盒子实际占 181px（176 的 flex basis + 内边距 + 1px 分隔线）。实测：模型列 331px、模型名列每行 **175px**（单栏时是 ~160px）、左栏最长名 132px 无省略号、13 行不滚动。**视口 ≤536px 时两栏折成一栏**（左栏变横向条），同一份 DOM、同一套 role，只有 flex 方向变。
+- **触发器说模型的身份**（DESIGN §5.26）：`提供商/模型名`，右侧跟思考强度。提供商前缀在这里是因为
+  两个 provider 真的有同名模型；旧版那个只读的 provider chip 已删除（同一件事不说两遍，也把宽度还给模型名）。
+  没有选中模型时只剩「请选择模型」/「正在加载模型…」，`aria-label` 同样带提供商与强度。
+- **范围不持久化，每次打开都从当前会话的 provider 开始**（DESIGN §5.26）：`providerFilter` 是组件内的
+  一次性视图状态，`providerFilter === null` 表示左栏第一行 `全部`。收窄**只影响列表、不影响搜索**，
+  也不写 Host、不影响 `/model` 与触发器。旧版写在 `localStorage['dsh-model-picker.provider.*']` 的记录
+  **已不再读写**；那些键还留在用户浏览器里，由 `retiredScope.ts` 在插件激活时一次性清掉（键名保持
+  改名前的拼写，selfcheck §15 钉住）。
+- **`.dmp-menu` 是三个卡片共用的材质类**：模型卡额外带 `.dmp-card` 才是两栏（`flex-direction: row` + 520px）。参数面板同时带 `.dmp-menu` 与 `.dmp-settings`，两栏样式若写在 `.dmp-menu` 上会把它的头部和正文并排——`scripts/_verify-settings-layout.cjs` 就是这道守卫（本机实测：280×460，头在上正文在下）。
 - 触发器只说模型名；`aria-label` 仍保留「推理等级 X」。
-- **座位离开版面时三个弹窗关掉**（不还焦点）。判据是座位根有没有盒子，窄布局不误关。详见 DESIGN.md §5.18 / §8.7。
+- **座位离开版面时两个弹窗关掉**（不还焦点）。判据是座位根有没有盒子，窄布局不误关。详见 DESIGN.md §5.18 / §8.7。

@@ -42,9 +42,10 @@ import {
   type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
-import type {
-  CapabilityFace, CapabilitySnapshot, DirectoryStore, ModelRoute, ModelSelection, ParamsFace, ParamsSnapshot,
-  RouteAddress, RouteCapability, SettingsOp, Translate,
+import {
+  rowKey, type CapabilityFace, type CapabilitySnapshot, type DirectoryStore, type ModelRoute,
+  type ModelSelection, type ParamsFace, type ParamsSnapshot, type RouteAddress, type RouteCapability,
+  type SettingsOp, type Translate,
 } from './contract.ts'
 import { effortChoicesOf } from './effort.ts'
 import {
@@ -52,7 +53,6 @@ import {
   showsContextField, showsInputSection,
 } from './panelCopy.ts'
 import { formatContext, PANEL_MODALITIES, parseContext, resolveRoute } from './params.ts'
-import { rowKey } from './recent.ts'
 
 /** Unplaced portal card: hidden but laid out at a fixed origin so measurement is real. */
 const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
@@ -97,20 +97,6 @@ export interface SettingsMenuProps {
 function modelOf(store: DirectoryStore, route: ModelRoute) {
   const group = store.getSnapshot().groups.find(candidate => candidate.id === route.provider)
   return group?.models.find(candidate => candidate.id === route.model) ?? null
-}
-
-/**
- * Render one modality list as copy.
- * @param modalities - modality ids.
- * @param t - the translator.
- * @returns the localized list ('文字、图片'), or '' when empty.
- */
-function modalityLabel(modalities: readonly string[], t: Translate): string {
-  return modalities
-    .map(modality => modality === 'text'
-      ? t('settings.input.text')
-      : modality === 'image' ? t('settings.input.image') : modality)
-    .join(t('settings.listJoin'))
 }
 
 /**
@@ -183,7 +169,7 @@ export function SettingsMenu({
   // is pure data: it decides WHICH line each state produces, and the unit gate
   // asserts that decision against the real dictionary.
   const copyState = { address, capability, snapshot, busy, capacityError } as const
-  const noticeLine = noticeOf(copyState, t)
+  const noticeLine = noticeOf(copyState)
   const sectionNotice = noticeLine === null ? null : t(noticeLine.key, noticeLine.params)
   const inputHintLine = inputHintOf(copyState, t)
   // The one disabled state no notice covers: an addressable, writable route whose
@@ -196,7 +182,7 @@ export function SettingsMenu({
         t(inputHintLine.key, inputHintLine.params),
         restoreIsEmpty(copyState) ? t('settings.resetNothing') : null,
       ].filter(part => part !== null).join(' ')
-  const contextHintLine = contextHintOf(copyState, t)
+  const contextHintLine = contextHintOf(copyState)
   const contextHint = contextHintLine === null ? null : t(contextHintLine.key, contextHintLine.params)
 
   // What the switches and the capacity field show, again from the pure module:
@@ -448,7 +434,9 @@ export function SettingsMenu({
     <MenuSurface
       ref={panelRef}
       id={`${idPrefix}-settings`}
-      className="dmp-menu dmp-settings"
+      className={position === null
+        ? 'dmp-menu dmp-settings'
+        : `dmp-menu dmp-settings dmp-menu-in ${side === 'top' ? 'dmp-from-top' : 'dmp-from-bottom'}`}
       style={position === null ? MEASURE_STYLE : { ...position, maxHeight }}
       role="group"
       aria-label={t('settings.aria', { model: modelLabel })}

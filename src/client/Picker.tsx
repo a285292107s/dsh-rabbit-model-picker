@@ -1,27 +1,38 @@
 /**
- * The composer model seat: a trigger plus ONE level of list.
+ * The composer model seat: a trigger, one fact chip, and ONE card holding two
+ * panes.
  *
  * What this replaces: the incumbent seat's root pane is a two-cell menu
- * (Model / Effort) that drills into a second pane each. Here the levels are
- * inline — the list carries the models, and each row states its own facts as a
- * read-only badge strip (text / image input, the effort in force, the context
- * window). Nothing inside a row is a control: effort is edited in the model
- * parameters panel, which is what the row's badges now merely report. Search is
- * always present (the incumbent only shows it above four models), and a "Recent"
- * group sits on top so a long catalog does not have to be scrolled or typed
- * through.
+ * (Model / Effort) that drills into a second pane each. Here the card is a
+ * single surface with a provider rail on the left and the model list on the
+ * right (§5.25) — picking a scope and picking a model are two gestures in one
+ * place, so narrowing the list is never a mode the user has to notice, and
+ * "全部" is a row of the same list rather than a separate exit.
+ *
+ * Each model row states its own facts as a read-only badge strip (text / image
+ * input, the effort in force, the context window). Nothing inside a row is a
+ * control: effort is edited in the model parameters panel, which is what the
+ * row's badges now merely report. Search is always present (the incumbent only
+ * shows it above four models) and it stays GLOBAL in scope: a query that matches
+ * models outside the rail's scope states how many, with one click back to all of
+ * them, instead of reading as "no such model".
+ *
+ * The chip beside the trigger is a FACT, not a control: it names the provider
+ * the selected model lives on and never the scope (§5.25). Two models with the
+ * same name really do exist under two providers (the row screenshots show
+ * exactly that), so the fact is not redundant with the trigger.
  *
  * Data and submission ride the same per-session `ModelDirectory` the `/model`
  * popup uses, so a switch made in either entry is what the other shows next.
  * Everything external (catalog, current selection, pending, errors) is read
- * from that one store; only view state (open, query, highlight, which popover is
- * open, the toast) is local.
+ * from that one store; only view state (open, query, highlight, the scope, the
+ * toast) is local.
  *
  * @module dsh-rabbit-model-picker/client/Picker
  */
 
 import {
-  IconApiOutlineRegular, IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconCloseFillRegular,
+  IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconCloseFillRegular,
   IconDataOutlineRegular, IconSettingsOutlineRegular, IconWarningOutlineRegular, Input, MenuGroup, MenuSurface,
   observeStickyMenuGroups, rankByName, StateDot, Tag, Toast, Tooltip, useAnchoredPosition,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -32,26 +43,24 @@ import {
 import { createPortal } from 'react-dom'
 import { BadgeIcon } from './BadgeIcons.tsx'
 import { observeSeatLoss } from './anchorLoss.ts'
-import { badgeSpecsOf, type BadgeSpec } from './badges.ts'
-import type { CatalogModel, ModelSelection, PickerProps, ProviderGroup } from './contract.ts'
+import { badgeSpecsOf, BADGE_FACTS, type BadgeFact, type BadgeSpec } from './badges.ts'
 import { effortLabelOf } from './effort.ts'
 import { resolveRoute } from './params.ts'
-import { readProviderFilter, rememberProviderFilter } from './prefs.ts'
-import { ProviderMenu, type ProviderOption } from './ProviderMenu.tsx'
-import { RECENT_ID, RECENT_VISIBLE, readRecent, recentGroupsFor, remember, rowKey, type RecentEntry } from './recent.ts'
+import { ProviderRail, type ProviderOption } from './ProviderRail.tsx'
+import { rowKey, type CatalogModel, type ModelSelection, type PickerProps, type ProviderGroup } from './contract.ts'
 import { SettingsMenu } from './SettingsMenu.tsx'
 
 /** Unplaced portal card: hidden but laid out at a fixed origin so measurement is real. */
 const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 
-/** One rendered model row. `key` is unique across groups (a model can appear in Recent too). */
+/** One rendered model row. `key` is unique across groups. */
 interface Row {
   readonly key: string
   readonly provider: string
   readonly model: CatalogModel
 }
 
-/** One rendered group: the sticky-headed Recent group or a provider group. */
+/** One rendered group: a provider group with its sticky heading. */
 interface DisplayGroup {
   readonly id: string
   readonly label: string
@@ -71,31 +80,6 @@ function orderProviders(groups: readonly ProviderGroup[]): ProviderGroup[] {
 }
 
 /**
- * Resolve the remembered routes that are still selectable and still match the
- * query, most recent first. A route missing from the catalog is skipped but
- * left in storage.
- * @param catalog - every row currently in the catalog.
- * @param recent - remembered routes, most recent first.
- * @param query - the trimmed search text ('' when not searching).
- * @param cap - how many rows to keep; null counts them all (the provider menu
- * reports the total, the list shows {@link RECENT_VISIBLE}).
- * @returns the matching rows, most recent first.
- */
-function recentRowsFor(
-  catalog: readonly Row[], recent: readonly RecentEntry[], query: string, cap: number | null = RECENT_VISIBLE,
-): Row[] {
-  const rows: Row[] = []
-  for (const entry of recent) {
-    const found = catalog.find(row => row.provider === entry.provider && row.model.id === entry.model)
-    if (found === undefined) continue
-    if (query !== '' && rankByName([found.model], query).length === 0) continue
-    rows.push({ key: `recent:${found.provider}:${found.model.id}`, provider: found.provider, model: found.model })
-    if (cap !== null && rows.length >= cap) break
-  }
-  return rows
-}
-
-/**
  * Render the composer model seat.
  * @param props - the owner share (`locked`), the injected directory face, and the translators.
  * @returns the trigger and, while open, the single-level menu.
@@ -111,13 +95,12 @@ export function Picker(props: PickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState<number | null>(null)
-  const [recent, setRecent] = useState<readonly RecentEntry[]>([])
-  // The narrowing is a preference, not session state — but it is a preference
-  // ABOUT one conversation, so it is remembered per session (see prefs.ts).
-  const [filterSession, setFilterSession] = useState(sessionId)
-  const [providerFilter, setProviderFilter] = useState<string | null>(() => readProviderFilter(sessionId))
-  const [providerAt, setProviderAt] = useState(false)
-  const [providerSide, setProviderSide] = useState<'top' | 'bottom'>('bottom')
+  // The rail's scope is VIEW state with the lifetime of one open (§5.26), and it
+  // is NOT remembered: every open starts from the provider this conversation runs
+  // on, so the list always answers "what can I switch to from here" before it
+  // answers "what exists". `null` is the unfiltered row (「全部」), which is what a
+  // session with no model yet honestly has.
+  const [providerFilter, setProviderFilter] = useState<string | null>(null)
   const [settingsAt, setSettingsAt] = useState(false)
   const [settingsSide, setSettingsSide] = useState<'top' | 'bottom'>('bottom')
   // The panel is the tallest surface in this seat, and the composer sits near
@@ -131,18 +114,18 @@ export function Picker(props: PickerProps) {
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const providerChipRef = useRef<HTMLButtonElement | null>(null)
-  const providerMenuRef = useRef<HTMLDivElement | null>(null)
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const groupsRef = useRef<HTMLDivElement | null>(null)
   const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+  // The rail's rows, in `providerOptions` order. The rail fills this array; the
+  // seat reads it for its own `Tab` chain, whose first stop is the rail's.
+  const railRefs = useRef<(HTMLButtonElement | null)[]>([])
   // The in-menu strip is the catalog-load surface; a rejected SELECTION
   // announces through the transient toast instead.
   const lastActionRef = useRef<'load' | 'select'>('load')
-  const routeRef = useRef<string | null>(null)
   const id = useId()
 
   // Which session the settings panel was opened on. The seat spans sessions, so
@@ -153,14 +136,16 @@ export function Picker(props: PickerProps) {
     setSettingsSession(sessionId)
   }
 
-  // The same boundary for the narrowing. The seat is NOT remounted when the
+  // The same boundary for the scope. The seat is NOT remounted when the
   // conversation changes — the model trigger keeps up only because the injected
-  // directory is re-resolved per session — so a `useState` initializer never
-  // runs again and a session-wide preference read once at mount would follow
-  // the wrong conversation for the rest of the seat's life.
-  if (filterSession !== sessionId) {
-    setFilterSession(sessionId)
-    setProviderFilter(readProviderFilter(sessionId))
+  // directory is re-resolved per session — so a scope left over from the previous
+  // conversation would be scoped to a provider the new one has nothing to do with.
+  // The new session's own provider is the answer, not a remembered value: there is
+  // nothing remembered any more (§5.26).
+  const [scopeSession, setScopeSession] = useState(sessionId)
+  if (scopeSession !== sessionId) {
+    setScopeSession(sessionId)
+    setProviderFilter(state.current?.provider ?? null)
   }
 
   const menuPos = useAnchoredPosition({
@@ -200,19 +185,18 @@ export function Picker(props: PickerProps) {
   const specsByRow = useMemo(() => {
     const map = new Map<string, readonly BadgeSpec[]>()
     for (const row of catalogRows) {
-      const selected = row.provider === state.current?.provider && row.model.id === state.current.model
       map.set(rowKey(row.provider, row.model.id), badgeSpecsOf({
         address: resolveRoute(paramsSnapshot, { provider: row.provider, model: row.model.id }),
         capability: catalog.routes[rowKey(row.provider, row.model.id)],
+        // The row states only whether the model CAN reason (reasoning metadata
+        // present or not); the effort in force is the trigger's and the panel's
+        // subject, so it is not passed here.
         reasoning: row.model.reasoning,
-        // The effort in force: what the Host accepted on the selected row, else
-        // the level the adapter would start this model at.
-        effort: selected ? effectiveEffort : row.model.reasoning?.defaultEffort,
         t,
       }))
     }
     return map
-  }, [catalog, catalogRows, effectiveEffort, paramsSnapshot, state.current, t])
+  }, [catalog, catalogRows, paramsSnapshot, t])
 
   const trimmedQuery = query.trim()
 
@@ -232,9 +216,6 @@ export function Picker(props: PickerProps) {
   const groups = useMemo<DisplayGroup[]>(() => {
     // Narrowing happens here and nowhere else: it never reaches the store, so
     // the /model popup keeps listing every provider.
-    if (providerFilter === RECENT_ID) {
-      return recentGroupsFor(recentRowsFor(catalogRows, recent, trimmedQuery), orderedGroups, providerLabel)
-    }
     const ranked = rankByName(catalogRows.map(row => row.model), trimmedQuery)
     const rankOf = new Map<CatalogModel, number>(ranked.map((model, index) => [model, index]))
     const bestRank = (candidate: DisplayGroup): number => candidate.rows.reduce(
@@ -256,30 +237,35 @@ export function Picker(props: PickerProps) {
       // Group order follows relevance: the best-matching provider floats up,
       // and an empty query leaves catalog order untouched.
       .sort((left, right) => bestRank(left) - bestRank(right))
-  }, [catalogRows, orderedGroups, providerFilter, providerLabel, recent, trimmedQuery])
+  }, [catalogRows, orderedGroups, providerFilter, providerLabel, trimmedQuery])
 
-  // How many rows the recent list will actually show, counted for the menu's row.
-  // The cap is the SAME one the list applies: the store deliberately keeps more
-  // than are shown (so that models leaving the catalog still leave the list
-  // full), and a menu count read past the cap reports rows nobody can open —
-  // every other row in this menu counts what you get, not what is remembered.
-  const presentRecentCount = useMemo(
-    () => recentRowsFor(catalogRows, recent, '', RECENT_VISIBLE).length,
-    [catalogRows, recent],
-  )
+  // How many models each provider currently offers, counted for the rail's row.
+  // Every row in the rail counts what you get, so the number here is the same
+  // list the pick beside it shows.
+  const modelCounts = useMemo(() => new Map(
+    orderedGroups.map(group => [group.id, group.models.length]),
+  ), [orderedGroups])
 
-  // The provider menu's rows: "all providers", then "recently used", then every
-  // loaded provider with its model count, then the providers whose catalog
-  // failed (listed so a missing provider is explained rather than mysterious).
-  // `session` marks the one this conversation actually runs on — the answer the
-  // chip used to give, in the place where it cannot contradict the radio group.
+  // The rail's rows: the unfiltered scope first, then every loaded provider with
+  // its model count, then the providers whose catalog failed (listed so a missing
+  // provider is explained rather than mysterious). The unfiltered row is a real
+  // member of this list (§5.25): the rail IS the scope, so it needs an "everything"
+  // position — that row is what replaced the in-card "show all" strip, which was
+  // the only way out of a narrowing while the scope lived in its own popover.
+  // `session` marks the one this conversation actually runs on; the rail draws it
+  // as a heavier name (the words are on the seat's chip, which stays on screen).
   const providerOptions = useMemo<ProviderOption[]>(() => [
-    { id: null, label: t('provider.all'), count: catalogRows.length, failed: false, session: false },
-    { id: RECENT_ID, label: t('group.recent'), count: presentRecentCount, failed: false, session: false },
+    {
+      id: null,
+      label: t('provider.all'),
+      count: catalogRows.length,
+      failed: false,
+      session: false,
+    },
     ...orderedGroups.map(group => ({
       id: group.id,
       label: providerLabel(group.id, group.name),
-      count: group.models.length,
+      count: modelCounts.get(group.id) ?? group.models.length,
       failed: false,
       session: group.id === state.current?.provider,
     })),
@@ -290,47 +276,56 @@ export function Picker(props: PickerProps) {
       failed: true,
       session: failure.id === state.current?.provider,
     })),
-  ], [catalogRows.length, orderedGroups, presentRecentCount, providerLabel, state.current, state.failures, t])
+  ], [catalogRows.length, modelCounts, orderedGroups, providerLabel, state.current, state.failures, t])
 
-  // What the chip NAMES. One job, and it is the same one the menu's radio group
-  // does: this is the list's scope. It is deliberately NOT the session's own
-  // provider — that is a different fact with a different lifetime (it moves when
-  // the model or the conversation does), and giving the chip both made it
-  // contradict its own menu: the menu said "全部 ✓" while the chip said
-  // "commandcode", and no reading of that pair was true. The session's provider
-  // is marked on the menu row that names it instead (`session:` below), which is
-  // where someone asking that question is already looking.
-  const activeProviderId = providerFilter
-  const activeProviderLabel = activeProviderId === null
-    ? t('provider.all')
-    : // Until the catalog loads there is no option to take a name from, so the
-      // id stands in for itself (still localized when it names the account).
-      providerOptions.find(option => option.id === activeProviderId)?.label
-      ?? providerLabel(activeProviderId, activeProviderId)
+  /**
+   * The display name of one provider id.
+   * @param providerId - an id from the catalog or from the failures list.
+   * @returns the name to paint; until the catalog loads there is no option to
+   * take a name from, so the id stands in for itself (still localized when it
+   * names the account).
+   */
+  const providerNameOf = useCallback(
+    (providerId: string): string =>
+      providerOptions.find(option => option.id === providerId)?.label
+      ?? providerLabel(providerId, providerId),
+    [providerLabel, providerOptions],
+  )
+
+  // The rail's single tab stop (§5.25). It follows the scope so `Tab` lands on
+  // the row the user is actually on, and it never lands on a disabled row: a
+  // failed provider cannot take focus, and parking the stop there would make the
+  // whole pane unreachable from the keyboard.
+  const railStop = useMemo(() => {
+    const selected = providerOptions.findIndex(option => option.id === providerFilter && !option.failed)
+    if (selected >= 0) return selected
+    return providerOptions.findIndex(option => !option.failed)
+  }, [providerOptions, providerFilter])
+
+  // What the TRIGGER names (§5.26): the model AND the provider it lives on, as
+  // `provider/model` — the provider prefix is not decoration, because two
+  // providers really do offer the same model names (the row screenshots show
+  // exactly that) and the seat has to say which one this conversation is on. The
+  // effort follows it as its own segment (see the label composition below).
+  const currentProviderId = state.current?.provider ?? null
+  const currentProviderLabel = currentProviderId === null ? null : providerNameOf(currentProviderId)
 
   // Every provider this catalog knows about, failed ones included: they are
-  // listed in the menu, so a filter naming one of them is still a filter the
-  // user can see and clear. "Recently used" is in here by construction — its
-  // row is unconditional — which is what keeps the cleanup below from throwing
-  // away a remembered "recently used" every time the catalog settles.
-  const knownProviders = useMemo(() => new Set(
-    providerOptions.flatMap(option => option.id === null ? [] : [option.id]),
-  ), [providerOptions])
+  // listed on the rail, so a scope naming one of them is still a scope the user
+  // can see and leave. `null` is not in here — it is the unfiltered row, and the
+  // cleanup below is guarded on it.
+  const knownProviders = useMemo(() => new Set(providerOptions.map(option => option.id)), [providerOptions])
 
-  // Written under the session the value belongs to, not under whatever session
-  // the seat happens to be on when the effect runs — `filterSession` is the one
-  // kept in step with `sessionId` above, so the two can never disagree.
-  useEffect(() => { rememberProviderFilter(filterSession, providerFilter) }, [filterSession, providerFilter])
-
-  // A remembered provider this catalog does not offer (removed, or renamed)
-  // would narrow the list to nothing with no visible reason, so it is dropped —
-  // but only once the catalog has actually loaded: an unloaded catalog knows no
-  // providers, and that must not be mistaken for "this provider is gone".
+  // A scope this catalog does not offer (the provider was removed, or renamed
+  // while the card was open) would narrow the list to nothing with no visible
+  // reason, so it falls back to the session's own provider — the state a fresh
+  // open starts from. Only once the catalog has answered: an unloaded catalog
+  // knows no providers, and that must not be mistaken for "this one is gone".
   useEffect(() => {
     if (providerFilter === null || state.status !== 'ready') return
     if (knownProviders.has(providerFilter)) return
-    setProviderFilter(null)
-  }, [knownProviders, providerFilter, state.status])
+    setProviderFilter(currentProviderId)
+  }, [currentProviderId, knownProviders, providerFilter, state.status])
 
   const rows = useMemo(() => groups.flatMap(group => group.rows), [groups])
   const indexOfRow = useMemo(() => new Map(rows.map((row, index) => [row.key, index])), [rows])
@@ -342,9 +337,20 @@ export function Picker(props: PickerProps) {
   const pending = state.pending
   const busy = pending !== null
 
+  // The rail scopes the LIST; it never scopes the SEARCH. A query typed while one
+  // provider is in scope is still a query about every model this catalog has, so
+  // a hit under another provider is reported and reachable in one click instead
+  // of reading as "no matching models" — the dead end that would make scoping
+  // feel like losing models (§5.25). Counted only while both a scope and a query
+  // are in force: unscoped, the list IS the whole answer.
+  const elsewhereCount = useMemo(() => {
+    if (providerFilter === null || trimmedQuery === '') return 0
+    const matches = rankByName(catalogRows.map(row => row.model), trimmedQuery).length
+    return Math.max(0, matches - rows.length)
+  }, [catalogRows, providerFilter, rows.length, trimmedQuery])
+
   const reload = (): void => {
     lastActionRef.current = 'load'
-    setRecent(readRecent())
     load()
   }
 
@@ -371,49 +377,35 @@ export function Picker(props: PickerProps) {
     capabilities.ensure(catalogRows.map(row => row.provider))
   }, [capabilities, catalogRows, open])
 
-  // Remember the route in use, whichever entry set it: the /model popup keeps
-  // the same store, so this is how its switches reach the Recent group.
   useEffect(() => {
-    if (state.current === null) return
-    const route = rowKey(state.current.provider, state.current.model)
-    if (routeRef.current === route) return
-    routeRef.current = route
-    remember(state.current.provider, state.current.model)
-    setRecent(readRecent())
-  }, [state.current])
-
-  useEffect(() => {
-    if (!open && !providerAt && !settingsAt) return
+    if (!open && !settingsAt) return
     const closeOutside = (event: MouseEvent): void => {
       const target = event.target as Node
       if (rootRef.current?.contains(target) === true) return
       if (menuRef.current?.contains(target) === true) return
-      if (providerMenuRef.current?.contains(target) === true) return
       if (settingsMenuRef.current?.contains(target) === true) return
       setOpen(false)
-      setProviderAt(false)
       setSettingsAt(false)
     }
     document.addEventListener('mousedown', closeOutside)
     return () => { document.removeEventListener('mousedown', closeOutside) }
-  }, [open, providerAt, settingsAt])
+  }, [open, settingsAt])
 
-  // The other way out. This seat is a `position: fixed` anchor, and its three
+  // The other way out. This seat is a `position: fixed` anchor, and its two
   // surfaces are portaled to the body, so the Host can remove the composer from
-  // the page and leave all three on screen with no anchor at all — a question
-  // card does exactly this (§5.18). An outside CLICK dismisses for the same
-  // reason this does: a popover whose trigger is gone is not a thing the user
-  // can still be reading, and the panel is measured once, from a rect that no
-  // longer describes anything. All three go together, because they already
-  // share the one-at-a-time contract and a model list over a vanished composer
-  // is the same defect as a parameter panel over one.
+  // the page and leave them on screen with no anchor at all — a question card
+  // does exactly this (§5.18). An outside CLICK dismisses for the same reason
+  // this does: a popover whose trigger is gone is not a thing the user can still
+  // be reading, and the panel is measured once, from a rect that no longer
+  // describes anything. Both go together, because they already share the
+  // one-at-a-time contract and a model card over a vanished composer is the same
+  // defect as a parameter panel over one.
   useEffect(() => {
-    if (!open && !providerAt && !settingsAt) return
+    if (!open && !settingsAt) return
     return observeSeatLoss(
       () => rootRef.current,
       () => {
         setOpen(false)
-        setProviderAt(false)
         setSettingsAt(false)
         // Focus is not handed back anywhere: the trigger the popover would
         // return it to is inside the box that just disappeared, and the Host's
@@ -421,7 +413,7 @@ export function Picker(props: PickerProps) {
         setSelectionFocus(false)
       },
     )
-  }, [open, providerAt, settingsAt])
+  }, [open, settingsAt])
 
   useEffect(() => {
     const viewport = groupsRef.current
@@ -453,11 +445,14 @@ export function Picker(props: PickerProps) {
     triggerRef.current?.focus()
     setQuery('')
     setHighlight(null)
-    // Only one popover at a time: the provider filter and the parameter panel are
-    // composer controls, not levels inside the model menu.
-    setProviderAt(false)
+    // Every open re-answers "which provider am I on": the scope starts from this
+    // conversation's own provider, never from what the last open ended on (§5.26).
+    // The highlight then lands on the current model inside it (see `activeIndex`),
+    // which is the model the user is most likely to compare against.
+    setProviderFilter(currentProviderId)
+    // One card at a time: the parameter panel is a sibling composer control, not
+    // a level inside the model card.
     setSettingsAt(false)
-    setRecent(readRecent())
     setOpen(true)
     reload()
   }
@@ -468,39 +463,25 @@ export function Picker(props: PickerProps) {
    */
   const close = (restoreFocus = false): void => {
     setOpen(false)
-    setProviderAt(false)
     setSettingsAt(false)
     if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
   }
 
   /**
-   * Open or close the provider filter, choosing the side the chip has room for.
+   * Commit the rail's scope, and hand the keyboard to the list it just scoped.
+   *
+   * The hand-off is the point of the pane: scoping exists to pick a model from
+   * inside it, so the next keystroke belongs in the search box rather than on the
+   * row that was just clicked. Picking a scope never touches the Host — the
+   * directory, `/model` and the trigger are all unaffected (§5.9).
+   * @param providerId - the chosen provider, or null for every provider.
    */
-  const toggleProviderMenu = (): void => {
-    if (providerAt) {
-      setProviderAt(false)
-      return
-    }
-    const anchor = providerChipRef.current
-    const rect = anchor?.getBoundingClientRect()
-    if (rect !== undefined && rect !== null) {
-      const estimated = (providerOptions.length + 1) * 34 + 44
-      const below = window.innerHeight - rect.bottom
-      setProviderSide(below < estimated && rect.top > below ? 'top' : 'bottom')
-    }
-    // The model menu and this one never share the screen.
-    setOpen(false)
-    setSettingsAt(false)
-    setProviderAt(true)
-  }
-
-  /**
-   * Close the provider filter.
-   * @param restoreToChip - hand focus back to the provider chip.
-   */
-  const closeProviderMenu = (restoreToChip: boolean): void => {
-    setProviderAt(false)
-    if (restoreToChip) queueMicrotask(() => { providerChipRef.current?.focus() })
+  const pickProvider = (providerId: string | null): void => {
+    setProviderFilter(providerId)
+    // The list under a new scope is a different list; its own highlight starts at
+    // the top rather than at an index carried over from the previous one.
+    setHighlight(0)
+    searchRef.current?.focus()
   }
 
   /**
@@ -524,9 +505,8 @@ export function Picker(props: PickerProps) {
       const room = top === 'top' ? rect.top - 28 : below - 28
       setSettingsBudget(Math.max(240, Math.min(460, room)))
     }
-    // One popover at a time: this is a sibling of the other two, not a level.
+    // One card at a time: this is a sibling of the model card, not a level in it.
     setOpen(false)
-    setProviderAt(false)
     setSettingsAt(true)
   }
 
@@ -601,21 +581,31 @@ export function Picker(props: PickerProps) {
   }
 
   /**
-   * Move the keyboard along the panel's own focus chain: search box, then each
-   * row. The rows carry no controls of their own any more — a row is one target,
-   * and effort is a fact it states, not a thing it does. Traversal never leaves
-   * the card; the ends wrap, and stepping back off the search box closes the
-   * seat like Escape does.
+   * Move the keyboard along the card's own focus chain, in the order the card
+   * renders it: the provider rail's single stop, then the search box, then each
+   * model row. The rows carry no controls of their own any more — a row is one
+   * target, and effort is a fact it states, not a thing it does. The rail is one
+   * stop rather than a dozen because it is a listbox: its own arrows move within
+   * it. Traversal never leaves the card; the ends wrap, and stepping back off the
+   * chain's first element closes the seat like Escape does.
    * @param delta - +1 forward, -1 backward.
    */
   const moveTab = (delta: number): void => {
-    // The provider chip sits in the composer to the trigger's left, so the
-    // panel's chain starts there rather than pretending the menu is the world.
-    const chain: (HTMLElement | null)[] = [providerChipRef.current, searchRef.current]
+    // The rail is the first pane of the card (left of the list on a wide card,
+    // above it on a narrow one), so the chain starts there and follows the DOM.
+    const chain: (HTMLElement | null)[] = [railRefs.current[railStop] ?? null, searchRef.current]
     rows.forEach((_row, index) => {
       chain.push(rowRefs.current[index] ?? null)
     })
-    const elements = chain.filter((element): element is HTMLElement => element !== null)
+    // A disabled control is not a tab stop — that is what `disabled` means to the
+    // platform. The rail's rows are all disabled while a selection is in flight,
+    // and a chain that kept one would swallow the keypress that lands on it
+    // (`.focus()` on a disabled button does nothing), so `Shift+Tab` off the
+    // search box would look dead for the length of the write.
+    const elements = chain.filter(
+      (element): element is HTMLElement =>
+        element !== null && !(element instanceof HTMLButtonElement && element.disabled),
+    )
     if (elements.length === 0) return
     const active = document.activeElement instanceof HTMLElement ? elements.indexOf(document.activeElement) : -1
     const next = active === -1 ? (delta > 0 ? 0 : elements.length - 1) : active + delta
@@ -628,9 +618,9 @@ export function Picker(props: PickerProps) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.nativeEvent.isComposing) return
-    // The provider and settings surfaces own every key they consume and stop it
-    // there.
-    if (providerAt || settingsAt) return
+    // The settings panel owns every key it consumes and stops it there; the rail
+    // does the same for the arrows it owns.
+    if (settingsAt) return
     if (event.key === 'Escape' && open) {
       event.preventDefault()
       if (query !== '') {
@@ -644,6 +634,17 @@ export function Picker(props: PickerProps) {
     }
     if (!open) return
     const onSearch = document.activeElement === searchRef.current
+    // Left steps out of the list and into the provider pane beside it. From the
+    // search box that only holds while the box is empty: with a caret in text,
+    // ArrowLeft is the caret's own key and must stay one.
+    if (event.key === 'ArrowLeft' && (onSearch ? query === '' : focusedIndexOf() !== null)) {
+      const stop = railRefs.current[railStop] ?? null
+      if (stop !== null) {
+        event.preventDefault()
+        stop.focus()
+      }
+      return
+    }
     if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && rows.length > 0) {
       event.preventDefault()
       const delta = event.key === 'ArrowDown' ? 1 : -1
@@ -656,6 +657,20 @@ export function Picker(props: PickerProps) {
         rowRefs.current[next]?.scrollIntoView({ block: 'nearest' })
       } else {
         setHighlight(next)
+        rowRefs.current[next]?.focus()
+      }
+      return
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      // The ends of a long catalog are a keyboard's worth of ArrowDowns away;
+      // the listbox pattern names these keys for exactly that.
+      if (rows.length === 0) return
+      event.preventDefault()
+      const next = event.key === 'Home' ? 0 : rows.length - 1
+      setHighlight(next)
+      if (onSearch) {
+        rowRefs.current[next]?.scrollIntoView({ block: 'nearest' })
+      } else {
         rowRefs.current[next]?.focus()
       }
       return
@@ -690,7 +705,6 @@ export function Picker(props: PickerProps) {
     if (target instanceof Node && (
       rootRef.current?.contains(target) === true
       || menuRef.current?.contains(target) === true
-      || providerMenuRef.current?.contains(target) === true
       || settingsMenuRef.current?.contains(target) === true
     )) return
     // A focus move with no destination is not a departure: React detaches a
@@ -702,21 +716,41 @@ export function Picker(props: PickerProps) {
     close()
   }
 
+  // The key to the strip's four columns, in the order they are drawn. The list
+  // states four facts per row as bare glyphs; without this line a first-time
+  // user has to hover a row to learn what any of them means, so the card says it
+  // once, above the table it explains. Static calls (never a computed key): the
+  // copy gate reads the dictionary entries out of the source, and a template
+  // literal would leave all four keys looking unused.
+  const legend: readonly { fact: BadgeFact; label: string }[] = [
+    { fact: 'text', label: t('badge.key.text') },
+    { fact: 'image', label: t('badge.key.image') },
+    { fact: 'effort', label: t('badge.key.effort') },
+    { fact: 'context', label: t('badge.key.context') },
+  ]
+
   const waiting = state.current === null && state.status === 'loading'
-  const modelLabel = waiting
+  // The model's own name, without the provider: the parameter panel's accessible
+  // name is about the model's parameters, and the provider is not one of them.
+  const modelName = waiting
     ? t('trigger.loading')
     : currentRow?.model.name
-      ?? (state.current === null ? t('trigger.fallback') : `${state.current.provider}/${state.current.model}`)
-  // The chip names the model and nothing else: the effort in force is a
-  // parameter, it is stated by the row's badge and edited in the panel, and
-  // repeating it beside the name only competes with the name for width.
+      ?? (state.current === null ? t('trigger.fallback') : state.current.model)
+  // What the trigger shows (§5.26): `provider/model`. One string rather than two
+  // spans on purpose — it is the model's identity, and the label keeps the width
+  // contract §5.1 gave it (the whole half collapses under the composer's narrow-row
+  // variable, and the tail ellipsizes). The provider is a prefix, so a truncated
+  // label still says WHICH provider it belongs to.
+  const triggerLabel = currentProviderLabel === null ? modelName : `${currentProviderLabel}/${modelName}`
+  // The effort in force follows as its own segment: it is a parameter, it is stated
+  // by the row's badge and edited in the panel, and it holds one short word.
   const triggerAria = waiting
     ? t('trigger.loading')
-    : state.current === null
+    : state.current === null || currentProviderLabel === null
       ? t('trigger.selectAria')
       : effortLabel === undefined
-        ? t('trigger.aria', { model: modelLabel })
-        : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+        ? t('trigger.aria', { provider: currentProviderLabel, model: modelName })
+        : t('trigger.ariaEffort', { provider: currentProviderLabel, model: modelName, effort: effortLabel })
   const settingsTitle = state.current === null
     ? t('settings.openNoModel')
     : declaredCurrent
@@ -738,38 +772,15 @@ export function Picker(props: PickerProps) {
         }
       }}
     >
-      {/* The provider control sits to the model trigger's left and narrows the
-          list below; it is deliberately part of this seat so the two chips are
-          guaranteed adjacent, and it shares the composer's compact contract. */}
-      <Tooltip label={activeProviderLabel} side="top" align="end" portal disabled={providerAt}>
-        <button
-          ref={providerChipRef}
-          type="button"
-          className={providerAt ? 'dmp-provider dmp-provider-open' : 'dmp-provider'}
-          aria-label={t('provider.chipAria', { name: activeProviderLabel })}
-          aria-haspopup="menu"
-          aria-expanded={providerAt}
-          aria-controls={providerAt ? `${id}-provider-menu` : undefined}
-          data-filtered={providerFilter === null ? undefined : ''}
-          data-selection-focus={providerAt ? '' : undefined}
-          disabled={locked}
-          onClick={toggleProviderMenu}
-        >
-          <IconApiOutlineRegular className="dmp-provider-icon" size={16} />
-          <span className="dmp-provider-label">{activeProviderLabel}</span>
-          <IconChevronDownOutlineRegular className={providerAt ? 'dmp-chevron dmp-chevron-open' : 'dmp-chevron'} />
-        </button>
-      </Tooltip>
-
       {/* Narrow rows drop the text through the composer's own display variables;
-          the bubble is hover/focus only, so it is the one place the full name
-          stays readable there. It repeats the NAME, not the effort: the effort
-          is the settings panel's subject. */}
-      <Tooltip label={modelLabel} side="top" align="end" portal disabled={open}>
+          the bubble is hover/focus only, so it is the one place the full label
+          stays readable there. It repeats the model's identity — provider and
+          name — not the effort: the effort is the settings panel's subject. */}
+      <Tooltip label={triggerLabel} side="top" align="end" portal disabled={open}>
         <button
           ref={triggerRef}
           type="button"
-          className="dmp-trigger"
+          className={open ? 'dmp-trigger dmp-trigger-open' : 'dmp-trigger'}
           aria-label={triggerAria}
           aria-haspopup="menu"
           aria-expanded={open}
@@ -784,17 +795,21 @@ export function Picker(props: PickerProps) {
           }}
         >
           <IconDataOutlineRegular className="dmp-trigger-icon" size={16} />
-          <span className="dmp-trigger-label">{modelLabel}</span>
+          <span className="dmp-trigger-label">{triggerLabel}</span>
+          {!waiting && effortLabel !== undefined && (
+            <span className="dmp-trigger-effort">{effortLabel}</span>
+          )}
           {busy
             ? <StateDot state="ongoing" />
             : <IconChevronDownOutlineRegular className={open ? 'dmp-chevron dmp-chevron-open' : 'dmp-chevron'} />}
         </button>
       </Tooltip>
 
-      {/* Parameters of the model in use. It sits to the trigger's RIGHT so the
-          "provider → model" pair stays untouched, and it is icon-only because
-          the composer's own display variables are about the model label; the
-          gear therefore keeps its accessible name from the label, not from CSS. */}
+      {/* Parameters of the model in use. It sits to the trigger's RIGHT, and it is
+          icon-only because the composer's own display variables are about the model
+          label; the gear therefore keeps its accessible name from the label, not
+          from CSS. Its subject is the MODEL (the provider is not a parameter), so
+          it names the model alone even though the trigger beside it shows both. */}
       <Tooltip label={settingsTitle} side="top" align="end" portal disabled={settingsAt}>
         <button
           ref={settingsButtonRef}
@@ -802,7 +817,7 @@ export function Picker(props: PickerProps) {
           className={settingsAt ? 'dmp-settings-button dmp-settings-open' : 'dmp-settings-button'}
           aria-label={state.current === null
             ? t('settings.openNoModel')
-            : t('settings.openAria', { model: modelLabel })}
+            : t('settings.openAria', { model: modelName })}
           aria-haspopup="menu"
           aria-expanded={settingsAt}
           aria-controls={settingsAt ? `${id}-settings` : undefined}
@@ -823,194 +838,245 @@ export function Picker(props: PickerProps) {
         <MenuSurface
           ref={menuRef}
           id={`${id}-menu`}
-          className="dmp-menu"
+          className={menuPos === null ? 'dmp-menu dmp-card' : 'dmp-menu dmp-card dmp-menu-in dmp-from-top'}
           style={menuPos ?? MEASURE_STYLE}
           role="group"
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
         >
-          <div className="dmp-search-row">
-            <Input
-              ref={searchRef}
-              className={query === '' ? 'dmp-search' : 'dmp-search dmp-search-with-query'}
-              type="text"
-              role="searchbox"
-              aria-label={t('search.placeholder')}
-              aria-controls={`${id}-models`}
-              aria-activedescendant={activeIndex < 0 ? undefined : `${id}-row-${activeIndex}`}
-              placeholder={t('search.placeholder')}
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setHighlight(0)
-              }}
-            />
-            {query !== '' && (
-              <button
-                type="button"
-                className="dmp-search-clear"
-                aria-label={t('search.clear')}
-                disabled={busy}
-                onClick={() => {
-                  setQuery('')
-                  setHighlight(null)
-                  searchRef.current?.focus()
+          {/* The rail is the card's left pane and the only place the list's scope
+              is chosen; on a narrow card it lays out as a strip above the list
+              (same DOM, same a11y tree — the breakpoint is CSS only). */}
+          <ProviderRail
+            options={providerOptions}
+            current={providerFilter}
+            stopIndex={railStop}
+            busy={busy}
+            t={t}
+            refs={railRefs}
+            onPick={pickProvider}
+            onEnterList={() => { searchRef.current?.focus() }}
+          />
+
+          <div className="dmp-models">
+            <div className="dmp-search-row">
+              <Input
+                ref={searchRef}
+                className={query === '' ? 'dmp-search' : 'dmp-search dmp-search-with-query'}
+                type="text"
+                role="searchbox"
+                aria-label={t('search.placeholder')}
+                aria-controls={`${id}-models`}
+                aria-activedescendant={activeIndex < 0 ? undefined : `${id}-row-${activeIndex}`}
+                placeholder={t('search.placeholder')}
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  setHighlight(0)
                 }}
-              >
-                <IconCloseFillRegular />
-              </button>
+              />
+              {query !== '' && (
+                <button
+                  type="button"
+                  className="dmp-search-clear"
+                  aria-label={t('search.clear')}
+                  disabled={busy}
+                  onClick={() => {
+                    setQuery('')
+                    setHighlight(null)
+                    searchRef.current?.focus()
+                  }}
+                >
+                  <IconCloseFillRegular />
+                </button>
+              )}
+            </div>
+
+            {/* The table's head: no rows, no table, no key. It sits here rather
+                than inside the scroll viewport so the words stay put while the
+                rows move — the same reason a real table head does. */}
+            {rows.length > 0 && (
+              <div className="dmp-legend" role="note" aria-label={t('badge.keyAria')}>
+                {legend.map(item => (
+                  <span className="dmp-legend-item" key={item.fact}>
+                    <span className="dmp-legend-icon">
+                      <BadgeIcon fact={item.fact} className="dmp-badge-icon" />
+                    </span>
+                    <span className="dmp-legend-word">{item.label}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {state.status === 'loading' && (
+              <div className="dmp-status" role="status">
+                <StateDot state="ongoing" />
+                <span>{t('status.loading')}</span>
+              </div>
+            )}
+            {/* A query that matches models OUTSIDE the rail's scope: the list below
+                is about to say "no matching models" about models this catalog has,
+                so the count and the one-click way back to every provider are what
+                keep a scope from reading as a lost catalog. The rail states the
+                scope itself (its selected row), so this strip is not a scope
+                label — it only exists when there is something to go to. */}
+            {elsewhereCount > 0 && (
+              <div className="dmp-filter-hint" role="status">
+                <span>{t('provider.elsewhere', { count: String(elsewhereCount) })}</span>
+                <button
+                  type="button"
+                  className="dmp-filter-clear"
+                  disabled={busy}
+                  onClick={() => { pickProvider(null) }}
+                >
+                  {t('provider.showAll')}
+                </button>
+              </div>
+            )}
+            {state.error !== null && lastActionRef.current === 'load' && (
+              <div className="dmp-error">
+                <IconWarningOutlineRegular className="dmp-error-icon" />
+                <span>{t('error.action', { message: state.error })}</span>
+                <button type="button" className="dmp-retry" onClick={reload}>{t('action.reload')}</button>
+              </div>
+            )}
+            {state.failures.map(failure => (
+              <div className="dmp-warning" key={failure.id}>
+                <IconWarningOutlineRegular className="dmp-error-icon" />
+                <span>
+                  {t('warning.groupLoad', {
+                    name: providerLabel(failure.id, failure.name),
+                    message: failure.message,
+                  })}
+                </span>
+                <button type="button" className="dmp-retry" onClick={reload}>{t('action.reload')}</button>
+              </div>
+            ))}
+
+            <div
+              ref={groupsRef}
+              id={`${id}-models`}
+              className="dmp-groups scrollable"
+              role="menu"
+              aria-label={t('menu.model')}
+              hidden={rows.length === 0}
+            >
+              {groups.map(group => (
+                <MenuGroup key={group.id} label={group.label}>
+                  {group.rows.map((row) => {
+                    const index = indexOfRow.get(row.key) ?? -1
+                    const selected = row.provider === state.current?.provider && row.model.id === state.current.model
+                    // The facts of this route, resolved once per catalog/settings
+                    // revision: the row only renders them.
+                    const specs = specsByRow.get(rowKey(row.provider, row.model.id)) ?? []
+                    const facts = specs.map(spec => spec.sentence).join(t('settings.listJoin'))
+                    // The strip shows only the facts the model actually has. An
+                    // `off` fact (no image input, no declared level) used to read
+                    // as a slashed glyph inside a capsule; with the capsule gone
+                    // it is a single dim slashed glyph, the weakest possible way
+                    // to say "this model does not do X" — so the strip drops it.
+                    // The row's aria-label and title keep the FULL list: "does not
+                    // support image input" is still a fact about the model, it
+                    // just is not worth a near-invisible mark in the row.
+                    const shown = specs.filter(spec => !spec.off)
+                    const shownByFact = new Map(shown.map(spec => [spec.fact, spec]))
+                    const rowPending = pending !== null
+                      && pending.provider === row.provider && pending.model === row.model.id
+                    return (
+                      <div
+                        key={row.key}
+                        ref={(element) => { rowRefs.current[index] = element }}
+                        id={`${id}-row-${index}`}
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        // The badge strip is decoration plus values ("High", "128K");
+                        // the row's own name carries the whole sentence instead, so a
+                        // screen reader hears "model: facts", not a bag of numbers.
+                        aria-label={facts === ''
+                          ? row.model.name
+                          : t('badge.rowAria', { model: row.model.name, facts })}
+                        aria-disabled={busy || undefined}
+                        data-active={index === activeIndex ? '' : undefined}
+                        className="dmp-row"
+                        tabIndex={-1}
+                        onMouseDown={() => { rowRefs.current[index]?.focus() }}
+                        onMouseMove={busy || index === activeIndex ? undefined : () => { setHighlight(index) }}
+                        onClick={() => { if (!busy) choose(row) }}
+                      >
+                        <span className="dmp-row-copy">
+                          <span className="dmp-row-name" title={row.model.name}>{row.model.name}</span>
+                          {shown.length > 0 && (
+                            <span className="dmp-badges" title={facts} aria-hidden="true">
+                              {/* ONE TRACK PER FACT, always all four, in canonical
+                                  order. A fact this model does not have leaves its
+                                  own track empty instead of pulling its neighbours
+                                  left: that is what makes the four columns line up
+                                  across every row (the eye reads a spec sheet, not
+                                  a bag of glyphs), and what keeps the name column —
+                                  and therefore the ellipsis point — identical on
+                                  every row. The empty track states the absence by
+                                  position; the row's title and aria-label still
+                                  spell it out in words. */}
+                              {BADGE_FACTS.map(fact => {
+                                const spec = shownByFact.get(fact)
+                                if (spec === undefined) {
+                                  return <span className="dmp-badge-slot" key={fact} />
+                                }
+                                // `Tag` renders a span, never a button: a fact badge
+                                // cannot be clicked into anything, by construction.
+                                // Every shown badge is the SAME two-cell mark: the
+                                // icon cell states which fact, the text cell names
+                                // its value (or stays empty for the yes/no ones).
+                                // Only `on` facts reach here (see `shown`), so the
+                                // tone is always the neutral one.
+                                return (
+                                  <Tag
+                                    key={spec.fact}
+                                    tone="neutral"
+                                    className="dmp-badge"
+                                  >
+                                    <span className="dmp-badge-fact">
+                                      <BadgeIcon fact={spec.fact} className="dmp-badge-icon" />
+                                    </span>
+                                    {spec.value !== '' && <span className="dmp-badge-value">{spec.value}</span>}
+                                  </Tag>
+                                )
+                              })}
+                            </span>
+                          )}
+                        </span>
+                        <span className="dmp-check">
+                          {rowPending
+                            ? <StateDot state="ongoing" />
+                            : selected ? <IconCheckOutlineRegular /> : null}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </MenuGroup>
+              ))}
+            </div>
+
+            {state.status === 'ready' && rows.length === 0 && (
+              <div className="dmp-empty" role="status">
+                {/* One sentence per reason the list came up empty: the catalog
+                    itself is empty, the rail's scope left nothing, or the query
+                    matched nothing. The glyph is the seat's own mark, quiet by
+                    tone; the sentence carries the reason. */}
+                <IconDataOutlineRegular className="dmp-empty-icon" size={20} aria-hidden="true" />
+                {/* Three reasons, three sentences — and the scope gets two of them,
+                    because "this provider has no models" and "nothing in this
+                    provider matches" are different facts and the rail makes the
+                    second one easy to reach. */}
+                <span>
+                  {providerFilter !== null
+                    ? trimmedQuery === '' ? t('empty.provider') : t('empty.providerSearch')
+                    : catalogRows.length === 0 ? t('empty.models') : t('search.empty')}
+                </span>
+              </div>
             )}
           </div>
-
-          {state.status === 'loading' && <div className="dmp-status" role="status">{t('status.loading')}</div>}
-          {/* While narrowed, say so inside the card too: the chip is outside it,
-              and a one-line list with no explanation reads as a missing catalog. */}
-          {providerFilter !== null && (
-            <div className="dmp-filter-hint">
-              {/* "Showing 最近使用 only" is a provider name spliced into a
-                  sentence about a name; "recently used" is a subject, not a
-                  provider, so it gets its own sentence. */}
-              <span>{t(providerFilter === RECENT_ID ? 'provider.filteredRecent' : 'provider.filtered', { name: activeProviderLabel })}</span>
-              <button
-                type="button"
-                className="dmp-filter-clear"
-                disabled={busy}
-                onClick={() => { setProviderFilter(null) }}
-              >
-                {t('provider.showAll')}
-              </button>
-            </div>
-          )}
-          {state.error !== null && lastActionRef.current === 'load' && (
-            <div className="dmp-error">
-              <IconWarningOutlineRegular className="dmp-error-icon" />
-              <span>{t('error.action', { message: state.error })}</span>
-              <button type="button" className="dmp-retry" onClick={reload}>{t('action.reload')}</button>
-            </div>
-          )}
-          {state.failures.map(failure => (
-            <div className="dmp-warning" key={failure.id}>
-              <IconWarningOutlineRegular className="dmp-error-icon" />
-              <span>
-                {t('warning.groupLoad', {
-                  name: providerLabel(failure.id, failure.name),
-                  message: failure.message,
-                })}
-              </span>
-              <button type="button" className="dmp-retry" onClick={reload}>{t('action.reload')}</button>
-            </div>
-          ))}
-
-          <div
-            ref={groupsRef}
-            id={`${id}-models`}
-            className="dmp-groups scrollable"
-            role="menu"
-            aria-label={t('menu.model')}
-            hidden={rows.length === 0}
-          >
-            {groups.map(group => (
-              <MenuGroup key={group.id} label={group.label}>
-                {group.rows.map((row) => {
-                  const index = indexOfRow.get(row.key) ?? -1
-                  const selected = row.provider === state.current?.provider && row.model.id === state.current.model
-                  // The facts of this route, resolved once per catalog/settings
-                  // revision: the row only renders them.
-                  const specs = specsByRow.get(rowKey(row.provider, row.model.id)) ?? []
-                  const facts = specs.map(spec => spec.sentence).join(t('settings.listJoin'))
-                  const rowPending = pending !== null
-                    && pending.provider === row.provider && pending.model === row.model.id
-                  return (
-                    <div
-                      key={row.key}
-                      ref={(element) => { rowRefs.current[index] = element }}
-                      id={`${id}-row-${index}`}
-                      role="menuitemradio"
-                      aria-checked={selected}
-                      // The badge strip is decoration plus values ("High", "128K");
-                      // the row's own name carries the whole sentence instead, so a
-                      // screen reader hears "model: facts", not a bag of numbers.
-                      aria-label={facts === ''
-                        ? row.model.name
-                        : t('badge.rowAria', { model: row.model.name, facts })}
-                      aria-disabled={busy || undefined}
-                      data-active={index === activeIndex ? '' : undefined}
-                      className="dmp-row"
-                      tabIndex={-1}
-                      onMouseDown={() => { rowRefs.current[index]?.focus() }}
-                      onMouseMove={busy || index === activeIndex ? undefined : () => { setHighlight(index) }}
-                      onClick={() => { if (!busy) choose(row) }}
-                    >
-                      <span className="dmp-row-copy">
-                        <span className="dmp-row-name" title={row.model.name}>{row.model.name}</span>
-                        {specs.length > 0 && (
-                          <span className="dmp-badges" title={facts} aria-hidden="true">
-                            {specs.map(spec => (
-                              // `Tag` renders a span, never a button: a fact badge
-                              // cannot be clicked into anything, by construction.
-                              // Every badge is the SAME two-cell capsule: the icon
-                              // cell states which fact, the text cell names its
-                              // value (or stays empty for the two yes/no ones).
-                              <Tag
-                                key={spec.fact}
-                                tone={spec.off ? 'quiet' : 'neutral'}
-                                className="dmp-badge"
-                              >
-                                <span className="dmp-badge-fact">
-                                  <BadgeIcon fact={spec.fact} off={spec.off} className="dmp-badge-icon" />
-                                </span>
-                                {spec.value !== '' && <span className="dmp-badge-value">{spec.value}</span>}
-                              </Tag>
-                            ))}
-                          </span>
-                        )}
-                      </span>
-                      <span className="dmp-check">
-                        {rowPending
-                          ? <StateDot state="ongoing" />
-                          : selected ? <IconCheckOutlineRegular /> : null}
-                      </span>
-                    </div>
-                  )
-                })}
-              </MenuGroup>
-            ))}
-          </div>
-
-          {state.status === 'ready' && rows.length === 0 && (
-            <div className="dmp-empty" role="status">
-              {/* One sentence per reason the list came up empty. "Recently
-                  used" gets its own because there are two ways to get here —
-                  nothing was ever used, or every remembered route has since
-                  left the catalog — and "this provider has no models" would
-                  blame the wrong thing for both. */}
-              {t(providerFilter === RECENT_ID
-                ? 'empty.recent'
-                : providerFilter !== null
-                  ? 'empty.provider'
-                  : catalogRows.length === 0 ? 'empty.models' : 'search.empty')}
-            </div>
-          )}
         </MenuSurface>,
-        document.body,
-      )}
-
-      {providerAt && createPortal(
-        <ProviderMenu
-          anchorRef={providerChipRef}
-          panelRef={providerMenuRef}
-          idPrefix={id}
-          side={providerSide}
-          options={providerOptions}
-          current={providerFilter}
-          busy={busy}
-          t={t}
-          onPick={(providerId) => {
-            setProviderFilter(providerId)
-            closeProviderMenu(true)
-          }}
-          onClose={closeProviderMenu}
-        />,
         document.body,
       )}
 

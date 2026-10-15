@@ -51,6 +51,16 @@ export interface CatalogFailure {
   readonly message: string
 }
 
+/**
+ * Compose the opaque row identity used across this plugin.
+ * @param provider - provider group id.
+ * @param model - model id within that provider.
+ * @returns the combined key.
+ */
+export function rowKey(provider: string, model: string): string {
+  return `${provider}/${model}`
+}
+
 /** Lifecycle of the directory's latest operation. */
 export type DirectoryStatus = 'idle' | 'loading' | 'ready' | 'selecting' | 'error'
 
@@ -58,7 +68,6 @@ export type DirectoryStatus = 'idle' | 'loading' | 'ready' | 'selecting' | 'erro
 export interface DirectoryState {
   readonly current: ModelSelection | null
   readonly retainedEffort?: string
-  readonly routable: boolean | null
   readonly groups: readonly ProviderGroup[]
   readonly failures: readonly CatalogFailure[]
   readonly status: DirectoryStatus
@@ -96,15 +105,11 @@ export interface SettingsNamespaceView {
   readonly value: unknown
   /** The profile patch (the layer this plugin's clear button empties). */
   readonly user?: unknown
-  /** The inherited value beneath the patch. */
-  readonly base?: unknown
-  readonly applies?: string
 }
 
 /** The whole settings surface: writability plus one view per namespace. */
 export interface SettingsDescribe {
   readonly writable: boolean
-  readonly hasDocument: boolean
   readonly namespaces: readonly SettingsNamespaceView[]
 }
 

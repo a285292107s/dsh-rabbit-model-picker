@@ -53,8 +53,7 @@ try {
         "export * from './src/client/params.ts'",
         "export * from './src/client/format.ts'",
         "export * from './src/client/badges.ts'",
-        "export * from './src/client/prefs.ts'",
-        "export * from './src/client/recent.ts'",
+        "export * from './src/client/retiredScope.ts'",
         "export * from './src/client/dictionary.ts'",
         "export * from './src/client/panelCopy.ts'",
         "export * from './src/client/capabilities.ts'",
@@ -74,8 +73,7 @@ try {
   const {
     resolveRoute, parseContext, formatContext, formatWindow, PANEL_MODALITIES,
     BADGE_FACTS, badgeSpecsOf, zh, en, interpolate,
-    readProviderFilter, rememberProviderFilter, providerKeyOf, retireLegacyProviderFilter,
-    recentGroupsFor, RECENT_ID, readRecent, remember,
+    retireStoredScope,
     noticeOf, inputHintOf, contextHintOf, contextFieldOf, shownInputOf, showsContextField, capacityAction,
     showsInputSection, routeCapabilityOf, CapabilityStore, ParamsStore,
     restoreIsEmpty,
@@ -134,13 +132,17 @@ try {
   }
   equal('window: no figure in range carries a decimal point', offenders, [])
 
-  // --- the remembered provider filter --------------------------------------
-  // The narrowing is a preference, so it has to survive the page it was set on —
-  // and it has to fail soft: a store that is denied, full or holding junk must
-  // read as "unfiltered", never as a filter nobody can clear.
+  // --- the RETIRED provider-scope record --------------------------------------
+  // §5.26 stopped remembering the scope, so nothing reads a stored value any more
+  // — but the keys an older build wrote are still in users' browsers, and the one
+  // thing that must keep working is the sweep that removes them: every shape the
+  // record ever had (per-session and the single unscoped one), only keys under this
+  // plugin's own prefix, and never a throw when the store is denied or absent.
   const fakeStore = (initial = {}) => {
     const data = { ...initial }
     return {
+      key: index => Object.keys(data)[index] ?? null,
+      get length() { return Object.keys(data).length },
       getItem: key => (key in data ? data[key] : null),
       setItem: (key, value) => { data[key] = String(value) },
       removeItem: key => { delete data[key] },
@@ -150,124 +152,47 @@ try {
   const SESSION = 'session-a'
   const OTHER = 'session-b'
   const KEY = `dsh-model-picker.provider.v1:${SESSION}`
+  const OTHER_KEY = `dsh-model-picker.provider.v1:${OTHER}`
   const LEGACY_KEY = 'dsh-model-picker.provider.v1'
 
-  withStore(fakeStore())
-  equal('prefs: nothing remembered reads as unfiltered', readProviderFilter(SESSION), null)
-  rememberProviderFilter(SESSION, 'opencode-go')
-  equal('prefs: a chosen provider is remembered', globalThis.window.localStorage.getItem(KEY), 'opencode-go')
-  equal('prefs: the remembered provider reads back', readProviderFilter(SESSION), 'opencode-go')
-  rememberProviderFilter(SESSION, null)
-  equal('prefs: "all providers" forgets the choice', globalThis.window.localStorage.getItem(KEY), null)
-  equal('prefs: forgetting reads back as unfiltered', readProviderFilter(SESSION), null)
-
-  withStore(fakeStore({ [KEY]: '' }))
-  equal('prefs: an empty record reads as unfiltered', readProviderFilter(SESSION), null)
-  withStore(fakeStore({ [KEY]: 'commandcode' }))
-  equal('prefs: the value stored is the bare id, not an encoded shape', readProviderFilter(SESSION), 'commandcode')
-
-  // The regression this plugin was fixed for: one window's narrowing must not
-  // become another's. A global key made every session read the first choice.
-  withStore(fakeStore())
-  rememberProviderFilter(SESSION, 'opencode-go')
-  rememberProviderFilter(OTHER, 'commandcode')
-  equal('prefs: a second session starts unfiltered', readProviderFilter(OTHER + '-x'), null)
-  equal('prefs: two sessions keep two narrowings', `${readProviderFilter(SESSION)}/${readProviderFilter(OTHER)}`, 'opencode-go/commandcode')
-  equal('prefs: the key is the session, not a constant', providerKeyOf(SESSION), KEY)
-  check('prefs: a session key differs from the other\'s', providerKeyOf(SESSION) !== providerKeyOf(OTHER))
-  // …and the single-key era's entry is dropped on mount rather than orphaned.
-  withStore(fakeStore({ [LEGACY_KEY]: 'opencode-go', [`${LEGACY_KEY}:${SESSION}`]: 'commandcode' }))
-  retireLegacyProviderFilter()
-  equal('prefs: the legacy global key is retired', globalThis.window.localStorage.getItem(LEGACY_KEY), null)
-  equal('prefs: retiring the legacy key keeps this session\'s own', readProviderFilter(SESSION), 'commandcode')
-
+  {
+    const store = fakeStore({
+      [KEY]: 'opencode-go',
+      [OTHER_KEY]: 'commandcode',
+      [LEGACY_KEY]: 'xiaomi',
+      'dsh-model-picker.other-setting': 'keep me',
+      'unrelated.key': 'keep me too',
+    })
+    withStore(store)
+    retireStoredScope()
+    equal('retired scope: this session\'s record is gone', store.getItem(KEY), null)
+    equal('retired scope: another session\'s record is gone too', store.getItem(OTHER_KEY), null)
+    equal('retired scope: the unscoped key from the single-key era is gone', store.getItem(LEGACY_KEY), null)
+    equal('retired scope: a neighbouring key of this plugin is untouched',
+      store.getItem('dsh-model-picker.other-setting'), 'keep me')
+    equal('retired scope: an unrelated plugin\'s key is untouched', store.getItem('unrelated.key'), 'keep me too')
+    equal('retired scope: the store is left with exactly the two survivors', store.length, 2)
+  }
+  // The sweep must be a real sweep, not "remove the key for this session": a store
+  // holding several prefixed keys has to come out empty of all of them. (Removing
+  // while walking the index would skip every other one — the reason the
+  // implementation collects first and removes after.)
+  {
+    const store = fakeStore(Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [`dsh-model-picker.provider.v1:s${index}`, `p${index}`]),
+    ))
+    withStore(store)
+    retireStoredScope()
+    equal('retired scope: every prefixed key is removed in one pass', store.length, 0)
+  }
   withStore(null)
-  equal('prefs: with no storage at all nothing is remembered', readProviderFilter(SESSION), null)
-  check('prefs: writing with no storage does not throw', (() => {
-    try { rememberProviderFilter(SESSION, 'x'); return true } catch { return false }
+  check('retired scope: an absent store does not throw', (() => {
+    try { retireStoredScope(); return true } catch { return false }
   })(), {})
-  withStore({ getItem: () => { throw new Error('denied') }, setItem: () => { throw new Error('denied') }, removeItem: () => { throw new Error('denied') } })
-  equal('prefs: a denied store reads as unfiltered', readProviderFilter(SESSION), null)
-  check('prefs: a denied store does not throw on write', (() => {
-    try { rememberProviderFilter(SESSION, 'x'); return true } catch { return false }
+  withStore({ get length() { throw new Error('denied') }, key: () => { throw new Error('denied') }, removeItem: () => { throw new Error('denied') } })
+  check('retired scope: a denied store does not throw', (() => {
+    try { retireStoredScope(); return true } catch { return false }
   })(), {})
-  check('prefs: a denied store does not throw on the legacy cleanup', (() => {
-    try { retireLegacyProviderFilter(); return true } catch { return false }
-  })(), {})
-  delete globalThis.window
-
-  // --- "recently used" as a provider-menu option ------------------------------
-  // The list it produces must keep the catalog's own provider headings, so no
-  // row repeats its provider — and it must keep EVERY remembered route, not the
-  // newest one per provider.
-  const catalog = [
-    { id: 'deepseek-account', name: 'DeepSeek Account' },
-    { id: 'opencode-go', name: 'opencode-go' },
-    { id: 'commandcode', name: 'commandcode' },
-  ]
-  /** One resolved row: the shape `recentGroupsFor` reads. */
-  const route = (provider, model) => ({ key: `${provider}/${model}`, provider, model: { id: model, name: model } })
-  const labelOf = (providerId, fallback) => (providerId === 'deepseek-account' ? 'DeepSeek 账号' : fallback)
-  const idsOf = groups => groups.map(group => `${group.id}:${group.rows.map(row => row.model.id).join('+')}`)
-  const labelsOf = groups => groups.map(group => group.label)
-
-  // Most recent first: opencode, then DeepSeek, then opencode again, then commandcode.
-  const walk = [route('opencode-go', 'qwen3-max'), route('deepseek-account', 'v4.1'), route('opencode-go', 'glm-5'), route('commandcode', 'kimi-k3')]
-  const bucketed = recentGroupsFor(walk, catalog, labelOf)
-  equal(
-    'recent: routes group by provider and keep all of them, newest provider first',
-    idsOf(bucketed),
-    ['opencode-go:qwen3-max+glm-5', 'deepseek-account:v4.1', 'commandcode:kimi-k3'],
-  )
-  equal(
-    'recent: each group takes its heading from the provider, localized',
-    labelsOf(bucketed),
-    ['opencode-go', 'DeepSeek 账号', 'commandcode'],
-  )
-  equal(
-    'recent: provider order is recency, not the catalog order',
-    // Reversed input reverses the group order, and a provider keeps the slot
-    // where its FIRST row appeared (opencode is opened by glm-5, so qwen3-max
-    // joins it rather than moving it down past the account provider). A
-    // catalog-ordered implementation would answer `deepseek-account` first.
-    idsOf(recentGroupsFor([...walk].reverse(), catalog, labelOf)),
-    ['commandcode:kimi-k3', 'opencode-go:glm-5+qwen3-max', 'deepseek-account:v4.1'],
-  )
-  check(
-    'recent: the newest route decides which provider floats up',
-    recentGroupsFor(walk, catalog, labelOf)[0].id === 'opencode-go'
-      // Catalog order would have put the account provider first — `catalog` lists
-      // it first, so this assertion is about ordering and not about luck.
-      && catalog[0].id === 'deepseek-account',
-  )
-  equal('recent: no routes means no groups', recentGroupsFor([], catalog, labelOf), [])
-  equal(
-    'recent: a route whose provider is absent from the catalog is skipped, not crashed on',
-    idsOf(recentGroupsFor([route('gone', 'x'), route('opencode-go', 'qwen3-max')], catalog, labelOf)),
-    ['opencode-go:qwen3-max'],
-  )
-  check('recent: the pseudo id cannot be a catalog provider', !catalog.some(group => group.id === RECENT_ID))
-
-  // The store behind it: most-recent-first, de-duplicated, capped.
-  withStore(fakeStore())
-  remember('opencode-go', 'qwen3-max', 100)
-  remember('deepseek-account', 'v4.1', 200)
-  remember('opencode-go', 'glm-5', 300)
-  remember('opencode-go', 'qwen3-max', 400)
-  equal(
-    'recent: the store keeps the newest use first and de-duplicates',
-    readRecent().map(entry => `${entry.provider}/${entry.model}`),
-    ['opencode-go/qwen3-max', 'opencode-go/glm-5', 'deepseek-account/v4.1'],
-  )
-  equal(
-    'recent: one provider keeps several routes, so the list is not one row per provider',
-    idsOf(recentGroupsFor(
-      readRecent().map(entry => route(entry.provider, entry.model)),
-      catalog,
-      labelOf,
-    )),
-    ['opencode-go:qwen3-max+glm-5', 'deepseek-account:v4.1'],
-  )
   delete globalThis.window
 
   // --- a provider-keyed declaration (llm-pi-ai) -----------------------------
@@ -399,16 +324,15 @@ try {
     // An explicit `reasoning: undefined` must mean "no metadata", which is why
     // presence of the key — not its value — picks the fixture.
     reasoning: 'reasoning' in extra ? extra.reasoning : reasoning,
-    effort: extra.effort,
     t,
   }))
 
   equal('facts: a declared list is stated as-is',
-    factsOf(piAi, { provider: 'opencode-go', model: 'second' }, { effort: 'high' }),
-    [['text', false, ''], ['image', true, ''], ['effort', false, 'High'], ['context', false, '800K']])
+    factsOf(piAi, { provider: 'opencode-go', model: 'second' }),
+    [['text', false, ''], ['image', true, ''], ['effort', false, ''], ['context', false, '800K']])
   equal('facts: an undeclared entry falls back to the adapter default list',
-    factsOf(piAi, { provider: 'opencode-go', model: 'first' }, { effort: 'off' }),
-    [['text', false, ''], ['image', false, ''], ['effort', false, 'Off'], ['context', false, '1M']])
+    factsOf(piAi, { provider: 'opencode-go', model: 'first' }),
+    [['text', false, ''], ['image', false, ''], ['effort', false, ''], ['context', false, '1M']])
   equal('facts: order is text, image, effort, context',
     factsOf(piAi, { provider: 'opencode-go', model: 'second' }).map(spec => spec[0]),
     ['text', 'image', 'effort', 'context'])
@@ -418,34 +342,32 @@ try {
     new Set(badgeSpecsOf({
       address: resolveRoute(piAi, { provider: 'opencode-go', model: 'first' }),
       reasoning,
-      effort: 'high',
       t,
     }).map(spec => spec.fact)).size, 4)
-  equal('facts: no effort in force renders the provider default caption',
-    factsOf(piAi, { provider: 'opencode-go', model: 'first' }, { effort: undefined })[2],
-    ['effort', false, 'Default'])
-  equal('facts: no reasoning metadata states an absent level, slashed',
+  equal('facts: the effort badge names no level — the row states the ability, not the setting',
+    factsOf(piAi, { provider: 'opencode-go', model: 'first' })[2],
+    ['effort', false, ''])
+  equal('facts: no reasoning metadata states no ability, slashed',
     factsOf(piAi, { provider: 'opencode-go', model: 'second' }, { reasoning: undefined })[2],
     ['effort', true, ''])
-  equal('facts: an unaddressable route claims no modality and no capacity',
-    factsOf(piAi, { provider: 'nope', model: 'second' }, { effort: 'high' }),
-    [['effort', false, 'High']])
-  equal('facts: nothing declared and no default → no modality claim at all',
-    factsOf(nested, { provider: 'x', model: 'm' }, { effort: 'high' }),
-    [['effort', false, 'High'], ['context', false, '4K']])
+  equal('facts: an unaddressable route still states the floor text fact, no image',
+    factsOf(piAi, { provider: 'nope', model: 'second' }),
+    [['text', false, ''], ['image', true, ''], ['effort', false, '']])
+  equal('facts: nothing declared and no default → text by floor, image unclaimed',
+    factsOf(nested, { provider: 'x', model: 'm' }),
+    [['text', false, ''], ['image', true, ''], ['effort', false, ''], ['context', false, '4K']])
 
   // The copy itself is asserted, not just the shape: a badge whose sentence is
   // wrong is worse than a missing badge, because it is a claim.
   const sentences = badgeSpecsOf({
     address: resolveRoute(piAi, { provider: 'opencode-go', model: 'second' }),
     reasoning,
-    effort: 'high',
     t,
   }).map(spec => spec.sentence)
   equal('facts: every badge sentence is localized', sentences,
-    ['文字输入', '不支持图片输入', '思考强度 High', '上下文窗口 800K'])
+    ['文字输入', '不支持图片输入', '支持思考', '上下文窗口 800K'])
   equal('facts: the row name carries them all', t('badge.rowAria', { model: 'M', facts: sentences.join(t('settings.listJoin')) }),
-    'M，文字输入、不支持图片输入、思考强度 High、上下文窗口 800K')
+    'M，文字输入、不支持图片输入、支持思考、上下文窗口 800K')
 
   // --- what the parameter panel says in each state --------------------------
   // The panel's copy is a decision per state, not a paragraph: which single line
@@ -459,9 +381,9 @@ try {
     ({ address, capability: null, snapshot: ready, busy: false, capacityError: false, ...extra })
   /** The resolved copy line, as the panel would paint it. */
   const line = (copy) => copy === null ? null : t(copy.key, copy.params)
-  const notice = (state) => line(noticeOf(state, t))
+  const notice = (state) => line(noticeOf(state))
   const inputHint = (state) => line(inputHintOf(state, t))
-  const contextHint = (state) => line(contextHintOf(state, t))
+  const contextHint = (state) => line(contextHintOf(state))
 
   // An editable route that declares both fields: no notice at all.
   equal('panel copy: an editable declared route needs no notice', notice(copyState(second)), null)
@@ -576,18 +498,18 @@ try {
   // static selfcheck sees the `key:` literals but cannot tell a typo'd key from a
   // real one; this resolves each key through both dictionaries and demands a hit.
   const everyKey = [
-    noticeOf(copyState(null, { busy: true }), t)?.key,
-    noticeOf(copyState(second, { snapshot: { status: 'idle', error: null, writable: true } }), t)?.key,
-    noticeOf(copyState(second, { snapshot: { status: 'loading', error: null, writable: true } }), t)?.key,
-    noticeOf(copyState(second, { snapshot: { status: 'unavailable', error: null, writable: false } }), t)?.key,
-    noticeOf(copyState(second, { snapshot: { status: 'error', error: 'x', writable: true } }), t)?.key,
-    noticeOf(unaddressable, t)?.key,
-    noticeOf(readOnly, t)?.key,
+    noticeOf(copyState(null, { busy: true }))?.key,
+    noticeOf(copyState(second, { snapshot: { status: 'idle', error: null, writable: true } }))?.key,
+    noticeOf(copyState(second, { snapshot: { status: 'loading', error: null, writable: true } }))?.key,
+    noticeOf(copyState(second, { snapshot: { status: 'unavailable', error: null, writable: false } }))?.key,
+    noticeOf(copyState(second, { snapshot: { status: 'error', error: 'x', writable: true } }))?.key,
+    noticeOf(unaddressable)?.key,
+    noticeOf(readOnly)?.key,
     inputHintOf(copyState(first), t)?.key,
     inputHintOf(copyState(second), t)?.key,
-    contextHintOf(copyState(second), t)?.key,
-    contextHintOf(fallbackState, t)?.key,
-    contextHintOf(copyState(second, { capacityError: true }), t)?.key,
+    contextHintOf(copyState(second))?.key,
+    contextHintOf(fallbackState)?.key,
+    contextHintOf(copyState(second, { capacityError: true }))?.key,
   ].filter(key => key !== undefined)
   const missingInZh = everyKey.filter(key => zh[key] === undefined)
   const missingInEn = everyKey.filter(key => en[key] === undefined)
@@ -636,19 +558,19 @@ try {
   // I not edit it".
   const besideANotice = new Set(['settings.input.capability', 'settings.context.capability'])
   const repeated = states.filter((state) => {
-    if (noticeOf(state, t) === null || state.capacityError) return false
-    return [inputHintOf(state, t), contextHintOf(state, t)]
+    if (noticeOf(state) === null || state.capacityError) return false
+    return [inputHintOf(state, t), contextHintOf(state)]
       .filter(hint => hint !== null)
       .some(hint => !besideANotice.has(hint.key))
   })
   equal('panel copy rule: a state with a notice emits no section hint but a published fact', repeated.length, 0)
   const rejectedOutranks = states.filter(state =>
-    state.capacityError && contextHintOf(state, t)?.key !== 'settings.context.invalid')
+    state.capacityError && contextHintOf(state)?.key !== 'settings.context.invalid')
   equal('panel copy rule: a rejected value is always the capacity hint', rejectedOutranks.length, 0)
 
   // Rule 2: busy is always explained, whatever else is going on — it is the
   // state the user caused themselves, and it had no sentence before.
-  const unexplainedBusy = states.filter(state => state.busy && noticeOf(state, t) === null)
+  const unexplainedBusy = states.filter(state => state.busy && noticeOf(state) === null)
   equal('panel copy rule: every busy state states why', unexplainedBusy.length, 0)
 
   // Rule 3: no two rendered lines of one state are the same SENTENCE. Compared
@@ -656,9 +578,9 @@ try {
   // same words, and that is the duplication this rule is named after.
   const duplicated = states.filter((state) => {
     const lines = [
-      line(noticeOf(state, t)),
+      line(noticeOf(state)),
       line(inputHintOf(state, t)),
-      line(contextHintOf(state, t)),
+      line(contextHintOf(state)),
     ].filter(text => text !== null)
     return new Set(lines).size !== lines.length
   })
@@ -673,15 +595,15 @@ try {
   const mismatched = states.filter((state) => {
     if (state.address === null) return false
     if (state.capacityError) return false
-    if (noticeOf(state, t) !== null) {
-      const hint = contextHintOf(state, t)
+    if (noticeOf(state) !== null) {
+      const hint = contextHintOf(state)
       if (hint === null) return false
       return !(hint.key === 'settings.context.capability' && state.address.contextWindow === undefined)
     }
     const declared = state.address.contextWindow !== undefined
     return declared
-      ? contextHintOf(state, t)?.key !== 'settings.context.declared'
-      : contextHintOf(state, t)?.key === 'settings.context.declared'
+      ? contextHintOf(state)?.key !== 'settings.context.declared'
+      : contextHintOf(state)?.key === 'settings.context.declared'
   })
   equal('panel copy rule: the capacity hint always matches the field', mismatched.length, 0)
 
@@ -759,7 +681,7 @@ try {
   // dropping the three the settings document could not answer.
   equal('facts: a published route states its modalities and its window',
     shapeOf(badgeSpecsOf({
-      address: null, capability: publishedCapability, reasoning: undefined, effort: undefined, t,
+      address: null, capability: publishedCapability, reasoning: undefined, t,
     })),
     [['text', false, ''], ['image', false, ''], ['effort', true, ''], ['context', false, '1M']])
   equal('facts: a declaration still outranks the published catalog',
@@ -767,13 +689,12 @@ try {
       address: second,
       capability: publishedCapability,
       reasoning: undefined,
-      effort: undefined,
       t,
     })),
     [['text', false, ''], ['image', true, ''], ['effort', true, ''], ['context', false, '800K']])
   equal('facts: the published window outranks the provider default behind it',
     shapeOf(badgeSpecsOf({
-      address: first, capability: { contextWindow: 250000 }, reasoning: undefined, effort: undefined, t,
+      address: first, capability: { contextWindow: 250000 }, reasoning: undefined, t,
     })),
     [['text', false, ''], ['image', false, ''], ['effort', true, ''], ['context', false, '250K']])
 

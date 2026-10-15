@@ -66,6 +66,25 @@ function themeFile() {
 }
 
 /**
+ * The committed token fixture, used when no host is installed (CI).
+ *
+ * The gate's job is measuring this plugin's ink against the host palette, and
+ * that palette normally only exists inside an installed DSH — so on CI the gate
+ * used to print `skip` and exit 0, a green tick that had measured nothing while
+ * the README advertised it as the proof that every painted word clears AA.
+ * Falling back to a committed snapshot of the exact tokens the gate resolves
+ * makes the measurement real everywhere; a local run with DSH installed still
+ * reads the LIVE sheet, so a host upgrade that moves the palette is still caught
+ * by whoever has the host. Regenerate with `node scripts/_dump-theme-fixture.mjs`.
+ * @returns the two palettes, or null when the fixture is missing too.
+ */
+function fixturePalettes() {
+  const path = resolve(root, 'scripts/theme-tokens.json')
+  if (!existsSync(path)) return null
+  return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+/**
  * Parse one theme's `--dsw-*` values out of the bundled token sheet.
  *
  * The sheet is a single CSS string: the light palette under `body{…}`, the dark
@@ -197,8 +216,8 @@ function cardBackgrounds(bag) {
 // gate teeth — pointing `.dmp-settings-hint` at another token changes what is
 // measured instead of slipping past a hard-coded expectation.
 const STYLES = [
-  { selector: '.dmp-trigger', note: 'model trigger label' },
-  { selector: '.dmp-provider[data-filtered]', note: 'provider chip, filtering' },
+  { selector: '.dmp-trigger', note: 'trigger label: provider/model and the effort' },
+  { selector: '.dmp-rail-name', note: 'provider name on the rail' },
   { selector: '.dmp-settings-title', note: 'panel model name' },
   { selector: '.dmp-settings-name', note: 'switch row label' },
   { selector: '.dmp-settings-reset', note: 'restore-defaults button' },
@@ -213,6 +232,10 @@ const STYLES = [
   { selector: '.dmp-filter-hint', note: 'provider filter strip' },
   { selector: '.dmp-row-name', note: 'model row name' },
   { selector: '.dmp-badge-value', note: 'badge value, 11px from the Tag primitive' },
+  { selector: '.dmp-legend', note: 'key to the fact columns' },
+  { selector: '.dmp-legend-word', note: 'one word of that key' },
+  { selector: '.dmp-search-row .dmp-search input::placeholder', note: 'search hint' },
+  { selector: '[data-menu-group-heading]', note: 'provider landmark, host-painted element' },
   { selector: '.dmp-settings-alert', note: 'Host refusal' },
 ]
 /** Painted by a host primitive rather than by this sheet, so there is no size to derive. */
@@ -241,7 +264,7 @@ if (styleRules.trim() === '') {
  * Read one declaration out of the rule that paints a selector in the plugin's
  * own sheet.
  *
- * Selectors here are often grouped (`.dmp-trigger,\n.dmp-provider { … }`) or
+ * Selectors here are often grouped (`.dmp-status,\n.dmp-empty { … }`) or
  * descendant (`.dmp-settings-input input::placeholder { … }`), and a style can
  * be painted by a later rule than the first one naming it, so every rule whose
  * selector list contains the given selector is considered and the LAST one with
@@ -258,7 +281,7 @@ function declarationOf(selector, property) {
     const selectors = rule[1].split(',').map(part => part.trim())
     // A declaration applies when the rule's selector IS this one, or when it
     // names it as a compound member or a descendant — `.dmp-badges .dmp-badge`
-    // sets the badge's own size, and `.dmp-trigger, .dmp-provider` sets the
+    // sets the badge's own size, and `.dmp-status, .dmp-empty` sets the
     // chip's. Splitting on whitespace only: a pseudo-class selector
     // (`.dmp-trigger:disabled`) must NOT count as `.dmp-trigger`'s own
     // declaration, or every disabled state would overwrite the base ink.
@@ -277,7 +300,7 @@ function declarationOf(selector, property) {
  * "large" at >=24px, or >=18.66px when bold (>=700); anything smaller owes
  * 4.5:1.
  *
- * A state rule that only changes `color` (`.dmp-provider[data-filtered]`) or a
+ * A state rule that only changes `color` (`.dmp-settings-button[data-edited]`) or a
  * pseudo-element inherits its size from the base rule, so when the selector
  * itself states none, the base selector and then the ancestor selectors are
  * consulted — the way the cascade would resolve it.
@@ -336,6 +359,14 @@ function inkOf(selector) {
  */
 const CONTAINERS = {
   '.dmp-menu': null,
+  // The two panes of the model card (§5.25). The rail's own chain has to be
+  // declared like any other: a class missing from this map has no ink to find,
+  // and the sweep would skip its rule instead of judging it.
+  '.dmp-rail': '.dmp-menu',
+  '.dmp-rail-row': '.dmp-rail',
+  '.dmp-rail-copy': '.dmp-rail-row',
+  '.dmp-rail-name': '.dmp-rail-copy',
+  '.dmp-models': '.dmp-menu',
   '.dmp-groups': '.dmp-menu',
   '.dmp-row': '.dmp-groups',
   '.dmp-row-copy': '.dmp-row',
@@ -358,7 +389,9 @@ const CONTAINERS = {
   // The gear and the two chips live in the seat, outside the card.
   '.dmp-settings-button': null,
   '.dmp-trigger': null,
-  '.dmp-provider': null,
+  // The effort tail is a span inside the trigger button; it states its own ink
+  // (so the sweep must size it) and inherits the chip's 13px/400 from here.
+  '.dmp-trigger-effort': '.dmp-trigger',
   '.dmp-settings-section': '.dmp-settings-body',
   '.dmp-settings-row': '.dmp-settings-section',
   '.dmp-settings-label': '.dmp-settings-section',
@@ -381,6 +414,10 @@ const CONTAINERS = {
   '.dmp-provider-failed-dot': '.dmp-provider-failed',
   '.dmp-search-row': '.dmp-menu',
   '.dmp-search-clear': '.dmp-search-row',
+  '.dmp-legend': '.dmp-menu',
+  '.dmp-legend-item': '.dmp-legend',
+  '.dmp-legend-icon': '.dmp-legend-item',
+  '.dmp-legend-word': '.dmp-legend-item',
 }
 
 /**
@@ -414,11 +451,27 @@ function effectiveInk(selector) {
   return null
 }
 
+// The host sheet is preferred so a host upgrade that moves the palette is caught
+// by whoever has the host installed; the committed fixture is what makes CI (and
+// any machine without DSH) measure the same thing instead of printing a skip.
 const theme = themeFile()
-if (theme === null) {
-  console.log('  skip contrast: DSH install not found (set DSH_INSTALL_DIR)')
+const bags = theme === null
+  ? fixturePalettes()
+  : palettes(readFileSync(theme, 'utf8'))
+
+if (bags === null) {
+  // Neither source exists: nothing was measured, so this must not read as a pass.
+  // It is counted as a FAILURE rather than by setting `process.exitCode` here,
+  // because the footer assigns that variable unconditionally — an early
+  // assignment would be silently overwritten by `failures === 0`, which is
+  // exactly the "prints a warning, still exits 0" defect this branch exists to
+  // prevent.
+  console.error('contrast: no DSH install and no scripts/theme-tokens.json — nothing measured')
+  failures += 1
 } else {
-  const bags = palettes(readFileSync(theme, 'utf8'))
+  if (theme === null) {
+    console.log('  note contrast: no DSH install; measuring against scripts/theme-tokens.json')
+  }
 
   // --- 1. the sheet must actually paint what this gate measures ------------
   for (const style of STYLES) {
@@ -490,7 +543,7 @@ if (theme === null) {
   //
   // Two earlier versions of this sweep were defeated by an adversarial review:
   // one skipped a rule whose `font-size` lived in a sibling rule of a grouped
-  // selector (`.dmp-trigger, .dmp-provider`), the other looked a whole selector
+  // selector (`.dmp-status, .dmp-empty`), the other looked a whole selector
   // list up as a single string and matched nothing at all. Both shapes are
   // normal in this sheet, so both are handled here.
   //

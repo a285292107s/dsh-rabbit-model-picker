@@ -97,11 +97,9 @@ function publishedInputOf(capability: RouteCapability | null): readonly string[]
  * card out is owed that reason on screen — `aria-busy` only tells a screen
  * reader. A write failure outranks all of these and is handled by the caller.
  * @param state - the panel state.
- * @param t - the translator (used to fill the failure message; the key comes from
- * {@link noticeKeyOf}, so there is one decision and not two).
  * @returns the notice's copy line, or null.
  */
-export function noticeOf(state: PanelCopyState, t: Translate): CopyLine | null {
+export function noticeOf(state: PanelCopyState): CopyLine | null {
   const line = noticeKeyOf(state)
   if (line === null) return null
   return line.key === 'settings.loadFailed'
@@ -160,7 +158,7 @@ export function inputHintOf(state: PanelCopyState, t: Translate): CopyLine | nul
   const address = state.address
   const published = publishedInputOf(state.capability)
   if (address !== null && address.input.length > 0) {
-    return noticeOf(state, t) === null
+    return noticeOf(state) === null
       ? { key: 'settings.input.declared', params: { list: modalityLabel(address.input, t) } }
       : null
   }
@@ -171,7 +169,7 @@ export function inputHintOf(state: PanelCopyState, t: Translate): CopyLine | nul
   if (published !== undefined) {
     return { key: 'settings.input.capability', params: { list: modalityLabel(published, t) } }
   }
-  if (noticeOf(state, t) !== null) return null
+  if (noticeOf(state) !== null) return null
   if (address === null) return null
   if (address.defaultInput.length > 0) {
     return { key: 'settings.input.default', params: { list: modalityLabel(address.defaultInput, t) } }
@@ -192,22 +190,21 @@ export function inputHintOf(state: PanelCopyState, t: Translate): CopyLine | nul
  * immediate problem. A value the ADAPTER published survives the notice, for the
  * same reason the input hint does: it names a source, not a reason.
  * @param state - the panel state.
- * @param t - the translator.
  * @returns the hint's copy line, or null.
  */
-export function contextHintOf(state: PanelCopyState, t: Translate): CopyLine | null {
+export function contextHintOf(state: PanelCopyState): CopyLine | null {
   if (state.capacityError) return { key: 'settings.context.invalid' }
   const address = state.address
   const published = state.capability?.contextWindow
   if (address !== null && address.contextWindow !== undefined) {
-    return noticeOf(state, t) === null ? { key: 'settings.context.declared' } : null
+    return noticeOf(state) === null ? { key: 'settings.context.declared' } : null
   }
   // Same split as the input hint: a published number is the one thing the notice
   // does not already say, so it stays on screen beside it.
   if (published !== undefined) {
     return { key: 'settings.context.capability', params: { value: formatContext(published) } }
   }
-  if (noticeOf(state, t) !== null) return null
+  if (noticeOf(state) !== null) return null
   if (address === null) return null
   if (address.defaultContextWindow !== undefined) {
     return { key: 'settings.context.default', params: { value: formatContext(address.defaultContextWindow) } }

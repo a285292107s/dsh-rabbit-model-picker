@@ -17,7 +17,8 @@ async page => {
     const gear = document.querySelector('.dmp-settings-button')
     const root = document.querySelector('.dmp-root')
     const trigger = document.querySelector('.dmp-trigger')
-    const chip = document.querySelector('.dmp-provider')
+    // §5.26 removed the provider chip, so the trigger is the seat's only text
+    // control; it is the box whose squeeze this probe cares about now.
     const seat = gear.closest('[data-composer-seat]') ?? root.parentElement
     const frame = () => new Promise(r => requestAnimationFrame(() => r()))
     const rows = []
@@ -29,7 +30,6 @@ async page => {
         maxWidth,
         root: read(root),
         trigger: read(trigger),
-        chip: read(chip),
         gear: read(gear),
       })
     }

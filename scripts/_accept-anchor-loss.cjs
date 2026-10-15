@@ -15,7 +15,9 @@
  *
  * Each surface is exercised on its own because the fix watches the seat root
  * while each surface is placed from a different rect: a rule that closed only
- * the panel would pass the panel case and leave the other two broken.
+ * the panel would pass the panel case and leave the other broken. (§5.25 removed
+ * the third surface — the provider popover is now the rail inside the model card
+ * — so the model card carries both anchors' worth of this check on its own.)
  *
  * The negative half matters as much as the positive one — a dismissal rule that
  * also fires on ordinary layout pressure would be a worse bug than the drift.
@@ -37,14 +39,13 @@ async page => {
     // able to fake a survivor.
     const visible = selector => [...document.querySelectorAll(selector)]
       .filter(node => node.getClientRects().length > 0).length
-    const panel = document.querySelector('.dmp-settings, .dmp-provider-menu, .dmp-menu')
+    const panel = document.querySelector('.dmp-settings, .dmp-menu')
     const rect = panel?.getBoundingClientRect()
     const seat = document.querySelector('.dmp-root')
     return {
       settings: visible('.dmp-settings'),
-      providerMenu: visible('.dmp-provider-menu'),
       modelMenu: visible('.dmp-menu'),
-      panel: visible('.dmp-settings, .dmp-provider-menu, .dmp-menu'),
+      panel: visible('.dmp-settings, .dmp-menu'),
       top: rect === undefined ? null : Math.round(rect.top),
       left: rect === undefined ? null : Math.round(rect.left),
       seatRects: seat?.getClientRects().length ?? null,
@@ -82,11 +83,10 @@ async page => {
   })
   if (out.bundleIsNew.hasFix !== true) return JSON.stringify({ aborted: 'stale bundle', ...out })
 
-  // --- positive: each of the three surfaces, on its own anchor ---------------
+  // --- positive: each of the two surfaces, on its own anchor -----------------
   for (const [name, open] of [
     ['settings', '.dmp-settings-button'],
     ['modelMenu', '.dmp-trigger'],
-    ['providerMenu', '.dmp-provider'],
   ]) {
     await page.keyboard.press('Escape')
     await settle(300)

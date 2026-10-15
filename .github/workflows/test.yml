@@ -15,7 +15,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The five gates in one pass: build + test:fresh (lib/ drift), selfcheck
-      # (static contracts), contrast (skips when the host theme is absent, as on
-      # CI) and the params unit gate.
+      # Every gate in one pass (see the `test` script in package.json):
+      #   typecheck   — tsc, including noUnusedLocals/Parameters
+      #   build       — regenerate lib/
+      #   test:fresh  — the COMMITTED lib/ must be a faithful build of the
+      #                 COMMITTED src/, which is what a git install receives
+      #   selfcheck   — static contracts, copy keys, a11y wiring
+      #   contrast    — WCAG AA per painted style in both themes, measured
+      #                 against scripts/theme-tokens.json here, since the host
+      #                 is not installed on the runner
+      #   test:params — the parameter/facts/panel-copy unit gate
       - run: npm test
