@@ -58,6 +58,7 @@ try {
         "export * from './src/client/panelCopy.ts'",
         "export * from './src/client/capabilities.ts'",
         "export * from './src/client/adapterCatalog.ts'",
+        "export * from './src/client/snapshotEq.ts'",
       ].join('\n'),
       resolveDir: root,
       sourcefile: 'unit-entry.ts',
@@ -78,7 +79,7 @@ try {
     noticeOf, inputHintOf, contextHintOf, contextFieldOf, shownInputOf, showsContextField, capacityAction,
     showsInputSection, routeCapabilityOf, CapabilityStore, ParamsStore,
     restoreIsEmpty,
-    readCatalog, ADAPTER_CATALOGS,
+    readCatalog, ADAPTER_CATALOGS, sameSnapshot,
   } = await import(pathToFileURL(outfile).href)
 
   /** A translator over the real dictionary, the way the shell binds it. */
@@ -790,7 +791,6 @@ try {
     equal('capabilities: a shipped route is read once, through its own namespace', log, ['ns:p'])
     equal('capabilities: the answer is indexed by the row key',
       store.getSnapshot().routes, { 'p/m': { inputModalities: ['text'], contextWindow: 1000 } })
-    equal('capabilities: the read settles to ready', store.getSnapshot().status, 'ready')
   }
   {
     const store = new CapabilityStore(() => null)
@@ -1001,6 +1001,133 @@ try {
     equal('adapter catalog: the ask survives the mount race and lands the facts',
       store.getSnapshot().routes,
       { 'dsh-opencode-go/flash': { contextWindow: 1000000 } })
+  }
+
+  // --- the snapshot equality behind both stores' publish guard ---------------
+  // `useSyncExternalStore` re-renders when the snapshot stops being `Object.is`-
+  // equal to the last one, and both stores BUILD that snapshot, so reference
+  // comparison can never help. Content comparison is what lets a publish that
+  // carries no change skip the render — which is the ordinary case, since the
+  // menu and the panel re-read on every open.
+  {
+    equal('snapshot eq: identical primitives are equal', sameSnapshot(1, 1), true)
+    equal('snapshot eq: different primitives are not', sameSnapshot(1, 2), false)
+    equal('snapshot eq: NaN equals itself', sameSnapshot(NaN, NaN), true)
+    equal('snapshot eq: undefined and null are distinct', sameSnapshot(undefined, null), false)
+    equal('snapshot eq: a type change is a change', sameSnapshot({ a: 1 }, { a: '1' }), false)
+    // Rebuilt-but-equal is the whole point: this is what a no-op publish builds.
+    equal('snapshot eq: a rebuilt equal record is equal',
+      sameSnapshot({ routes: { 'p/m': { contextWindow: 1000 } } }, { routes: { 'p/m': { contextWindow: 1000 } } }), true)
+    equal('snapshot eq: a rebuilt equal nested array is equal',
+      sameSnapshot({ p: [{ inputModalities: ['text', 'image'] }] }, { p: [{ inputModalities: ['text', 'image'] }] }), true)
+    // Array ORDER is meaningful here: the catalog's provider order is what the
+    // rail lists, so a reorder is a change a subscriber can see.
+    equal('snapshot eq: array order matters', sameSnapshot({ p: [1, 2] }, { p: [2, 1] }), false)
+    equal('snapshot eq: array length matters', sameSnapshot({ p: [1] }, { p: [1, 2] }), false)
+    // A gained or lost KEY is a change even when every shared key still matches.
+    equal('snapshot eq: a lost key is a change', sameSnapshot({ a: 1, b: 2 }, { a: 1 }), false)
+    equal('snapshot eq: a gained key is a change', sameSnapshot({ a: 1 }, { a: 1, b: 2 }), false)
+    // Key ORDER is not observable to any consumer, so it is not a change.
+    equal('snapshot eq: key order alone is not a change', sameSnapshot({ a: 1, b: 2 }, { b: 2, a: 1 }), true)
+    // An optional field going from absent to a value is a change, and back.
+    equal('snapshot eq: undefined -> value is a change', sameSnapshot({}, { contextWindow: 1000 }), false)
+    equal('snapshot eq: value -> undefined is a change', sameSnapshot({ contextWindow: 1000 }, {}), false)
+    equal('snapshot eq: an empty record equals a rebuilt empty record', sameSnapshot({}, {}), true)
+    // Non-plain values must not be "equal" by accident.
+    equal('snapshot eq: a function is never equal to a rebuilt one',
+      sameSnapshot({ f: () => {} }, { f: () => {} }), false)
+    equal('snapshot eq: an array is not equal to a record', sameSnapshot([], {}), false)
+  }
+
+  // --- the publish guard: a no-op publish must not wake anyone ---------------
+  // Measured before the guard: opening the menu on an 8-provider catalog woke
+  // every subscriber 16 times for 8 real answers, and half of those re-rendered
+  // the whole model list. Both stores build their snapshot, so only a CONTENT
+  // comparison can skip those.
+  {
+    // CapabilityStore: a provider that published nothing changes no fact, so the
+    // second ask must be silent, and getSnapshot must stay identity-stable.
+    const store = new CapabilityStore(() => ({
+      listConfigurableProviders: async () => ({ ok: true, value: [entryOf({ declared: true })] }),
+    }))
+    let wakeups = 0
+    store.subscribe(() => { wakeups += 1 })
+    store.ensure(['p'])
+    await settle()
+    const afterFirst = wakeups
+    const settled = store.getSnapshot()
+    // A later open asks again (the ask was consumed, so nothing runs) — and even
+    // a resolved read that lands nothing must not publish a new snapshot.
+    store.ensure(['p'])
+    await settle()
+    equal('capabilities: a read that publishes nothing wakes no subscriber', wakeups, afterFirst)
+    equal('capabilities: and the snapshot it hands back is identity-stable',
+      store.getSnapshot() === settled, true)
+  }
+  {
+    // CapabilityStore: a read that DOES land facts must still publish exactly once.
+    const store = new CapabilityStore(() => null)
+    store.addSource({ providers: ['p'], read: async () => [{ id: 'm', contextWindow: 4096 }] })
+    let wakeups = 0
+    store.subscribe(() => { wakeups += 1 })
+    store.ensure(['p'])
+    await settle()
+    equal('capabilities: a read that lands facts publishes exactly once', wakeups, 1)
+    equal('capabilities: the facts are readable after that one publish',
+      store.getSnapshot().routes, { 'p/m': { contextWindow: 4096 } })
+  }
+  {
+    // ParamsStore: the menu and the panel call refresh() on EVERY open, and a
+    // refresh that finds the same values changed nothing a subscriber can see.
+    let describes = 0
+    const store = new ParamsStore(() => ({
+      settings: {
+        describe: async () => {
+          describes += 1
+          return { ok: true, value: { writable: true, namespaces: [{ ns: 'ns', revision: 1, value: { a: 1 } }] } }
+        },
+        mutate: async (ns) => ({ ok: true, value: { ns, revision: 2, value: {} } }),
+      },
+      llm: { listConfigurableProviders: async () => ({ ok: true, value: [] }) },
+    }))
+    let wakeups = 0
+    store.subscribe(() => { wakeups += 1 })
+    store.ensure()
+    await settle()
+    const settledWakeups = wakeups
+    const settled = store.getSnapshot()
+    await store.refresh()
+    await settle()
+    equal('params store: an unchanged refresh wakes no subscriber', wakeups, settledWakeups)
+    equal('params store: and stays identity-stable', store.getSnapshot() === settled, true)
+    equal('params store: the refresh really did re-read the Host', describes, 2)
+  }
+  {
+    // …but a refresh that finds a DIFFERENT answer must publish it.
+    let revision = 1
+    const store = new ParamsStore(() => ({
+      settings: {
+        describe: async () => ({
+          ok: true,
+          value: { writable: true, namespaces: [{ ns: 'ns', revision, value: { a: revision } }] },
+        }),
+        mutate: async (ns) => ({ ok: true, value: { ns, revision: 9, value: {} } }),
+      },
+      llm: { listConfigurableProviders: async () => ({ ok: true, value: [] }) },
+    }))
+    store.ensure()
+    await settle()
+    let wakeups = 0
+    store.subscribe(() => { wakeups += 1 })
+    const settled = store.getSnapshot()
+    revision = 2 // an external edit on the settings page
+    await store.refresh()
+    await settle()
+    equal('params store: a refresh that finds an external edit does publish', wakeups, 1)
+    equal('params store: and the new revision is the one it read',
+      store.getSnapshot().namespaces.ns?.revision, 2)
+    equal('params store: that publish replaced the snapshot object',
+      store.getSnapshot() === settled, false)
   }
 
   // --- the write path: a transport failure is an outcome, not a hang ---------

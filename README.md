@@ -194,6 +194,7 @@ src/client/facts.ts        徽章词汇表（渲染层与推导层共用）
 src/client/badges.ts       行内事实推导（纯函数）
 src/client/capabilities.ts 适配器发布的能力目录（只读事实 + 读取策略）
 src/client/adapterCatalog.ts 适配器自有目录的读取器与路由表（"没挂载"≠"什么都没发布"）
+src/client/snapshotEq.ts    快照内容比较：什么都没变就不叫醒订阅者（DESIGN §5.28）
 src/client/format.ts       徽章专用窗口写法（整数 + K/M）
 src/client/effort.ts       强度档位命名与列表
 src/client/SettingsMenu.tsx 模型参数面板

@@ -256,12 +256,19 @@ export interface RouteCapability {
   readonly maxTokens?: number
 }
 
-/** Lifecycle of the adapter-catalog read behind the read-only facts. */
-export type CapabilityStatus = 'idle' | 'loading' | 'ready'
-
-/** The facts every adapter-catalog read has produced so far. */
+/**
+ * The facts every adapter-catalog read has produced so far.
+ *
+ * There is deliberately NO lifecycle field here. An earlier revision carried
+ * `status: 'idle' | 'loading' | 'ready'` and published it, but no surface ever
+ * read it — checked across `src/` — so it only ever made the snapshot differ from
+ * itself: opening the menu on the reference catalog woke every subscriber 16
+ * times for 8 real answers, and half of those re-rendered the whole model list to
+ * report a status nothing displays. What a row needs to know is what the adapter
+ * published; "a read is still in flight" is the directory's own `status`, which
+ * the card already renders.
+ */
 export interface CapabilitySnapshot {
-  readonly status: CapabilityStatus
   /** Facts by the plugin's row key (`provider/model`). A route the adapter published nothing about is absent. */
   readonly routes: Readonly<Record<string, RouteCapability>>
 }

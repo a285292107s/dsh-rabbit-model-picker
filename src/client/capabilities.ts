@@ -43,9 +43,16 @@ import {
   rowKey, type CapabilityFace, type CapabilitySnapshot, type CapabilitySource, type ConfigurableProvider,
   type DiscoveredModel, type RemoteLlmFace, type RouteCapability,
 } from './contract.ts'
+import { sameSnapshot } from './snapshotEq.ts'
 
-/** The snapshot before the first read: nothing asked, nothing claimed. */
-const INITIAL_SNAPSHOT: CapabilitySnapshot = { status: 'idle', routes: {} }
+/**
+ * The snapshot before the first read: nothing asked, nothing claimed.
+ *
+ * `routes` starts as one frozen shared object rather than a fresh `{}`, so the
+ * "nothing has changed" comparison in {@link CapabilityStore.publish} can hold
+ * onto the same identity while the store is still empty.
+ */
+const INITIAL_SNAPSHOT: CapabilitySnapshot = { routes: {} }
 
 /**
  * Keep only a token count that can be a real capacity.
@@ -103,7 +110,6 @@ export class CapabilityStore implements CapabilityFace {
   private readonly requeue = new Set<string>()
   private readonly routes: Record<string, RouteCapability> = {}
   private snapshot: CapabilitySnapshot = INITIAL_SNAPSHOT
-  private status: CapabilitySnapshot['status'] = 'idle'
   private directory: readonly ConfigurableProvider[] | null = null
 
   /**
@@ -188,8 +194,6 @@ export class CapabilityStore implements CapabilityFace {
   private async read(provider: string): Promise<void> {
     if (this.inflight.has(provider)) return
     this.inflight.add(provider)
-    this.status = 'loading'
-    this.publish()
     let models: readonly DiscoveredModel[] | null = null
     try {
       models = await this.fetch(provider)
@@ -216,7 +220,6 @@ export class CapabilityStore implements CapabilityFace {
         if (capability !== null) this.routes[rowKey(provider, model.id)] = capability
       }
     }
-    this.status = this.inflight.size === 0 ? 'ready' : 'loading'
     this.publish()
     this.requeueRacingReader(provider)
   }
@@ -299,10 +302,24 @@ export class CapabilityStore implements CapabilityFace {
   }
 
   /**
-   * Replace the snapshot and wake every subscriber.
+   * Replace the snapshot and wake every subscriber — but only when the answer
+   * actually differs from the one in hand.
+   *
+   * WHY THE GUARD. `useSyncExternalStore` re-renders a component when the
+   * snapshot it reads stops being `Object.is`-equal to the last one it saw, and
+   * this store's snapshot is built here, so comparing references can never help:
+   * every publish would hand React a new object. Comparing the CONTENT is
+   * therefore the only way to avoid the re-render, and it is worth avoiding —
+   * a read that answers "this provider published nothing" lands here with an
+   * unchanged payload, and the model list would otherwise re-render for it.
+   *
+   * `routes` is copied only when something is published, so a no-op publish keeps
+   * handing back the very same snapshot object.
    */
   private publish(): void {
-    this.snapshot = { status: this.status, routes: { ...this.routes } }
+    const next: CapabilitySnapshot = { routes: { ...this.routes } }
+    if (sameSnapshot(this.snapshot, next)) return
+    this.snapshot = next
     for (const listener of this.listeners) listener()
   }
 }

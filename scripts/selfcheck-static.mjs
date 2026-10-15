@@ -313,6 +313,43 @@ const capabilities = stripComments(read('src/client/capabilities.ts'))
 // The adapter-catalog reader: extracted from `index.ts` so the unit gate can
 // drive it, and read here for the decisions that only source text can show.
 const adapterCatalog = stripComments(read('src/client/adapterCatalog.ts'))
+// The "did anything a subscriber can see change?" answer both stores publish
+// through, and the two publish guards that consume it.
+const snapshotEq = stripComments(read('src/client/snapshotEq.ts'))
+// `contractCode` above deliberately covers only the files that can carry a
+// `dmp-*` class or a copy key, so the contract itself is read on its own here.
+const contractSource = stripComments(read('src/client/contract.ts'))
+
+// A snapshot a store BUILDS cannot be compared by reference, so a publish that
+// carries no change used to wake every subscriber anyway: `useSyncExternalStore`
+// re-renders whenever the snapshot it reads stops being `Object.is`-equal to the
+// last one. Both stores therefore have to compare CONTENT before publishing.
+{
+  check(
+    'publish: both stores guard their publish with the shared content comparison',
+    /if \(sameSnapshot\(this\.snapshot, next\)\) return/.test(capabilities)
+    && /if \(sameSnapshot\(this\.snapshot, snapshot\)\) return/.test(params),
+  )
+  check(
+    'publish: the comparison is a real structural one, not a reference check',
+    /export function sameSnapshot/.test(snapshotEq)
+    && /Array\.isArray\(left\)/.test(snapshotEq)
+    && /Object\.keys\(left\)/.test(snapshotEq),
+  )
+  // The capability snapshot's lifecycle field was WRITE-ONLY: no surface read it
+  // (`src/` checked), so it only ever made the snapshot differ from itself. Its
+  // return would reinstate a re-render per read that reports nothing.
+  check(
+    'publish: the capability snapshot carries no write-only status field',
+    !/CapabilityStatus/.test(contractSource) && !/readonly status: CapabilityStatus/.test(contractSource),
+  )
+  // The card's own "a read is still running" signal comes from the directory
+  // store, which is the one that must keep its status.
+  check(
+    'publish: the directory status the card renders is untouched',
+    /DirectoryStatus/.test(contractSource) && /readonly status: DirectoryStatus/.test(contractSource),
+  )
+}
 check(
   'capabilities: a route the adapter only knows from configuration is never interrogated',
   capabilities.includes('entry.declared === true'),

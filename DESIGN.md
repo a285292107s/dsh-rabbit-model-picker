@@ -168,6 +168,7 @@ dsh-rabbit-model-picker/
   src/client/badges.ts     # 行内事实推导（纯函数）：resolveRoute + 能力目录 + reasoning → 该行能说的 1–4 条事实
   src/client/capabilities.ts # 适配器发布的能力目录（只读）：登记 reader、按需读取、按 rowKey 索引（§5.19）
   src/client/adapterCatalog.ts # 适配器自有目录的路由表与读取器（"还没挂载"≠"什么都没发布"，§5.27）
+  src/client/snapshotEq.ts # "订阅者看得见的东西变了吗"——两个 store 的 publish guard 共用（§5.28）
   src/client/effort.ts     # 强度档位的命名与列表（参数面板与行内徽章共用同一套说法）
   src/client/SettingsMenu.tsx # 模型参数面板（输入类型 / 上下文窗口 / 思考强度 + 写入位置与失败原话）
   src/client/params.ts     # 参数寻址与读写：show 快照 ← describe，resolveRoute(route) → 地址，write() → mutate
@@ -1823,6 +1824,51 @@ reader 落地事实后连开 10 次菜单，读数仍是 **1**（"已答复的 p
 
 **没有回归的**：§5.20 的既有契约全部原样成立（`asked` 的释放、目录读失败不缓存成空答案、
 适配器拒绝仍然一次定终身）；`lib/` 已重建，`test:fresh` 通过，git 安装拿到的是同一份。
+
+### 5.28 优化（2026-10-16）：一次"什么都没变"的 publish 不该叫醒任何人
+
+**动因**：上一节的体检是"哪些状态被当成了答案"；这一节是性能向的同一把尺子——
+**哪些通知其实什么都没说**。两个 store 都用"建一个新快照对象 + 逐个叫醒订阅者"来发布，
+而 `useSyncExternalStore` 判定重渲染的依据是 `Object.is`（上次读到的快照 vs 现在读到的）。
+store 自己建对象，所以**引用比较永远不可能相等**：每一次 publish 都必然换掉身份 → 必然重渲染。
+配上一个真实的目录（8 provider / 64 模型）实测，代价是这样：
+
+| 场景 | 修复前 | 修复后 |
+|---|---|---|
+| 打开菜单（`ensure` 全部 provider） | **16 次叫醒 / 8 次真有内容变化** —— 一半是空转 | **8 / 8**，空转 0 |
+| 什么都没变时的 `getSnapshot()` | —— | 身份稳定（React 可跳过渲染） |
+| 参数面板：已 settled 后再开 3 次（每次 `refresh()`） | **6 次叫醒 / 只有 1 次内容变化** | **0 次叫醒**（identity 不变） |
+
+**改法**：新增 `src/client/snapshotEq.ts`（`sameSnapshot`，结构化相等），两个 store 的
+`publish` 在换快照**之前**先比内容，相同就直接返回、连快照对象都不换。
+store 比不了引用，只能比内容——这正是这个小模块存在的全部理由。
+
+**同时删掉一个只写不读的字段**：`CapabilitySnapshot.status`（`'idle' | 'loading' | 'ready'`）。
+把 `src/` 全文按"读 `.status`"扫过一遍：**没有任何消费方**（面板/行内读的都是
+`DirectoryStore` 自己的 `status`，那是目录加载态，与本 store 无关）。也就是说这个字段唯一的作用
+就是让快照"和上一份长得不一样"——它自己制造了上面那一半空转。删除后 `read()` 从**两次** publish
+变成**一次**，且那一次若"适配器什么都没公布"也不会换身份。
+
+**边界（实测）**：guard 不能把**真的**变化吞掉，这一点单独钉了断言——外部在「设置 → 模型」页
+改了声明后 `refresh()` 必须照样发布（因为 revision/value 变了）；`ParamsStore` 那个真的会移动的
+`status`（`idle/loading/ready/unavailable/error`）也仍然照发，因为那确实是订阅者看得见的变化。
+`sameSnapshot` 的语义边界由单测逐条钉死：数组**顺序**算变化（provider 顺序就是左栏顺序）、
+键**集合**增减算变化、键**顺序**不算（没有消费方读它）、`undefined → 值` 算变化
+（`contextWindow`/`maxTokens`/`error` 都是可选字段，真的有"有/无"两态）、函数按引用比。
+
+**门**：`npm test` 五道门全绿。
+
+- `test-params.mjs` 新增 **26 条**：18 条 `sameSnapshot` 语义（基本类型、`NaN`、
+  `undefined` vs `null`、重建但相等的 record / 嵌套数组、数组顺序与长度、键集合增减、
+  键顺序不算、可选字段的有↔无、空 record、函数按引用、数组 vs record）；8 条行为
+  （capability：什么都没变的 read 不叫醒订阅者、身份稳定、落地事实时**恰好**发布一次；
+  params：不变的 refresh 不叫醒、身份稳定、**确实重读了 Host**（describe 调用数为证）、
+  外部改动会发布、发布后身份确实换了）。
+- `selfcheck-static.mjs` 新增 **4 条**：两个 store 都必须有内容 guard、`sameSnapshot` 必须
+  是真的结构化比较（不是引用比较）、capability 快照不得再有只写字段、而卡片真正渲染的
+  `DirectoryStatus` 必须保留。
+- **变异测试**：把两个 store 的 guard 各删一行 → 新增断言 FAIL 5 条（`actual 2 ≠ 1`、
+  `identity-stable false`、`4 ≠ 2` 等）。源文件按 hash 校验还原。
 
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 
