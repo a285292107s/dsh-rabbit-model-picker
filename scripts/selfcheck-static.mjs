@@ -581,6 +581,151 @@ check(
   Number.isFinite(stripPx) && stripPx <= 120,
   { stripPx, iconCol, windowCol, colGap },
 )
+// --- 10c. the horizontal budget: does the NAME still get room? --------------
+// 10b proves the strip fits. That is only half the property, and it is the half
+// that cannot fail alone: the name is the row's ELASTIC half (`flex: 1 1 auto`)
+// and the strip is its fixed half, so squeezing the columns never changes the
+// strip's width — it only takes room from the name. Mutation testing confirmed
+// the gap: widening the rail to 260px, narrowing the card to 380px, raising the
+// name's own floor to 96px and fattening the row padding to 30px ALL passed every
+// gate in this repo, while each one quietly shrinks the name column.
+//
+// So this walks the real box model from the card down to the name and asserts the
+// result. Every band is read out of the sheet, so the gate follows an edit rather
+// than going stale beside it. Calibrated below against the two numbers the sheet's
+// own comments record from the live GUI (a 331px model pane, a 175px name column)
+// — if the arithmetic stops reproducing those, the gate says so instead of passing
+// on a model that no longer describes the card.
+// The model column's own floor, from the stylesheet's own derivation: "the rail's
+// 176px plus the 320px the model column needs, plus the card's own 4px of padding
+// either side" (styles.ts, above `@media (max-width: 536px)`). It is a design
+// intent rather than a rule in the sheet, so it is named here.
+const MODEL_COLUMN_FLOOR = 320
+/** The card is `100vw - 24px` under the 480px branch, where the narrow layout applies. */
+const VIEWPORT_SLACK_NARROW = 24
+/** The narrowest viewport the surfaces are actually measured at (DESIGN §5.24). */
+const NARROWEST_MEASURED_VIEWPORT = 320
+
+{
+  /** One selector's property, as a number of px (NaN when absent). */
+  const px = (selector, property) => {
+    const raw = capsule(selector, property)
+    if (raw === null) return NaN
+    const value = /(-?[\d.]+)px/.exec(raw)
+    return value === null ? NaN : Number.parseFloat(value[1])
+  }
+  /** The Nth space-separated component of a shorthand property, as px. */
+  const partPx = (selector, property, index) => {
+    const raw = capsule(selector, property)
+    if (raw === null) return NaN
+    const value = /(-?[\d.]+)px/.exec(raw.split(/\s+/)[index] ?? '')
+    return value === null ? NaN : Number.parseFloat(value[1])
+  }
+
+  const menuPaddingX = 2 * px('.dmp-menu', 'padding')
+  const railBasis = partPx('.dmp-rail', 'flex', 2)
+  const railPadRight = partPx('.dmp-rail', 'padding', 1)
+  const railBorderRight = px('.dmp-rail', 'border-right')
+  const modelsPadLeft = px('.dmp-models', 'padding-left')
+  const rowPadX = 2 * columnPx('--dmp-row-pad-x')
+  const rowGap = px('.dmp-row', 'gap')
+  const checkWidth = partPx('.dmp-check', 'flex', 2)
+  const copyGap = px('.dmp-row-copy', 'gap')
+  const nameFloor = px('.dmp-row-name', 'min-width')
+  // The card's own width, and the viewport slack it is drawn against.
+  const cardMax = Number.parseFloat(/min\(\s*([\d.]+)px/.exec(capsule('.dmp-card', 'width'))?.[1] ?? '')
+  const viewportSlack = Number.parseFloat(/- ([\d.]+)px/.exec(capsule('.dmp-card', 'width'))?.[1] ?? '')
+  const collapseAt = Number.parseFloat(/@media \(max-width:\s*([\d.]+)px\)/.exec(stylesCode)?.[1] ?? '')
+
+  /** Every band, for one card width. */
+  const atCardWidth = (card, { narrow = false } = {}) => {
+    // In the narrow layout the rail is a strip ABOVE the list, so it costs no
+    // width and `.dmp-models` drops its own left padding.
+    const railOuter = narrow ? 0 : railBasis + railPadRight + railBorderRight
+    const pane = card - menuPaddingX - railOuter
+    const modelsLeft = narrow ? 0 : modelsPadLeft
+    const rowInner = pane - modelsLeft - rowPadX
+    return { pane, rowInner, name: rowInner - rowGap - checkWidth - copyGap - stripPx }
+  }
+
+  const design = atCardWidth(cardMax)
+  // CALIBRATION. These two are the sheet's own recorded live-GUI measurements
+  // (styles.ts: "the model pane is 331px and the name column is 175px on every
+  // row"). Reproducing them is what makes the arithmetic below trustworthy: an
+  // edit that moves either number is an edit that changed the measured layout, and
+  // re-measuring is the only honest response to this gate going red.
+  check(
+    'layout: the budget model reproduces the measured pane and name column',
+    Math.round(design.pane) === 331 && Math.round(design.name) === 175,
+    { pane: design.pane, name: design.name },
+  )
+  // The name must not become the smaller half of the row. It is what ellipsizes,
+  // so once the strip outweighs it every row stops identifying its own model —
+  // which is the failure this whole budget exists to prevent.
+  check(
+    'layout: the name column keeps more room than the fact strip it sits beside',
+    Number.isFinite(design.name) && design.name >= stripPx,
+    { name: design.name, strip: stripPx },
+  )
+  // The two-pane card needs the rail plus a usable model column plus its own
+  // padding, and it cannot be narrower than that: a card whose max width is under
+  // it can never lay out as two panes at ANY viewport.
+  const wideNeeds = railBasis + MODEL_COLUMN_FLOOR + menuPaddingX
+  check(
+    'layout: the card is wide enough to lay out as two panes at all',
+    Number.isFinite(cardMax) && cardMax >= wideNeeds,
+    { cardMax, wideNeeds },
+  )
+  // The name's floor is the point below which it stops identifying a model, and it
+  // has to stay a MINORITY of the room its column gets. That distinction is the
+  // whole reason this is a separate assertion: raising the floor does not change
+  // the computed width at all (the name is elastic), so the budget arithmetic above
+  // cannot see it — only comparing the two can. A floor at or above the room
+  // available means the column is permanently below its own minimum, which is a
+  // contradiction the browser resolves by overflowing the row.
+  check(
+    'layout: the name floor stays under the room the name column actually gets',
+    Number.isFinite(nameFloor) && Number.isFinite(design.name) && nameFloor < design.name,
+    { nameFloor, roomAvailable: design.name },
+  )
+  // …and the floor has to leave room for the name to be a name, which is a claim
+  // about how many characters it shows rather than about a preferred number: at
+  // 13px the name holds roughly one character per 7px, and a floor under three
+  // characters is a column that cannot distinguish one model from another. This is
+  // deliberately WEAK — the floor's real constraint is the viewport check below,
+  // since a floor and a viewport are two ends of one budget. It is here so that a
+  // floor collapsed to nothing is caught even if the viewport check would pass.
+  const nameCharPx = 7
+  check(
+    'layout: the name floor still shows a few characters at the name\'s own type size',
+    Number.isFinite(nameFloor) && nameFloor >= 3 * nameCharPx,
+    { nameFloor, minimum: 3 * nameCharPx },
+  )
+  // …and the collapse breakpoint has to be exactly where that stops fitting.
+  // These two numbers are one decision written twice, so an edit to either the rail
+  // or the breakpoint alone is a contradiction: below the breakpoint the two-pane
+  // layout would be squeezed past its floor, and above it the one-column layout
+  // stays on screen with room to spare.
+  check(
+    'layout: the collapse breakpoint is exactly where the two panes stop fitting',
+    Number.isFinite(collapseAt) && Number.isFinite(viewportSlack)
+      && collapseAt - viewportSlack === wideNeeds,
+    { collapseAt, slack: viewportSlack, expected: wideNeeds },
+  )
+  // The narrow layout is what a phone gets, so it has to keep the name readable at
+  // a phone's width. Below this the name is under its own floor and the row
+  // overflows. 320px is the narrowest width this project actually measures its
+  // surfaces at (DESIGN §5.24 records 320/360/420/560/1280 as the five viewports
+  // every row was checked at), so it is the widest honest bar to hold here.
+  const narrowNeeds = VIEWPORT_SLACK_NARROW + menuPaddingX + rowPadX + rowGap + checkWidth
+    + copyGap + stripPx + nameFloor
+  check(
+    'layout: the name stays readable at the narrowest measured viewport',
+    Number.isFinite(narrowNeeds) && narrowNeeds <= NARROWEST_MEASURED_VIEWPORT,
+    { narrowestViewport: narrowNeeds, measuredAt: NARROWEST_MEASURED_VIEWPORT },
+  )
+}
+
 // The key under the search field is the other half of the same decision: the
 // strip is only readable if the card names its columns, so the key has to exist
 // in the sheet AND be rendered (the dead-class gate covers the reverse).
