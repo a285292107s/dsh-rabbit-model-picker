@@ -25,4 +25,8 @@ jobs:
       #                 against scripts/theme-tokens.json here, since the host
       #                 is not installed on the runner
       #   test:params — the parameter/facts/panel-copy unit gate
+      #   test:mutations — the gate ON the gates: each judgement is broken on
+      #                 purpose and a gate has to go red. A mutation that no
+      #                 longer applies FAILS this step rather than skipping,
+      #                 which is how three of them sat unapplied unnoticed.
       - run: npm test

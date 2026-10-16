@@ -1394,12 +1394,23 @@ const lossSpan = /useEffect\(\(\) => \{\s*if \(!open && !settingsAt\) return[\s\
 const lossCall = lossSpan.slice(lossSpan.indexOf('return observeSeatLoss(') === -1
   ? 0
   : lossSpan.lastIndexOf('useEffect('))
-const closes = ['setOpen(false)', 'setSettingsAt(false)']
+// The list of things to close is DERIVED, not written here. It used to be the
+// hand-written pair `['setOpen(false)', 'setSettingsAt(false)']`, while the design
+// record described the same rule as "三个一起关" — and the third one
+// (`setSelectionFocus(false)`, which releases the latched flag suppressing the
+// trigger's focus ring) was asserted by nothing at all: deleting it left both
+// gates green. A hand-written list beside a prose rule is a list that drifts, so
+// the rule is now read out of the code: every boolean this seat LATCHES ON must be
+// released when the seat leaves the page, or it is still latched when the composer
+// comes back. That is the same failure §5.29 fixed — state that a keyboard user
+// can see the absence of, left in a place no gate was looking.
+const latched = [...new Set([...picker.matchAll(/set([A-Z]\w*)\(true\)/g)].map(m => m[1]))].sort()
 check(
-  '§5.18: both popovers are dismissed together, with no focus restore',
-  closes.every(call => lossCall.includes(call))
+  '§5.18: every flag the seat latches on is released when it is dismissed',
+  latched.length > 0
+    && latched.every(name => lossCall.includes(`set${name}(false)`))
     && !/triggerRef\.current\?\.focus\(\)|lastActionRef/.test(lossCall),
-  { missing: closes.filter(call => !lossCall.includes(call)), call: lossCall.replace(/\s+/g, ' ').trim().slice(0, 200) || null },
+  { latched, missing: latched.filter(name => !lossCall.includes(`set${name}(false)`)) },
 )
 // The observer has to be armed while a popover is open — a guard that watches
 // the seat all the time would make every one of these surfaces hostage to

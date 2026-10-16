@@ -146,11 +146,14 @@ npm run test:fresh   # 已提交的 lib/ 是否是已提交的 src/ 的忠实产
 npm run selfcheck    # 静态禁令 + 座位契约 + 文案键 + 两栏/提供商栏/触发器契约
 npm run contrast     # 文字对比度门：两个主题下按真实字号判 WCAG AA
 npm run test:params  # 参数寻址/容量 + 行内事实推导 + 面板文案决策的单元门
-npm test             # typecheck + build + test:fresh + selfcheck + contrast + test:params
+npm run test:mutations # 改坏验证：15 条改坏必须条条变红（§5.31）
+npm test             # typecheck + build + test:fresh + selfcheck + contrast + test:params + test:mutations
 ```
 
-> 这六道门在 GitHub Actions 上随每次 push 跑一遍（`.github/workflows/test.yml`）：
+> 这七道门在 GitHub Actions 上随每次 push 跑一遍（`.github/workflows/test.yml`）：
 > `lib/` 漂移会在 push 阶段被拦下，而不是等某次 git 安装装到旧行为。
+> `test:mutations` 是"门自己的门"：它把每条判断逐个改坏，确认有一条门真的会红；
+> 改坏要是打不上去了，它**算失败并点名**，而不是静默跳过（§5.31）。
 
 > `lib/` 是提交进仓库的（见「安装」）。**动过 `src/` 就要把重建后的 `lib/` 一起提交**，
 > `npm run test:fresh` 会在两者不一致时失败。它比较的是 **HEAD 里的那一对**

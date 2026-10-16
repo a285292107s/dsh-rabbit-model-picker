@@ -60,6 +60,7 @@ try {
         "export * from './src/client/adapterCatalog.ts'",
         "export * from './src/client/snapshotEq.ts'",
         "export * from './src/client/focusChain.ts'",
+        "export * from './src/client/anchorLoss.ts'",
       ].join('\n'),
       resolveDir: root,
       sourcefile: 'unit-entry.ts',
@@ -82,6 +83,7 @@ try {
     restoreIsEmpty,
     readCatalog, ADAPTER_CATALOGS, sameSnapshot,
     CHAIN_SELECTOR, isChainMember, cardChainOf, stepChain,
+    seatLeftThePage, observeSeatLoss,
   } = await import(pathToFileURL(outfile).href)
 
   /** A translator over the real dictionary, the way the shell binds it. */
@@ -1326,6 +1328,176 @@ try {
     routeCapabilityOf({ id: 'm', inputModalities: [] }), null)
   equal('capabilities: a useless window is dropped and the rest is kept',
     routeCapabilityOf({ id: 'm', contextWindow: 0, maxTokens: 4096 }), { maxTokens: 4096 })
+
+  // --- the anchor-loss rule: driven, not pattern-matched ---------------------
+  // The §5.18 defect is a DECISION spread over time — "look twice before believing
+  // the seat is gone" — and every gate for it used to be a regex over the source.
+  // Six logic mutations proved that worthless: dismissing on the FIRST reading,
+  // never setting the `reported` flag, ignoring `stopped`, inverting the recovery
+  // test, never observing the root, and failing to store the timer so it cannot be
+  // cancelled ALL passed every gate in the repo. A regex can see that
+  // `setTimeout(confirm` is written; it cannot see whether the second look
+  // actually happens, which is the entire rule. These drive the real state machine
+  // against a fake element, a fake ResizeObserver and a controllable clock.
+  {
+    /** Install the globals the module reaches for, and let a test drive them. */
+    const makeEnv = () => {
+      const timers = []
+      const cleared = []
+      const frames = []
+      let nextId = 1
+      globalThis.window = {
+        setTimeout: (cb, ms) => { nextId += 1; timers.push({ id: nextId, cb, ms }); return nextId },
+        clearTimeout: (id) => { cleared.push(id) },
+      }
+      // A frame callback is the tempting wrong answer, so it is recorded: the
+      // whole point is that this rule must NOT depend on one.
+      globalThis.requestAnimationFrame = (cb) => { frames.push(cb); return 0 }
+      const observers = []
+      globalThis.ResizeObserver = class {
+        constructor(cb) { this.cb = cb; this.targets = []; this.disconnected = false; observers.push(this) }
+        observe(el) { this.targets.push(el) }
+        disconnect() { this.disconnected = true; this.targets = [] }
+      }
+      return {
+        observers, timers, cleared, frames,
+        /** Fire every timer scheduled so far (one round). */
+        runTimers: () => { for (const t of timers.splice(0)) t.cb() },
+        /** Fire the observer as the browser would after a re-layout. */
+        notify: () => { for (const o of observers) o.cb() },
+      }
+    }
+
+    /** A stand-in for the seat root: is it in the document, and does it paint? */
+    const seat = (rects = 1, connected = true) => ({
+      isConnected: connected,
+      getClientRects: () => ({ length: rects }),
+    })
+
+    // The probe decides "occupies the page", and the two halves are separate
+    // facts: `display: none` leaves `isConnected` TRUE while collapsing the box,
+    // so a detached ref and an unpainted one must both read as gone, and a
+    // missing ref must not read as "unknown".
+    check('anchor loss: a missing root reads as gone', seatLeftThePage(null) === true)
+    check('anchor loss: a detached root reads as gone', seatLeftThePage(seat(1, false)) === true)
+    check('anchor loss: a connected but unpainted root reads as gone', seatLeftThePage(seat(0, true)) === true)
+    check('anchor loss: a painted root reads as present', seatLeftThePage(seat(2, true)) === false)
+
+    // The rule: ONE reading is not enough, because a re-layout in flight reports
+    // 0×0 and recovers within the frame. This is the assertion that fails when
+    // `CONFIRM_LOOKS` drops to 1 — the panel would be thrown away on a reading
+    // the user can still see and use.
+    {
+      const env = makeEnv()
+      let lost = 0
+      let current = seat(2)
+      const dispose = observeSeatLoss(() => current, () => { lost += 1 })
+      env.notify()                       // re-layout starts: the box is 0×0
+      current = seat(2)                  // …and it lands again before the re-check
+      env.runTimers()
+      check('anchor loss: a one-look dip in layout does not dismiss the panel', lost === 0, { lost })
+      // …while a loss that PERSISTS through the second look is believed.
+      current = seat(0)
+      env.notify()
+      env.runTimers()
+      check('anchor loss: a loss that survives the second look does dismiss', lost === 1, { lost })
+      dispose()
+    }
+
+    // The second look must be a TASK-QUEUE timer, never a frame callback: a
+    // `display: none` subtree stops the browser servicing the frame callback, so
+    // the re-check would be scheduled and never run. Recorded rather than
+    // grepped — the point is what happens at runtime.
+    {
+      const env = makeEnv()
+      const dispose = observeSeatLoss(() => seat(0), () => {})
+      env.notify()
+      check('anchor loss: the second look waits on a timer', env.timers.length === 1, { timers: env.timers.length })
+      check('anchor loss: the second look is never a frame callback', env.frames.length === 0, { frames: env.frames.length })
+      env.runTimers()
+      dispose()
+    }
+
+    // Dismissal is once. Two losses in a row, or a loss arriving after the report,
+    // must not call back again — the caller closes React state from here.
+    {
+      const env = makeEnv()
+      let lost = 0
+      const dispose = observeSeatLoss(() => seat(0), () => { lost += 1 })
+      env.notify(); env.runTimers()
+      env.notify(); env.runTimers()
+      env.notify(); env.runTimers()
+      check('anchor loss: a dismissal is reported exactly once', lost === 1, { lost })
+      dispose()
+    }
+
+    // Recovery resets the count, so two losses that are NOT consecutive are still
+    // not a loss: this is what separates "the Host is showing something else now"
+    // from "layout is still settling".
+    {
+      const env = makeEnv()
+      let lost = 0
+      let current = seat(2)
+      const dispose = observeSeatLoss(() => current, () => { lost += 1 })
+      env.notify()                       // dip 1
+      current = seat(2)
+      env.runTimers()                    // recovered: count resets
+      current = seat(0)
+      env.notify()                       // dip 2, first reading of a real loss
+      env.runTimers()                    // second reading: believed
+      check('anchor loss: a recovery resets the count instead of accumulating', lost === 1, { lost })
+      dispose()
+    }
+
+    // Teardown has to stop the pending look AND detach the observer, or a closed
+    // popover can still be dismissed by a timer left over from when it was open.
+    {
+      const env = makeEnv()
+      let lost = 0
+      const dispose = observeSeatLoss(() => seat(0), () => { lost += 1 })
+      env.notify()                       // a look is now pending
+      dispose()
+      env.runTimers()
+      check('anchor loss: teardown cancels the pending second look', lost === 0, { lost })
+      check('anchor loss: teardown clears the timer it scheduled', env.cleared.length === 1, { cleared: env.cleared })
+      check('anchor loss: teardown disconnects the observer',
+        env.observers.length === 1 && env.observers[0].disconnected === true,
+        { observers: env.observers.map(o => o.disconnected) })
+    }
+
+    // The observer is armed on the ROOT, and armed at all. Watching one anchor
+    // would measure a symptom: a narrow composer squeezes the trigger to 12px
+    // while the seat is still on the page.
+    {
+      const env = makeEnv()
+      const root = seat(2)
+      const dispose = observeSeatLoss(() => root, () => {})
+      check('anchor loss: the observer is armed on the root it was given',
+        env.observers.length === 1 && env.observers[0].targets.length === 1
+          && env.observers[0].targets[0] === root,
+        { armed: env.observers.map(o => o.targets.length) })
+      // A root that is not attached yet is not an error, just nothing to watch.
+      const env2 = makeEnv()
+      const dispose2 = observeSeatLoss(() => null, () => {})
+      check('anchor loss: a null root is not observed rather than throwing',
+        env2.observers[0].targets.length === 0, { armed: env2.observers[0].targets.length })
+      dispose(); dispose2()
+    }
+
+    // The root is read at notify time, not captured. The effect that owns this
+    // re-runs on every open, and a captured node would keep the observer watching
+    // a composer that has already been replaced.
+    {
+      const env = makeEnv()
+      let lost = 0
+      let current = seat(2)
+      const dispose = observeSeatLoss(() => current, () => { lost += 1 })
+      current = seat(0)                  // a DIFFERENT node, since the getter is re-read
+      env.notify(); env.runTimers()
+      check('anchor loss: the root is read per look, not captured once', lost === 1, { lost })
+      dispose()
+    }
+  }
 
   // The copy that reaches a user must not name internals they cannot act on.
   const jargon = panelLines.filter(text => text !== null && /Host|适配器内置目录的模型|走会话选择/.test(text))

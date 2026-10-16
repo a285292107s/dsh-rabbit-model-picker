@@ -39,9 +39,10 @@
     "selfcheck": "node scripts/selfcheck-static.mjs",
     "contrast": "node scripts/check-contrast.mjs",
     "test:params": "node scripts/test-params.mjs",
+    "test:mutations": "node scripts/mutate-anchor-loss.mjs",
     "test:fresh": "node scripts/check-build-fresh.mjs",
     "theme:fixture": "node scripts/_dump-theme-fixture.mjs",
-    "test": "npm run typecheck && npm run build && npm run test:fresh && npm run selfcheck && npm run contrast && npm run test:params",
+    "test": "npm run typecheck && npm run build && npm run test:fresh && npm run selfcheck && npm run contrast && npm run test:params && npm run test:mutations",
     "prepublishOnly": "npm test"
   },
   "license": "MIT",
