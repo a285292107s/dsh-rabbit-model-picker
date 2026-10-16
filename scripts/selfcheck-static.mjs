@@ -997,19 +997,52 @@ check(
   { pick: /const pickProvider = [\s\S]{0,320}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
 )
 
-// h5. …and the `Tab` chain skips DISABLED controls. The rail is one tab stop whose
-//     row is a real `disabled` button whenever a selection is in flight, and
-//     `.focus()` on a disabled button does nothing: a chain that kept it would
-//     swallow `Shift+Tab` off the search box for the length of the write. The
-//     model rows are `div`s carrying `aria-disabled` precisely so the keyboard is
-//     NOT dropped during a selection, so filtering on the attribute rather than on
-//     `aria-disabled` is the distinction that matters here.
-check(
-  'filter: the Tab chain skips disabled controls',
-  /const elements = chain\.filter\([\s\S]{0,200}element\.disabled/.test(picker)
-    && /moveTab\(event\.shiftKey \? -1 : 1\)/.test(picker),
-  { chain: /const elements = chain\.filter\([\s\S]{0,200}/.exec(picker)?.[0]?.replace(/\s+/g, ' ').trim() ?? null },
-)
+// h5. The `Tab` chain is READ FROM THE CARD, not assembled from refs. A hand-kept
+//     list has to be kept in step with the JSX by hand, and three controls that
+//     exist only in one state had drifted out of it — the search field's clear
+//     button, the "show all providers" button, and the retry button on a failed
+//     read. Since the card cancels `Tab` and walks its own chain, the browser
+//     cannot reach them either: all three were pointer-only, and "reload the group
+//     that failed to load" had no other way in at all (WCAG 2.1.1). `SettingsMenu`
+//     lost its two switches to the same mistake (§5.10, caveat 2). The behavioural
+//     rules live in `focusChain.ts` and are driven by the unit gate; what is
+//     asserted here is that the component actually goes through them.
+{
+  const focusChain = stripComments(read('src/client/focusChain.ts'))
+  check(
+    'focus: the seat walks the chain it reads off the rendered card',
+    /stepChain\(cardChainOf\(/.test(picker),
+    { call: /stepChain\([^)]*\)/.exec(picker)?.[0] ?? null },
+  )
+  check(
+    'focus: the chain is no longer assembled from refs by hand',
+    !/const chain: \(HTMLElement \| null\)\[\] = \[railRefs/.test(picker),
+  )
+  // A model row is a `div` at tabIndex=-1, so a query for the platform's tabbable
+  // elements alone would miss every row of the list.
+  check(
+    'focus: the chain selector includes [tabindex] so the rows are reachable',
+    /\[tabindex\]/.test(focusChain) && /button/.test(focusChain) && /input/.test(focusChain),
+    { selector: /CHAIN_SELECTOR = '([^']*)'/.exec(focusChain)?.[1] ?? null },
+  )
+  // A listbox is ONE tab stop: the rail's rows sit at 0 and -1, and a model row
+  // uses that same -1 to mean "in the chain", so the role has to decide.
+  check(
+    'focus: the rail stays one tab stop rather than one per row',
+    /getAttribute\('role'\) === 'option'/.test(focusChain) && /tabIndex === 0/.test(focusChain),
+  )
+  // `disabled` excludes; `aria-disabled` must NOT, because the rows carry it
+  // during a write precisely so the keyboard is not dropped.
+  check(
+    'focus: a disabled control is excluded but an aria-disabled one is not',
+    /disabled === true/.test(focusChain) && !/aria-disabled/.test(focusChain),
+  )
+  // Backward off the first member closes the seat — the keyboard's only way out.
+  check(
+    'focus: stepping back off the first member closes the seat',
+    /next < 0\) return \{ kind: 'close' \}/.test(focusChain),
+  )
+}
 
 // --- 12. the component has to CONSUME the decisions the pure layer makes -----
 // `panelCopy.ts` is meticulously gated, and `test-params.mjs` drives it directly —

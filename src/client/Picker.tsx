@@ -45,6 +45,7 @@ import { BadgeIcon } from './BadgeIcons.tsx'
 import { observeSeatLoss } from './anchorLoss.ts'
 import { badgeSpecsOf, BADGE_FACTS, type BadgeFact, type BadgeSpec } from './badges.ts'
 import { effortLabelOf } from './effort.ts'
+import { cardChainOf, stepChain } from './focusChain.ts'
 import { resolveRoute } from './params.ts'
 import { ProviderRail, type ProviderOption } from './ProviderRail.tsx'
 import { rowKey, type CatalogModel, type ModelSelection, type PickerProps, type ProviderGroup } from './contract.ts'
@@ -582,38 +583,27 @@ export function Picker(props: PickerProps) {
 
   /**
    * Move the keyboard along the card's own focus chain, in the order the card
-   * renders it: the provider rail's single stop, then the search box, then each
-   * model row. The rows carry no controls of their own any more — a row is one
-   * target, and effort is a fact it states, not a thing it does. The rail is one
-   * stop rather than a dozen because it is a listbox: its own arrows move within
-   * it. Traversal never leaves the card; the ends wrap, and stepping back off the
-   * chain's first element closes the seat like Escape does.
+   * renders it: the provider rail's single stop, then the search box and whatever
+   * controls sit beside it, then each model row. The rows carry no controls of
+   * their own — a row is one target, and effort is a fact it states, not a thing
+   * it does. The rail is one stop rather than a dozen because it is a listbox: its
+   * own arrows move within it. Traversal never leaves the card; the ends wrap, and
+   * stepping back off the chain's first element closes the seat like Escape does.
+   *
+   * The chain is read from the rendered card rather than assembled from refs, so
+   * every control the card draws is reachable even when it exists in only one
+   * state. See `focusChain.ts` for why that is the whole point.
    * @param delta - +1 forward, -1 backward.
    */
   const moveTab = (delta: number): void => {
-    // The rail is the first pane of the card (left of the list on a wide card,
-    // above it on a narrow one), so the chain starts there and follows the DOM.
-    const chain: (HTMLElement | null)[] = [railRefs.current[railStop] ?? null, searchRef.current]
-    rows.forEach((_row, index) => {
-      chain.push(rowRefs.current[index] ?? null)
-    })
-    // A disabled control is not a tab stop — that is what `disabled` means to the
-    // platform. The rail's rows are all disabled while a selection is in flight,
-    // and a chain that kept one would swallow the keypress that lands on it
-    // (`.focus()` on a disabled button does nothing), so `Shift+Tab` off the
-    // search box would look dead for the length of the write.
-    const elements = chain.filter(
-      (element): element is HTMLElement =>
-        element !== null && !(element instanceof HTMLButtonElement && element.disabled),
-    )
-    if (elements.length === 0) return
-    const active = document.activeElement instanceof HTMLElement ? elements.indexOf(document.activeElement) : -1
-    const next = active === -1 ? (delta > 0 ? 0 : elements.length - 1) : active + delta
-    if (next < 0) {
+    const panel = menuRef.current
+    if (panel === null) return
+    const step = stepChain(cardChainOf(panel), document.activeElement, delta)
+    if (step.kind === 'close') {
       close(true)
       return
     }
-    elements[next % elements.length]?.focus()
+    if (step.kind === 'focus') step.element.focus()
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {

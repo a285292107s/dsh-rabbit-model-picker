@@ -169,6 +169,7 @@ dsh-rabbit-model-picker/
   src/client/capabilities.ts # 适配器发布的能力目录（只读）：登记 reader、按需读取、按 rowKey 索引（§5.19）
   src/client/adapterCatalog.ts # 适配器自有目录的路由表与读取器（"还没挂载"≠"什么都没发布"，§5.27）
   src/client/snapshotEq.ts # "订阅者看得见的东西变了吗"——两个 store 的 publish guard 共用（§5.28）
+  src/client/focusChain.ts # 卡片的 Tab 链：从渲出的 DOM 里读，只在某状态下出现的控件也够得到（§5.29）
   src/client/effort.ts     # 强度档位的命名与列表（参数面板与行内徽章共用同一套说法）
   src/client/SettingsMenu.tsx # 模型参数面板（输入类型 / 上下文窗口 / 思考强度 + 写入位置与失败原话）
   src/client/params.ts     # 参数寻址与读写：show 快照 ← describe，resolveRoute(route) → 地址，write() → mutate
@@ -386,7 +387,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 | 计数 | 取自已加载目录（`opencode-go 30`、`commandcode 19`…），tabular-nums；每一行的数字都等于点进去能看到的行数 |
 | 选中后 | 模型列表收窄到该提供商；chip 写该 provider 名并转强墨色（`data-filtered`、`aria-label` 换成 `provider.chipAria`）；**模型卡内**出现一行 `仅显示 {name}` + 「显示全部」一键清除（§5.21：这是退出筛选的唯一出口；§5.22：清除后 chip 回到当前模型的 provider，不是「全部」） |
 | 记住（2026-10-02 追加，2026-10-03 改为**按会话**） | 选择写进本插件自己的 `localStorage['dsh-model-picker.provider.v1:<会话 id>']`（`prefs.ts`），刷新页面/重开**这个会话**后仍是它；清除筛选 = 删掉该会话的项。目录里**已经没有**的 id 会在目录 `ready` 后被丢弃（否则用户会面对一个没有解释的空列表）；**失败但仍列在菜单里**的 provider 不算"没有"，保留。详见 §5.13、§5.15 |
-| 键盘 | 菜单内 `↑↓`/`Tab` 走 `搜索框 ↔ 行`，`Enter` 选中，`Esc` / `←` 退回 chip；模型菜单的 Tab 链把 chip 当作链首，端点 Shift+Tab 关闭并交还触发器 |
+| 键盘 | 菜单内 `↑↓` 走行、`Tab` 走整卡的焦点链（`聚焦的 DOM` 顺序：左栏 → 搜索框及其按钮 → 各行），`Enter` 选中，`Esc` / `←` 退回 chip；链首 Shift+Tab 关闭并交还触发器。**链是从渲出的卡片里读出来的**，不是手写清单——否则只在某个状态下出现的控件（清除搜索、显示全部、重试）键盘够不到（§5.29） |
 | 与模型菜单的关系 | 互斥：开一个就关另一个（它们是两个独立 popover，不嵌套） |
 | 空状态 | 筛选后无行 → 「该提供商没有可用模型。」；失败的 provider 该行本来就被禁用，选不到 |
 | **不做什么** | 不改 Host、不改 `/model`、不改触发器显示值；筛选绝不参与 `select()` 的参数 |
@@ -1869,6 +1870,70 @@ store 比不了引用，只能比内容——这正是这个小模块存在的�
   `DirectoryStatus` 必须保留。
 - **变异测试**：把两个 store 的 guard 各删一行 → 新增断言 FAIL 5 条（`actual 2 ≠ 1`、
   `identity-stable false`、`4 ≠ 2` 等）。源文件按 hash 校验还原。
+
+### 5.29 修（2026-10-16）：四个只在某个状态下出现的控件，键盘够不到
+
+**这是 §5.10 那条坑的同一个形状，第二次踩。** §5.10 的坑 2 写得很清楚：面板初版**按 ref 表维护
+Tab 链**，于是两个开关"静默地不在链里——键盘根本够不到它们"；当时的修复是**改查渲出的 DOM**。
+模型卡这一侧没有跟着改，一直留在"手写清单"的形态上。
+
+卡片开着时 `Tab` 是被**完全接管**的（`onKeyDown` 里 `event.preventDefault()` 之后自己走链），
+所以浏览器不会兜底——**不在链里 = 键盘永远到不了**。而链是这样写死的：
+
+```
+chain = [ railRefs[railStop], searchRef, ...rowRefs ]   // 三种成员，手写
+```
+
+渲出的卡片里却有 **四个**只在特定状态下出现的控件不在其中：
+
+| 控件 | 出现条件 | 原来的键盘出口 |
+|---|---|---|
+| `.dmp-search-clear` | 搜索框非空 | 有：`Esc` 清空 |
+| `.dmp-filter-clear` | 别的 provider 也有匹配 | 有：左栏的「全部」行 |
+| `.dmp-retry`（读取失败） | 目录读失败 | **没有** |
+| `.dmp-retry`（分组失败） | 某个 provider 组失败 | **没有** |
+
+前两个只是不方便，后两个是 **WCAG 2.1.1（键盘）失败**：`reload()` 全文只被调用两处，一处是
+打开菜单时（`openMenu`），一处就是这个按钮的 `onClick`。也就是说**某个 provider 组加载失败后，
+想重试只有鼠标一条路**——而那正是最需要重试的时刻。这类缺陷连截图都看不出来：按钮画得好好的。
+
+**改法**：把链从"手写清单"改成**从渲出的卡片里读**，并且把这套规则抽成 `src/client/focusChain.ts`
+（纯函数，可被单测直接驱动，而不是只能在源码上做正则匹配——§5.27 抽 `adapterCatalog.ts` 的同一理由）。
+两条规则各有来历，都不是顺手加的：
+
+1. **`disabled` 排除，`aria-disabled` 不排除。** 这就是 §5.10 那条坑的正面：选中写入期间左栏整列
+   `disabled`，而 `.focus()` 打在一个 disabled 按钮上**什么都不做**，链里留着它就会**吞掉**按键
+   （搜索框上 Shift+Tab 看起来像坏了）。模型行反过来故意用 `aria-disabled`，正是为了写入期间**不**
+   把键盘丢掉——所以判据必须是 `disabled` 而不是 `aria-disabled`。
+2. **listbox 是一个 Tab 停靠点，不是每行一个。** 左栏靠自己的方向键在内部移动，`ProviderRail` 为此
+   把选中的那行留在 `tabIndex=0`、其余 `-1`。麻烦在于**模型行也用 `-1` 表示"在链里"**——同一个值
+   两种含义，所以只能靠 `role` 分辨（`role="option"` 且 `tabIndex===0` 才算）。
+
+查询里带 `[tabindex]` 也是必需的：模型行是 `div` 而不是 `button`，只查平台原生的可 Tab 元素会
+**漏掉整张列表**。
+
+**端点行为原样保留**（它们是有意不对称的）：向前越过最后一员回绕到第一员（遍历永远不离开卡片），
+向后越过第一员则**关闭座位**——这是键盘唯一的出路，交还焦点给触发器。焦点不在链上时（卡片本身，
+或某个控件在脚下消失了），按前进方向从对应端进入。
+
+**门**：`npm test` 五道门全绿。
+
+- `test-params.mjs` 新增 **28 条**：selector 覆盖三种形态；`disabled` 进出链；左栏 `role=option`
+  在 `tabIndex=0` 时是唯一停靠点、`-1` 的其余行**不是**、而模型行（`role=menuitemradio` at `-1`）
+  **是**；三个只在某状态下出现的按钮都**在**链里；链顺序 = 渲染顺序；**"只按 Tab 能走遍渲出的每一个
+  控件"**（这条才是那个缺陷的正面表述——指针独占的控件走不到）；端点回绕 / 首端后退关闭 / 焦点不在
+  链上时从哪端进入 / 空链；以及失败态里重试按钮在链上。
+- `selfcheck-static.mjs`：原来的 `filter: the Tab chain skips disabled controls` 断言的是**已被删掉的
+  手写链形状**，改写为 **6 条**——座位必须走 `stepChain(cardChainOf(...))`、手写 ref 链不得回来、
+  selector 必须含 `[tabindex]`、左栏必须靠 `role` 判、`disabled` 排除而 `aria-disabled` 不得出现、
+  首端后退必须关闭座位。
+- **变异测试**（五条，都实测炸）：① 把链改回"只收有 role 的 + input"（= 原缺陷：普通按钮全丢）→
+  3 条 FAIL，其中恰好是"重试按钮在链上"那条；② 左栏不再是一个停靠点 → 3 条 FAIL；③ `disabled`
+  检查删掉 → 1 条 FAIL；④ 首端后退不再关闭 → 1 条 FAIL；⑤ 取模回绕删掉 → 3 条 FAIL。
+  五次变异后源文件都按 hash 校验还原。
+
+**顺带核对的**：`railRefs` / `rowRefs` / `railStop` / `groupsRef` 都仍在用（方向键、滚动、
+鼠标按下聚焦），没有因为这次改动变成孤儿——`noUnusedLocals` 也会拦下这种情况。
 
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 

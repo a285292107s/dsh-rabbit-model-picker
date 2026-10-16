@@ -70,7 +70,7 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
 | 参数面板点「恢复默认」 | 撤掉本 profile patch 里的声明；无声明时按钮禁用 |
 | 参数面板点思考强度 | **唯一改强度的地方**：走 `directory.select()`，改完行内徽章同步 |
 | 无法寻址的路由 | 面板写明原因，并**陈述适配器目录公布的事实**（可编辑的控件仍然全部禁用）；适配器什么都没公布时，对应分区整块不渲染，不画成"不支持" |
-| 键盘（列表） | `↑↓` 移高亮、`Home`/`End` 跳首尾行、`Enter` 选中；`←` 进提供商栏；`Tab` 在 左栏 → 搜索 → 各行 之间走 |
+| 键盘（列表） | `↑↓` 移高亮、`Home`/`End` 跳首尾行、`Enter` 选中；`←` 进提供商栏；`Tab` 按卡片渲出的顺序走（左栏 → 搜索框及其按钮 → 各行），链首 `Shift+Tab` 关卡片 |
 | 键盘（左栏） | `↑↓` 在行间移焦点、`Home`/`End` 跳首尾、`Enter`/`空格` 采纳并回到搜索框、`→` 回搜索框；`Esc` 关卡片 |
 | 问答/审批/只读子代理顶掉输入条时 | 两个弹窗一起关掉（不还焦点）。判据是座位根有没有盒子，窄布局不误关。详见 DESIGN.md §5.18 |
 
@@ -195,6 +195,7 @@ src/client/badges.ts       行内事实推导（纯函数）
 src/client/capabilities.ts 适配器发布的能力目录（只读事实 + 读取策略）
 src/client/adapterCatalog.ts 适配器自有目录的读取器与路由表（"没挂载"≠"什么都没发布"）
 src/client/snapshotEq.ts    快照内容比较：什么都没变就不叫醒订阅者（DESIGN §5.28）
+src/client/focusChain.ts    卡片的 Tab 链：从渲出的 DOM 读，只在某状态下出现的控件也够得到（§5.29）
 src/client/format.ts       徽章专用窗口写法（整数 + K/M）
 src/client/effort.ts       强度档位命名与列表
 src/client/SettingsMenu.tsx 模型参数面板

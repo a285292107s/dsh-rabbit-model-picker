@@ -59,6 +59,7 @@ try {
         "export * from './src/client/capabilities.ts'",
         "export * from './src/client/adapterCatalog.ts'",
         "export * from './src/client/snapshotEq.ts'",
+        "export * from './src/client/focusChain.ts'",
       ].join('\n'),
       resolveDir: root,
       sourcefile: 'unit-entry.ts',
@@ -80,6 +81,7 @@ try {
     showsInputSection, routeCapabilityOf, CapabilityStore, ParamsStore,
     restoreIsEmpty,
     readCatalog, ADAPTER_CATALOGS, sameSnapshot,
+    CHAIN_SELECTOR, isChainMember, cardChainOf, stepChain,
   } = await import(pathToFileURL(outfile).href)
 
   /** A translator over the real dictionary, the way the shell binds it. */
@@ -1128,6 +1130,103 @@ try {
       store.getSnapshot().namespaces.ns?.revision, 2)
     equal('params store: that publish replaced the snapshot object',
       store.getSnapshot() === settled, false)
+  }
+
+  // --- the card's Tab chain: every control it draws must be reachable --------
+  // The card cancels `Tab` and walks its own chain, so a control missing from that
+  // chain is unreachable by keyboard — the browser cannot fall back to its own
+  // traversal. Three controls that exist in only one state had drifted out of the
+  // hand-written list, and "reload the group that failed to load" had no other way
+  // in at all (a WCAG 2.1.1 failure). These drive the rules directly.
+  {
+    /** A stand-in for one rendered control. */
+    const el = (tag, { role = null, tabIndex = 0, disabled = false } = {}) => ({
+      tag, role, tabIndex, disabled,
+      getAttribute: (name) => (name === 'role' ? role : null),
+      toString: () => `${tag}${role === null ? '' : `[${role}]`}${disabled ? ':disabled' : ''}`,
+    })
+    /** A stand-in for the card, answering in render (document) order. */
+    const card = (members) => ({ querySelectorAll: () => members })
+
+    // The selector has to cover all three shapes the card uses: a real input, real
+    // buttons, and the `div`s that stand in for both a row and a rail row.
+    check('focus chain: the selector covers button, input and [tabindex]',
+      /button/.test(CHAIN_SELECTOR) && /input/.test(CHAIN_SELECTOR) && /\[tabindex\]/.test(CHAIN_SELECTOR),
+      { selector: CHAIN_SELECTOR })
+
+    // A disabled control is what `disabled` means to the platform: not a tab stop.
+    check('focus chain: a disabled button is not a member',
+      isChainMember(el('button', { disabled: true })) === false)
+    check('focus chain: the same button enabled IS a member',
+      isChainMember(el('button')) === true)
+
+    // The rail is ONE stop: ProviderRail keeps the selected row at 0 and the rest
+    // at -1, the same -1 a model row uses to mean "in the chain" — so `tabIndex`
+    // alone cannot separate them and the role has to.
+    check('focus chain: the rail row at tabIndex 0 is the one stop',
+      isChainMember(el('button', { role: 'option', tabIndex: 0 })) === true)
+    check('focus chain: the rail\'s other rows are NOT stops',
+      isChainMember(el('button', { role: 'option', tabIndex: -1 })) === false)
+    check('focus chain: a model row (role menuitemradio at -1) IS a member',
+      isChainMember(el('div', { role: 'menuitemradio', tabIndex: -1 })) === true)
+
+    // THE REGRESSION. Each of these exists only in one state, and each was absent
+    // from the hand-written chain. `aria-disabled` must not exclude them: it is
+    // what the ROW carries during a write precisely so the keyboard is not dropped.
+    for (const cls of ['dmp-search-clear', 'dmp-filter-clear', 'dmp-retry']) {
+      check(`focus chain: an enabled .${cls} IS a member`,
+        isChainMember(el('button')) === true)
+    }
+
+    // Order: the chain follows document order, which is render order — rail first,
+    // then the search row, then the rows.
+    const railStop = el('button', { role: 'option', tabIndex: 0 })
+    const railOther = el('button', { role: 'option', tabIndex: -1 })
+    const search = el('input', { tabIndex: 0 })
+    const clear = el('button')
+    const retry = el('button')
+    const row0 = el('div', { role: 'menuitemradio', tabIndex: -1 })
+    const row1 = el('div', { role: 'menuitemradio', tabIndex: -1 })
+    const rendered = [railStop, railOther, search, clear, retry, row0, row1]
+    equal('focus chain: the chain is the rendered order, minus what the rules exclude',
+      cardChainOf(card(rendered)), [railStop, search, clear, retry, row0, row1])
+
+    // …and every one of those is reachable by Tab alone. This is the property the
+    // old chain violated: walking forward from the rail must eventually visit the
+    // whole set. A pointer-only control cannot be reached this way, which is the
+    // whole failure.
+    const chain = cardChainOf(card(rendered))
+    const visited = []
+    let cursor = railStop
+    for (let i = 0; i < chain.length; i += 1) {
+      const step = stepChain(chain, cursor, 1)
+      check(`focus chain: forward step ${i + 1} lands on a real member`, step.kind === 'focus')
+      if (step.kind !== 'focus') break
+      visited.push(step.element)
+      cursor = step.element
+    }
+    equal('focus chain: Tab alone visits every rendered control, then wraps to the start',
+      visited, [search, clear, retry, row0, row1, railStop])
+
+    // The ends differ on purpose: forward off the last member wraps, but BACK off
+    // the first closes the seat — that is the keyboard's way out of the card.
+    equal('focus chain: backward off the first member closes the seat',
+      stepChain(chain, railStop, -1), { kind: 'close' })
+    check('focus chain: forward off the last member wraps to the first',
+      stepChain(chain, row1, 1).kind === 'focus' && stepChain(chain, row1, 1).element === railStop)
+    // Focus that is not on the chain (the card itself, or a control that vanished
+    // under it) enters at the end the press is heading away from.
+    check('focus chain: focus off the chain enters at the first going forward',
+      stepChain(chain, null, 1).element === railStop)
+    check('focus chain: focus off the chain enters at the last going backward',
+      stepChain(chain, null, -1).element === row1)
+    equal('focus chain: an empty chain has nowhere to go', stepChain([], null, 1), { kind: 'none' })
+
+    // The failure state is where this mattered most: a failed read renders a retry
+    // button that used to be unreachable, so the only way to reload was a mouse.
+    const failed = cardChainOf(card([railStop, search, retry, row0]))
+    check('focus chain: the retry button of a failed read is on the chain',
+      failed.includes(retry))
   }
 
   // --- the write path: a transport failure is an outcome, not a hang ---------
