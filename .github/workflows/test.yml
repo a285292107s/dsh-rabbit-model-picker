@@ -25,8 +25,15 @@ jobs:
       #                 against scripts/theme-tokens.json here, since the host
       #                 is not installed on the runner
       #   test:params — the parameter/facts/panel-copy unit gate
+      #   test:retry  — the retry-policy unit gate (curve, parsing, document)
+      #   test:recovery — the rate-limit wording recovery gate (the five
+      #                 conditions, the wording table, the copy-not-rewrite rule)
       #   test:mutations — the gate ON the gates: each judgement is broken on
       #                 purpose and a gate has to go red. A mutation that no
       #                 longer applies FAILS this step rather than skipping,
       #                 which is how three of them sat unapplied unnoticed.
+      #                 Its detector reads a nonzero exit or a line-initial
+      #                 FAIL: a bare substring test was satisfied by a GREEN
+      #                 selfcheck line naming the rule it checks, so every
+      #                 mutation used to be reported as caught by selfcheck.
       - run: npm test

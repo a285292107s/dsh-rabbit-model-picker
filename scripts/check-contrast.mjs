@@ -16,6 +16,27 @@
  * ratio per painted style. The token values live in the host, so the numbers
  * move when DSH moves; the FLOOR is ours.
  *
+ * WHICH SHEETS IT READS. All three of the plugin's sheets, not just the seat's:
+ * `styles.ts` (`dmp-`), `modelConfigStyles.ts` (the 模型配置 page, `dmc-`) and
+ * `drawerStyles.ts` (that page's drawer, also `dmc-`). Before this gate was
+ * widened, the two `dmc-` sheets were read by NO contrast measurement at all —
+ * their copy had never been measured in either theme, which is the exact class of
+ * gap this file exists to close.
+ *
+ * WHAT "MEASURED" MEANS FOR A `dmc-` RULE. Registering the styles by hand cannot
+ * be the whole answer, because a hand list only judges what someone remembered to
+ * add. So the sweep below walks every rule in every sheet, and for the `dmc-`
+ * domain it is closed by name: a selector that paints a `color` or states a
+ * `font-size` must appear in the measured set, or it is REPORTED. The only way
+ * out is a named exemption (an inactive control), which is narrow enough that it
+ * cannot cover a neighbouring text rule.
+ *
+ * THE GRAPHIC-ONLY TOKENS STAY OUT OF THE TEXT ROLE. `--dsw-alias-state-*` and
+ * the three label tiers (`tertiary` / `caption` / `dimmed`) are marks — a rail, a
+ * bar, a focus ring, a field edge — never ink, so none of them is registered as a
+ * text style and one appearing in a `color:` declaration of a `dmc-` sheet is a
+ * failure in its own right.
+ *
  * Run: node scripts/check-contrast.mjs
  *
  * @module dsh-rabbit-model-picker/check-contrast
@@ -237,28 +258,127 @@ const STYLES = [
   { selector: '.dmp-search-row .dmp-search input::placeholder', note: 'search hint' },
   { selector: '[data-menu-group-heading]', note: 'provider landmark, host-painted element' },
   { selector: '.dmp-settings-alert', note: 'Host refusal' },
+
+  // --- the 模型配置 page (`dmc-`, modelConfigStyles.ts) ----------------------
+  // Registered one by one rather than left to the sweep, because the brief asks
+  // for the registry and because a listed style whose ink changes is re-measured
+  // instead of silently disappearing. The sweep below is what proves this list is
+  // COMPLETE.
+  // `.dmc-title` is deliberately NOT here: the visible `<h2>` was retired (§16/V2)
+  // and its name now travels on the section's `aria-label`, which paints nothing.
+  // Leaving the selector registered made this gate FAIL once the sheet dropped it —
+  // which is the registry doing its job, and the reason the entry is deleted rather
+  // than tolerated. A selector that comes BACK is caught by the static selfcheck's
+  // retired-class list, not here.
+  { selector: '.dmc-readout', note: 'ready statement, the page\'s one loud line' },
+  { selector: '.dmc-empty', note: 'first-run hint' },
+  { selector: '.dmc-notice', note: 'page state line' },
+  { selector: '.dmc-notice-action', note: 'the action inside that line' },
+  { selector: '.dmc-alert', note: 'read-only refusal sentence' },
+  { selector: '.dmc-add', note: 'the page\'s one accent action (ink on the plain ground)' },
+  { selector: '.dmc-picker-item', note: 'catalog entry in the add picker' },
+  { selector: '.dmc-name', note: 'provider display name' },
+  { selector: '.dmc-route', note: 'route id beside the name' },
+  { selector: '.dmc-verdict', note: 'the row\'s one answer word' },
+  { selector: '.dmc-manage', note: 'the row\'s one door (§5.35)' },
+  { selector: '.dmc-field-label', note: 'a field\'s name in the well (凭据 / API 协议 / 自动重试)' },
+  { selector: '.dmc-field-value', note: 'a field\'s value line in the well' },
+  { selector: '.dmc-quiet', note: 'a stated value inside a field (已配置 / 使用默认值 / 由账号提供)' },
+  { selector: '.dmc-diagnostic', note: 'the diagnostic sentence, first line of an open well' },
+  { selector: '.dmc-danger', note: 'the lifecycle entry, last line of an open well' },
+  { selector: '.dmc-key-action', note: 'credential entry as a text action' },
+  { selector: '.dmc-key-clear', note: 'credential clear as a text action' },
+  { selector: '.dmc-protocol', note: 'protocol select value (the row\'s one 1px-edged control)' },
+  { selector: '.dmc-protocol option', note: 'native option text, painted on the field fill' },
+  { selector: '.dmc-catalog', note: 'the model cell: a fact that is also the drawer\'s door' },
+  // §5.33 — the inline auto-retry editor, one entry per rule that paints text. It
+  // is the SAME domain as the page above (the editor's rules live in
+  // `modelConfigStyles.ts`, and the editor renders inside a `.dmc-row`), so its ink
+  // ladder has to clear the same floor. Registered one by one rather than left to
+  // the sweep below, because a listed style whose token changes is re-measured
+  // instead of disappearing — and the sweep is what proves the list is COMPLETE.
+  { selector: '.dmc-retry-action', note: '自动重试 触发词：控制行里的去铬文字动作（rest 即 primary 墨）' },
+  { selector: '.dmc-retry-state', note: '已单独设置 / 使用默认值：编辑器顶部那一行事实' },
+  { selector: '.dmc-retry-label', note: '字段名（重试次数 / 间隔上限）：安静的一档墨' },
+  { selector: '.dmc-retry-input', note: '数字字段的值：页面上第二个真实表单控件，自带填充' },
+  { selector: '.dmc-retry-unit', note: '单位词（次 / 秒）：数字旁边的那一个字' },
+  { selector: '.dmc-retry-summary', note: '一行排期（5 次 · 首次等待 0.5s · 最长合计 ~15s）：tabular 数字' },
+  // --- the drawer (`dmc-`, drawerStyles.ts) ---------------------------------
+  { selector: '.dmc-drawer', note: 'drawer shell (its own fill)' },
+  { selector: '.dmc-drawer-title', note: 'drawer title' },
+  { selector: '.dmc-drawer-sub', note: 'drawer subtitle' },
+  { selector: '.dmc-btn', note: 'drawer control' },
+  { selector: '.dmc-drawer-section', note: 'drawer section heading' },
+  { selector: '.dmc-drawer-status', note: 'discovery status sentence' },
+  { selector: '.dmc-drawer-notice', note: 'drawer notice' },
+  { selector: '.dmc-drawer-error', note: 'Host diagnostic, verbatim' },
+  { selector: '.dmc-drawer-note', note: 'drawer footnote' },
+  { selector: '.dmc-model-ref', note: 'roster line: the model id (§5.36)' },
+  { selector: '.dmc-model-alias', note: 'roster line: the display name' },
+  { selector: '.dmc-model-fact', note: 'roster line: the capacity facts (上下文 / 输出)' },
+  { selector: '.dmc-model-edit', note: 'roster line: its one door (编辑)' },
+  { selector: '.dmc-model-danger', note: 'the well\'s remove entry (删除模型)' },
+  { selector: '.dmc-model-label', note: 'field label in a catalog row' },
+  { selector: '.dmc-model-input', note: 'catalog field value' },
+  { selector: '.dmc-model-input::placeholder', note: 'catalog field placeholder' },
+  { selector: '.dmc-model-error', note: 'per-field validation sentence' },
+  { selector: '.dmc-reasoning-help', note: 'reasoning-levels help' },
+  { selector: '.dmc-discover-id', note: 'discovered model id' },
+  { selector: '.dmc-discover-name', note: 'discovered model name' },
+  { selector: '.dmc-discover-group', note: 'discovery list group heading (§13.5)' },
 ]
 /** Painted by a host primitive rather than by this sheet, so there is no size to derive. */
 const PRIMITIVE_SIZED = new Set(['.dmp-badge-value', '.dmp-settings-input input::placeholder'])
 /** The sizes those primitive-painted styles render at (the Tag capsule's value, the Input's own). */
 const PRIMITIVE_SIZE = { size: 11, weight: 400 }
 
-// The plugin's own sheet must name these tokens; a style that drifts onto a
+// The plugin's own sheets must name these tokens; a style that drifts onto a
 // caption/dimmed token is caught statically below as well, so a renamed class
 // cannot slip past this gate by no longer being listed here.
 //
 // Only the CSS TEMPLATE is parsed: the module around it is TypeScript, and a
 // stray `{ … }` there (or a class name in a string literal) must not be read as
-// a rule. Comments are stripped too — this sheet is heavily annotated and a
+// a rule. Comments are stripped too — these sheets are heavily annotated and a
 // `/*…*/` between two rules would otherwise be read as part of the next
 // selector, which is exactly the kind of silent miss this gate exists to avoid.
-const stylesSheet = readFileSync(resolve(root, 'src/client/styles.ts'), 'utf8')
-const template = /const CSS = `([\s\S]*?)`\s*$|const CSS = `([\s\S]*?)`\n/m.exec(stylesSheet)
-const styleRules = (template?.[1] ?? template?.[2] ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
-if (styleRules.trim() === '') {
-  console.log('  FAIL contrast: the sheet could not be read out of styles.ts')
-  failures += 1
+const SHEETS = [
+  { file: 'src/client/styles.ts', owner: 'the composer seat (dmp-)', dmc: false },
+  { file: 'src/client/modelConfigStyles.ts', owner: 'the 模型配置 page (dmc-)', dmc: true },
+  { file: 'src/client/drawerStyles.ts', owner: 'the model drawer (dmc-)', dmc: true },
+]
+
+/**
+ * Pull one sheet's CSS template literal out of its module.
+ *
+ * The literal is opened by `const CSS = \`` and closed by the next backtick; both
+ * `selfcheck-static.mjs` (for all four sheets) and a module-header comment in
+ * `modelConfigStyles.ts` assert that no backtick ever appears inside the CSS text,
+ * so the first close is the right one.
+ * @param relative - the module path, relative to the repository root.
+ * @returns the CSS text, or null when the literal is not there.
+ */
+function cssOf(relative) {
+  const source = readFileSync(resolve(root, relative), 'utf8')
+  const open = source.indexOf('const CSS = `')
+  if (open < 0) return null
+  const from = open + 'const CSS = `'.length
+  const close = source.indexOf('`', from)
+  if (close < 0) return null
+  return source.slice(from, close)
 }
+
+const sheetCss = new Map()
+for (const sheet of SHEETS) {
+  const css = cssOf(sheet.file)
+  if (css === null || css.trim() === '') {
+    console.log(`  FAIL contrast: the sheet could not be read out of ${sheet.file}`)
+    failures += 1
+    sheetCss.set(sheet.file, '')
+    continue
+  }
+  sheetCss.set(sheet.file, css)
+}
+const styleRules = [...sheetCss.values()].join('\n').replace(/\/\*[\s\S]*?\*\//g, '')
 
 /**
  * Read one declaration out of the rule that paints a selector in the plugin's
@@ -418,6 +538,209 @@ const CONTAINERS = {
   '.dmp-legend-item': '.dmp-legend',
   '.dmp-legend-icon': '.dmp-legend-item',
   '.dmp-legend-word': '.dmp-legend-item',
+
+  // --- the 模型配置 page (`dmc-`) -------------------------------------------
+  // The page states its ink once, on `.dmc-page`, and the drawer states its own on
+  // `.dmc-drawer`; every rule below that does not declare a colour of its own
+  // reaches one of those through this chain. A class missing here has no
+  // inheritable ink to find, which for a sized rule is a reported failure rather
+  // than a pass.
+  '.dmc-page': null,
+  '.dmc-head': '.dmc-page',
+  // `.dmc-title` is retired (§16/V2); `.dmc-head` stays because it is still the
+  // container of the ready statement below.
+  // The ready statement is the page's one large line and it states its own ink, so
+  // it is listed for completeness rather than because it inherits one.
+  '.dmc-readout': '.dmc-head',
+  '.dmc-empty': '.dmc-page',
+  '.dmc-notice': '.dmc-page',
+  '.dmc-notice-action': '.dmc-notice',
+  '.dmc-alert': '.dmc-page',
+  '.dmc-actions': '.dmc-page',
+  '.dmc-add': '.dmc-actions',
+  '.dmc-picker': '.dmc-page',
+  '.dmc-picker-list': '.dmc-picker',
+  '.dmc-picker-item': '.dmc-picker-list',
+  '.dmc-list': '.dmc-page',
+  '.dmc-row': '.dmc-list',
+  '.dmc-rail': '.dmc-row',
+  '.dmc-name': '.dmc-row',
+  '.dmc-route': '.dmc-name',
+  '.dmc-verdict': '.dmc-row',
+  // The scan line's two right-hand cells (§5.35). The model cell is a fact, so it
+  // hangs off the row; the door is a control whose ink is its own.
+  '.dmc-catalog': '.dmc-row',
+  '.dmc-manage': '.dmc-row',
+  '.dmc-pending': '.dmc-row',
+  // The settings well: a form, not a segment. Its fields state their own ink and
+  // size, so the chain is here for the two things it still decides: which of those
+  // inks are composited against the row's hover fill, and where a size would be
+  // inherited from if a field stopped stating it.
+  '.dmc-well': '.dmc-row',
+  '.dmc-diagnostic': '.dmc-well',
+  '.dmc-field-label': '.dmc-well',
+  '.dmc-field-value': '.dmc-well',
+  '.dmc-quiet': '.dmc-field-value',
+  '.dmc-key-action': '.dmc-field-value',
+  '.dmc-key-clear': '.dmc-field-value',
+  '.dmc-protocol': '.dmc-field-value',
+  '.dmc-retry-action': '.dmc-field-value',
+  '.dmc-danger': '.dmc-field-value',
+  // §5.33 — the inline auto-retry editor. It opens INSIDE the well, under the
+  // field line that owns it, so its shell hangs off `.dmc-well`. Every rule in this
+  // family states its own ink and its own size.
+  '.dmc-retry': '.dmc-well',
+  '.dmc-retry-state': '.dmc-retry',
+  '.dmc-retry-fields': '.dmc-retry',
+  '.dmc-retry-field': '.dmc-retry-fields',
+  '.dmc-retry-label': '.dmc-retry-field',
+  '.dmc-retry-row': '.dmc-retry-field',
+  '.dmc-retry-input': '.dmc-retry-row',
+  '.dmc-retry-unit': '.dmc-retry-row',
+  '.dmc-retry-summary': '.dmc-retry',
+  '.dmc-retry-actions': '.dmc-retry',
+  // --- the drawer (`dmc-`) ---------------------------------------------------
+  '.dmc-drawer-scrim': null,
+  '.dmc-drawer': null,
+  '.dmc-drawer-head': '.dmc-drawer',
+  '.dmc-drawer-heading': '.dmc-drawer-head',
+  '.dmc-drawer-title': '.dmc-drawer-heading',
+  '.dmc-drawer-sub': '.dmc-drawer-heading',
+  '.dmc-drawer-close': '.dmc-drawer-head',
+  '.dmc-btn': '.dmc-drawer',
+  '.dmc-btn-commit': '.dmc-drawer-foot',
+  '.dmc-drawer-body': '.dmc-drawer',
+  '.dmc-drawer-foot': '.dmc-drawer',
+  '.dmc-drawer-section': '.dmc-drawer-body',
+  '.dmc-drawer-status': '.dmc-drawer-body',
+  '.dmc-drawer-notice': '.dmc-drawer-body',
+  '.dmc-drawer-error': '.dmc-drawer-body',
+  '.dmc-drawer-note': '.dmc-drawer-body',
+  '.dmc-model-list': '.dmc-drawer-body',
+  '.dmc-model-row': '.dmc-model-list',
+  // §5.36 — the roster line. Its identity, its quiet fact line and its door hang off
+  // the row; the fields and the reasoning editor hang off the well the door opens.
+  '.dmc-model-ref': '.dmc-model-row',
+  '.dmc-model-sub': '.dmc-model-row',
+  '.dmc-model-alias': '.dmc-model-sub',
+  '.dmc-model-fact': '.dmc-model-sub',
+  '.dmc-model-edit': '.dmc-model-row',
+  '.dmc-model-well': '.dmc-model-row',
+  '.dmc-model-fields': '.dmc-model-well',
+  '.dmc-model-id': '.dmc-model-fields',
+  '.dmc-model-name': '.dmc-model-fields',
+  '.dmc-model-window': '.dmc-model-fields',
+  '.dmc-model-tokens': '.dmc-model-fields',
+  '.dmc-model-label': '.dmc-model-well',
+  '.dmc-model-input': '.dmc-model-id',
+  '.dmc-model-error': '.dmc-model-well',
+  '.dmc-model-danger': '.dmc-model-well',
+  '.dmc-model-add': '.dmc-drawer-body',
+  '.dmc-reasoning': '.dmc-model-well',
+  '.dmc-reasoning-head': '.dmc-reasoning',
+  '.dmc-reasoning-row': '.dmc-reasoning',
+  '.dmc-reasoning-level': '.dmc-reasoning-row',
+  '.dmc-reasoning-value': '.dmc-reasoning-row',
+  '.dmc-reasoning-add': '.dmc-reasoning-head',
+  '.dmc-reasoning-remove': '.dmc-reasoning-row',
+  '.dmc-reasoning-help': '.dmc-reasoning',
+  '.dmc-discover-actions': '.dmc-drawer-body',
+  '.dmc-discover': '.dmc-discover-actions',
+  '.dmc-discover-adopt': '.dmc-discover-actions',
+  '.dmc-discover-tool': '.dmc-discover-actions',
+  '.dmc-discover-panel': '.dmc-drawer-body',
+  '.dmc-discover-tools': '.dmc-discover-panel',
+  '.dmc-discover-list': '.dmc-discover-panel',
+  '.dmc-discover-candidate': '.dmc-discover-list',
+  '.dmc-discover-label': '.dmc-discover-candidate',
+  '.dmc-discover-check': '.dmc-discover-candidate',
+  '.dmc-discover-id': '.dmc-discover-candidate',
+  '.dmc-discover-name': '.dmc-discover-candidate',
+  '.dmc-discover-group': '.dmc-discover-list',
+  '.dmc-discover-search': '.dmc-discover-panel',
+}
+
+/**
+ * A selector with its attribute tests and pseudo-classes removed, so the cascade
+ * map can be consulted for `[data-state='missing-key']`-style variants too.
+ * @param selector - a selector, possibly with a state attribute or a pseudo.
+ * @returns the bare class selector.
+ */
+function bareSelector(selector) {
+  return selector
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/::?[a-z-]+(\([^)]*\))?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Whether a selector's text is painted inside a ROW.
+ *
+ * This is what makes the backdrop honest rather than merely conservative: a row
+ * carries the tone ladder (`--dsw-alias-interactive-bg-hover` while the pointer or
+ * the open drawer is here, `-hover-danger` for a row that cannot serve), so text
+ * inside a row can sit on a fill the card backdrop never shows. Text that is not
+ * in a row — the title, the ready statement, the add action — is judged against
+ * the card backdrop alone.
+ * @param selector - the selector to place in the tree.
+ * @returns whether a row is one of its ancestors (or it is a row).
+ */
+function sitsInRow(selector) {
+  let current = bareSelector(selector)
+  for (let depth = 0; depth < 24; depth += 1) {
+    if (current === '.dmc-row') return true
+    const ancestor = CONTAINERS[current]
+    if (ancestor === null || ancestor === undefined) return false
+    current = ancestor
+  }
+  return false
+}
+
+/**
+ * The `--dsw-*` fills the page itself declares on a ROW, read out of the sheet.
+ *
+ * Derived rather than hard-coded on purpose: §14 R1 removes the rest fill, so a
+ * list of token names written here by hand would keep judging text against a fill
+ * the page no longer paints (or, worse, miss a new one). Whatever the row rules
+ * actually declare is what gets composited.
+ * @returns the distinct token names, in sheet order.
+ */
+function rowFillTokens() {
+  const tokens = []
+  for (const rule of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const paints = rule[1].split(',').some(part => /^\.dmc-row(?![a-z0-9-])/.test(part.trim()))
+    if (!paints) continue
+    const token = /(?:^|;)\s*background\s*:\s*var\((--dsw-[a-z0-9-]+)\)/.exec(rule[2])?.[1]
+    if (token !== undefined && !tokens.includes(token)) tokens.push(token)
+  }
+  return tokens
+}
+
+/**
+ * Every opaque background one selector's text can actually sit on.
+ *
+ * The card backdrops are the two the seat's panel already uses (the translucency
+ * of `--dsw-menu-surface-fill` resolved over the page base and over the composer
+ * card). A `dmc-` style whose text lives inside a row additionally gets every fill
+ * the row rules declare, composited over the page base, because those are real
+ * backdrops a row can paint under its own copy — the live hover/focus fill today.
+ * Nothing here is a guess about which of them is showing: the verdict is taken
+ * against the WORST one, which is the same discipline the card backdrops follow.
+ * @param selector - the selector whose text is being judged.
+ * @param bag - one theme's token values.
+ * @returns the candidate opaque backgrounds.
+ */
+function backdropsFor(selector, bag) {
+  const candidates = cardBackgrounds(bag)
+  if (!sitsInRow(selector)) return candidates
+  const page = resolveToken(bag, '--dsw-alias-bg-base')
+  if (page === null) return candidates
+  for (const token of rowFillTokens()) {
+    const fill = resolveToken(bag, token)
+    if (fill !== null) candidates.push(over(fill, page))
+  }
+  return candidates
 }
 
 /**
@@ -510,7 +833,7 @@ if (bags === null) {
       }
       // Judged against the WORST backdrop the card can sit on, so the verdict
       // does not depend on which surface the panel happens to float over.
-      const ratios = cardBackgrounds(bag).map(background => contrast(over(ink, background), background))
+      const ratios = backdropsFor(style.selector, bag).map(background => contrast(over(ink, background), background))
       measured.push({ style, which, ratio: Math.min(...ratios), token, ...judged })
     }
   }
@@ -555,13 +878,19 @@ if (bags === null) {
   //     glyphs, the check marks, the failure dot — which states no copy of its
   //     own (the adjacent badge value carries the fact in text, and a failure's
   //     words are painted separately).
+  // The `dmc-` sheets get the inactive-control exemption and NOTHING else. The
+  // dimmed-ink and icon exemptions are argued in place for the `dmp-` seat; a
+  // `dmc-` rule that reached for the dimmed token would otherwise be skipped, and
+  // §2 puts every graphic-only token out of the text role entirely.
   // A rule the exemptions do not cover and that this gate cannot size is
   // REPORTED rather than passed over.
-  const EXEMPT = (selector, token) =>
-    (token === '--dsw-alias-label-dimmed' || /:disabled|\[aria-disabled/.test(selector))
-    || /^\.dmp-[a-z-]*(?:icon|check|dot)(?:[\s:\[]|$)/.test(selector)
-    || /^\.dmp-[a-z-]*\[[^\]]*\][^,]*\.dmp-[a-z-]*(?:icon|check|dot)/.test(selector)
-    || /^\.dmp-(?:settings-button|chevron)(?:[\s:\[]|$)/.test(selector)
+  const EXEMPT = (selector, token) => {
+    if (/^\.dmc-/.test(selector)) return /:disabled|\[aria-disabled/.test(selector)
+    return (token === '--dsw-alias-label-dimmed' || /:disabled|\[aria-disabled/.test(selector))
+      || /^\.dmp-[a-z-]*(?:icon|check|dot)(?:[\s:\[]|$)/.test(selector)
+      || /^\.dmp-[a-z-]*\[[^\]]*\][^,]*\.dmp-[a-z-]*(?:icon|check|dot)/.test(selector)
+      || /^\.dmp-(?:settings-button|chevron)(?:[\s:\[]|$)/.test(selector)
+  }
   const sweep = []
   const unsized = []
   for (const rule of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -592,7 +921,7 @@ if (bags === null) {
         const color = resolveToken(bags[which], ink)
         const onBackdrops = color === null
           ? [null]
-          : cardBackgrounds(bags[which]).map(background => contrast(over(color, background), background))
+          : backdropsFor(selector, bags[which]).map(background => contrast(over(color, background), background))
         ratios[which] = onBackdrops.some(ratio => ratio === null) ? null : Math.min(...onBackdrops)
       }
       sweep.push({ selector, token: ink, ...judged, ratios })
@@ -616,6 +945,79 @@ if (bags === null) {
       dark: entry.ratios.dark?.toFixed(2),
       floor: entry.floor,
     })),
+  )
+
+  // --- 5. the dmc- sheets: no text rule may go unmeasured --------------------
+  // This is the hole the brief names. The sweep above can still walk past a rule
+  // it cannot size or whose ink it cannot resolve, and a rule that was walked
+  // past reads exactly like a rule that passed — which is how the two `dmc-`
+  // sheets had never been measured at all. For the `dmc-` domain the sweep is
+  // therefore closed BY NAME: every selector that paints a colour or states a
+  // text size must appear in the measured set, and the only way out is the
+  // inactive-control exemption above.
+  //
+  // The FIRST assertion below is the other half of that closure, and it exists
+  // because a mutation found the hole: `effectiveInk` follows the cascade to
+  // `.dmc-page`, so a registered style that loses its own `color` and `font-size`
+  // still measures as "primary ink at the page's 13px" and passes. Deleting the
+  // `.dmc-readout` rule outright — the page's one large line, which would then
+  // render at body size in the page ink — left this gate GREEN until this check
+  // existed. A registered style must therefore state its own ink or its own size:
+  // inheriting from a container is only legitimate for a style that is not asked
+  // to be a style of its own.
+  const silentRegistered = []
+  for (const style of STYLES) {
+    if (!style.selector.startsWith('.dmc-')) continue
+    const own = declarationOf(style.selector, 'color') !== null || declarationOf(style.selector, 'font-size') !== null
+    if (!own) silentRegistered.push(style.selector)
+  }
+  check(
+    'contrast: every registered dmc- style states its own ink or its own size',
+    silentRegistered.length === 0,
+    { silentRegistered },
+  )
+  const dmcSheetFiles = SHEETS.filter(sheet => sheet.dmc).map(sheet => sheet.file)
+  const measuredSelectors = new Set(sweep.map(entry => entry.selector))
+  const unmeasured = []
+  for (const file of dmcSheetFiles) {
+    const css = (sheetCss.get(file) ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
+    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const paintsText = /(?:^|;)\s*color\s*:/.test(rule[2]) || /(?:^|;)\s*font-size\s*:/.test(rule[2])
+      if (!paintsText) continue
+      const token = /(?:^|;)\s*color\s*:\s*var\((--dsw-[a-z0-9-]+)\)/.exec(rule[2])?.[1] ?? null
+      for (const selector of rule[1].split(',').map(part => part.trim()).filter(part => part.startsWith('.dmc-'))) {
+        if (measuredSelectors.has(selector)) continue
+        if (EXEMPT(selector, token)) continue
+        unmeasured.push(`${file}: ${selector}`)
+      }
+    }
+  }
+  check(
+    'contrast: every dmc- rule that paints text is measured (no silent skip)',
+    unmeasured.length === 0,
+    { unmeasured: [...new Set(unmeasured)] },
+  )
+
+  // --- 6. the graphic-only tokens stay out of the dmc- text role ------------
+  // §2 gives `--dsw-alias-state-*` and the three label tiers
+  // (tertiary / caption / dimmed) one job: a rail, a bar, a focus ring, a field
+  // edge. They are not registered in STYLES above for exactly that reason, and a
+  // `color:` that names one is reported here as well as by the static selfcheck,
+  // so neither gate can be the single point of failure for the rule.
+  const graphicOnlyText = []
+  for (const file of dmcSheetFiles) {
+    const css = (sheetCss.get(file) ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
+    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/(?:^|;)\s*color\s*:\s*var\(--dsw-alias-(?:state-[a-z-]+|label-(?:tertiary|caption|dimmed))\)/.test(rule[2])) continue
+      for (const selector of rule[1].split(',').map(part => part.trim()).filter(part => part.startsWith('.dmc-'))) {
+        graphicOnlyText.push(`${file}: ${selector}`)
+      }
+    }
+  }
+  check(
+    'contrast: the dmc- sheets paint text with primary/secondary ink only',
+    graphicOnlyText.length === 0,
+    { graphicOnlyText: [...new Set(graphicOnlyText)] },
   )
 }
 

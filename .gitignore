@@ -24,3 +24,10 @@ node_modules/
 # The surfaces a reviewer is meant to open are the plain and `accept-*` / `audit-*`
 # shots; anything named `_…` is an intermediate.
 shots/_*
+
+# Static-preview intermediates written by `scripts/_page-preview.mjs` /
+# `scripts/_drawer-preview.mjs` while checking the §5.35/§5.36 layouts. The
+# committed evidence is the four authored panels (`model-config-35..38`); these
+# rebuild from the real sheets and the host token fixture on demand.
+shots/page-preview-*.png
+shots/drawer-preview-*.png

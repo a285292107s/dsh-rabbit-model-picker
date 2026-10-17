@@ -49,7 +49,9 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, resolve, sep } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { homedir } from 'node:os'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -83,8 +85,69 @@ function stripComments(text) {
 
 const CLASS_NAME = /dmp-[a-z0-9]+(?:-[a-z0-9]+)*/g
 
+// A stylesheet is a TS template literal, so a backtick anywhere inside the CSS
+// text — including in a comment that mentions a token by name — closes the
+// literal early and turns the rest of the sheet into a syntax error. That
+// failure is confusing (esbuild reports it as "Expected ';' but found …" in the
+// middle of a comment), and it happened three times while this sheet was
+// written, so it is gated rather than remembered.
+//
+// THE ASSERTION IS NOW STRONGER THAN "THE LITERAL IS NOT EMPTY", and the reason is
+// an incident rather than a theory: a backtick pair added to a comment in
+// `drawerStyles.ts` (line 97, quoting a class name) closed that sheet's literal
+// after 1.2KB of its 14KB, and the OLD form of this check — `close >= 0 &&
+// body.slice(0, close).includes('{')` — stayed GREEN, because a truncated literal
+// still opens with a rule. What actually broke was downstream: `tsc` failed inside
+// the stylesheet, and `check-contrast.mjs` silently lost 30+ assertions (the whole
+// drawer half of its registry) while still printing its own name. A gate whose
+// miss is invisible in another gate is the worst kind, so the shape is pinned
+// instead of the emptiness: the closing backtick must sit at the END of its line.
+// Every real sheet closes that way (`\`` alone on a line, or `\`;` with nothing
+// after it before the newline), and a backtick used mid-line inside the CSS — in a
+// rule or in a comment — cannot satisfy it.
+for (const file of [
+  'src/client/styles.ts',
+  // `src/client/retryStyles.ts` was the retry card's own sheet on the shipped
+  // Models page. The card moved INTO the 模型配置 page and its rules now live in
+  // `modelConfigStyles.ts` with the page's other `dmc-` rules, so the sheet (and
+  // its `drc-` domain) is deleted rather than left as a second design system —
+  // the "gone from disk, not merely unreferenced" assertion further down owns
+  // that, so this list simply stops naming it.
+  'src/client/modelConfigStyles.ts',
+  'src/client/drawerStyles.ts',
+]) {
+  const source = read(file)
+  const open = source.indexOf('const CSS = `')
+  check(`${file}: the CSS template literal is present`, open >= 0, { file })
+  if (open < 0) continue
+  const body = source.slice(open + 'const CSS = `'.length)
+  const close = body.indexOf('`')
+  const afterClose = body.slice(close + 1, close + 2)
+  const closesItsOwnLine = close >= 0 && (afterClose === '\n' || afterClose === '\r')
+  check(`${file}: no stray backtick inside the CSS text`,
+    closesItsOwnLine && body.slice(0, close).includes('{'),
+    {
+      firstBacktickAt: close,
+      closesItsOwnLine,
+      afterClose,
+      cssBytes: close,
+      // The offending line, so the report names the comment that broke the literal.
+      line: close < 0
+        ? null
+        : source.slice(0, open + 'const CSS = `'.length + close).split(/\r?\n/).length,
+    })
+}
+
 const stylesSource = read('src/client/styles.ts')
 const stylesCode = stripComments(stylesSource)
+// `src/client/RetryCard.tsx` used to sit here: it rendered in the shipped Models
+// section under its own `drc-` domain. It is DELETED this round (the retry policy
+// is edited inline on the 模型配置 page instead), so it is no longer a surface
+// whose `dmp-` classes and copy keys this seat-level half has anything to say
+// about. Its replacement, `RetryEditor.tsx`, belongs to the `dmc-` domain and is
+// listed in `MODEL_CONFIG_TSX` below — not here, because every `config.*` key it
+// asks for comes from `modelConfigCopy.ts`, which the seat's `dictionary.ts`
+// checks (used keys / dead keys, further down) do not own.
 const tsxFiles = [
   'src/client/Picker.tsx',
   'src/client/BadgeIcons.tsx',
@@ -98,6 +161,12 @@ const contractFiles = [
   'src/client/badges.ts',
   'src/client/effort.ts',
   'src/client/panelCopy.ts',
+  // The retry editor's arithmetic (`retryWaitCurve` / `waitRange` / the two
+  // parsers). It carries no class of its own and no copy key — the `dmp-` class
+  // checks below cannot reach it, and `test-retry-policy.mjs` owns its numbers;
+  // it stays listed because it is still one of the modules this plugin ships
+  // into a user-visible surface, not because these checks read anything from it.
+  'src/client/retryPolicy.ts',
 ]
 const tsxCode = stripComments(tsxFiles.map(read).join('\n'))
 const contractCode = stripComments(contractFiles.map(read).join('\n'))
@@ -175,6 +244,10 @@ check('contrast: every inline style is the placement object, and nothing else',
 // visual-vs-AT contract. Two things are hidden on purpose and named here rather
 // than exempted by pattern: the badge FACE (`dmp-badges`), whose facts are
 // restated in the row's `aria-label`, and the failure dot, which carries no text.
+// The seat's own sheet is `dmp-`; the retry card renders in the Models section
+// under `drc-` and draws a chart whose bars are decoration beside its own
+// accessible name. Only the seat's classes are in scope here, matching the
+// assertion's name.
 const HIDDEN_COPY_ALLOWED = new Set(['dmp-badges', 'dmp-provider-failed-dot'])
 const hiddenCopy = []
 for (const element of tsxSource.matchAll(/<(?:span|div|p|li|button)\b[^>]*>/g)) {
@@ -183,6 +256,7 @@ for (const element of tsxSource.matchAll(/<(?:span|div|p|li|button)\b[^>]*>/g)) 
   const names = (/className=(?:"([^"]*)"|\{`([^`]*)`\})/.exec(tag)?.slice(1).find(Boolean) ?? '')
     .split(/\s+/).filter(Boolean)
   if (names.length === 0 || names.every(name => HIDDEN_COPY_ALLOWED.has(name))) continue
+  if (names.every(name => !name.startsWith('dmp-'))) continue
   hiddenCopy.push({ tag: tag.replace(/\s+/g, ' ').slice(0, 130), classes: names })
 }
 check('a11y: no dmp-* element hides its own copy from sighted users',
@@ -499,6 +573,552 @@ check(
   { zhOnly: [...zhKeys].filter(key => !enKeys.has(key)), enOnly: [...enKeys].filter(key => !zhKeys.has(key)) },
 )
 check('copy: a literal join separator exists for modality lists', dictionaryKeys.has('settings.listJoin'))
+
+// --- 8b. the 模型配置 tab: its own sheet, on its own terms -------------------
+// A THIRD additive surface, so it gets its own domain rather than being folded
+// into the `dmp-` checks above. Those assert the COMPOSER SEAT's contract
+// (shadowing rank, badge grid, focus chain) and are meaningless here, while the
+// rules that DO matter — dead classes both ways, no baked colours, the three
+// responsive branches — are the same ones. Keeping the domains separate is what
+// lets each surface's dead-rule check stay independent.
+// `src/client/RetryEditor.tsx` joins this list this round: the inline retry
+// editor is the new third surface of the `dmc-` domain, and it is a SEPARATE file
+// from the page, so leaving it out would exempt the whole editor from the dead
+// class sweep (a `dmc-retry-*` name that only the sheet spells would then read as
+// live). It is deliberately NOT added to `tsxFiles`: every key it asks for is a
+// `config.*` key owned by `modelConfigCopy.ts`, and the seat-level
+// `dictionary.ts` checks above would report them all as missing copy.
+const MODEL_CONFIG_TSX = ['src/client/ModelConfigPage.tsx', 'src/client/RetryEditor.tsx', 'src/client/ModelDrawer.tsx']
+const MODEL_CONFIG_SHEETS = ['src/client/modelConfigStyles.ts', 'src/client/drawerStyles.ts']
+const modelConfigCode = stripComments(MODEL_CONFIG_TSX.map(read).join('\n'))
+const modelConfigSheet = stripComments(MODEL_CONFIG_SHEETS.map(read).join('\n'))
+// The two sheets answer different questions about width. The PAGE lives inside the
+// host settings panel, which hands it a fixed content column at ANY viewport, so
+// its narrow branch must ask a CONTAINER query (see the check below). The DRAWER is
+// a fixed-position panel sized off the viewport (`width: min(460px, 100vw)`), so a
+// viewport media query is the correct instrument there and is left alone. Keeping
+// the two apart is what stops a `@media`-only regression in the page sheet from
+// being masked by the drawer's legitimate one.
+const modelConfigPageSheet = stripComments(read('src/client/modelConfigStyles.ts'))
+// The drawer's own sheet, checked separately for the ONE row-shape reason the two
+// cannot share: the drawer is a `position: fixed` panel whose width comes from the
+// viewport (`width: min(460px, 100vw)`), so a viewport media query is the correct
+// instrument there — and its `.dmc-model-row` is a four-field form, which the house
+// rules exempt from the one-1px-edge budget that governs the page's rows.
+const modelConfigDrawerSheet = stripComments(read('src/client/drawerStyles.ts'))
+// The state vocabulary may live in the page's own module rather than in a JSX
+// attribute (`data-state={reading.answer}`, with `RowAnswer` spelling the three
+// values), so the search for "which states does the TSX produce" reads the
+// component AND the pure module it imports them from.
+const MODEL_CONFIG_STATE_SOURCES = [...MODEL_CONFIG_TSX, 'src/client/modelConfigModel.ts']
+const modelConfigStateCode = stripComments(MODEL_CONFIG_STATE_SOURCES.map(read).join('\n'))
+const DMC_CLASS = /dmc-[a-z0-9]+(?:-[a-z0-9]+)*/g
+
+// WHICH `dmc-` TOKENS IN THE TSX ARE CLASSES, AND WHY THIS IS NO LONGER A RAW
+// TOKEN SCAN. §5.33 puts ARIA ids in the same domain on purpose: the frozen
+// contract requires `id={`dmc-retry-${provider}`}` on the editor and
+// `aria-controls={`dmc-retry-${provider}`}` on the page's trigger, and the two
+// numeric fields go one step further (`dmc-retry-count-${provider}` /
+// `dmc-retry-cap-${provider}`, each the target of its own `<label htmlFor>`).
+// A raw scan reads those id strings as class names and demands a CSS rule for
+// `dmc-retry-count` — a rule that CANNOT exist, because that token is an id. The
+// class half therefore reads what the JSX declares as a class.
+//
+// THE NARROWING IS CLOSED, not trusted: the assertion right below walks EVERY
+// `dmc-` token in the TSX and requires each one to be either a class here or an id
+// in an `id=`/`aria-controls=` template. A token that is neither is reported, so a
+// class reaching the DOM some other way (a variable, a spread, a data attribute)
+// cannot slip out of the sweep by not looking like a class attribute.
+const dmcClassTokens = [...modelConfigCode.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^}]*)\})/g)]
+  .flatMap(match => [...(match[1] ?? match[2] ?? match[3] ?? '').matchAll(new RegExp(DMC_CLASS.source, 'g'))])
+  .map(match => match[0])
+const dmcIdTokens = [...modelConfigCode.matchAll(/(?:^|\s)(?:id|aria-controls)=\{`([^`]*)`\}/g)]
+  .flatMap(match => [...match[1].matchAll(new RegExp(DMC_CLASS.source, 'g'))])
+  .map(match => match[0])
+const dmcInSheet = new Set(
+  [...modelConfigSheet.matchAll(new RegExp(`\\.(${DMC_CLASS.source})`, 'g'))].map(m => m[1]))
+const dmcInTsx = new Set(dmcClassTokens)
+const dmcTokensInTsx = new Set(
+  [...modelConfigCode.matchAll(new RegExp(DMC_CLASS.source, 'g'))].map(m => m[0]))
+const dmcIdSet = new Set(dmcIdTokens)
+const unaccountedDmc = [...dmcTokensInTsx]
+  .filter(name => !dmcInTsx.has(name) && !dmcIdSet.has(name)).sort()
+const deadDmc = [...dmcInSheet].filter(name => !dmcInTsx.has(name)).sort()
+const unstyledDmc = [...dmcInTsx].filter(name => !dmcInSheet.has(name)).sort()
+check('model config: no dmc- rule is unused', deadDmc.length === 0, { deadInCss: deadDmc })
+check('model config: every dmc- class in the TSX has a rule', unstyledDmc.length === 0, { unstyledInTsx: unstyledDmc })
+check('model config: every dmc- token in the TSX is a class or an ARIA id (nothing hidden by the class reading)',
+  unaccountedDmc.length === 0,
+  { unaccounted: unaccountedDmc, tokens: [...dmcTokensInTsx].length })
+
+// The frozen class contract, asserted by name so a rename cannot pass as a
+// refactor. §13.5 froze exactly three NEW names and §13.4 retired four; the two
+// dead-class sweeps above are generic and would not notice, say, `.dmc-readout`
+// being spelled `.dmc-summary` in the sheet and in the TSX at once.
+//
+// §5.33 (the retry move) adds the two names that carry the NEW SHAPE: the inline
+// editor's shell (`.dmc-retry`) and its one bordered control (`.dmc-retry-input`).
+// They are the two the review has to be able to find by name — one proves the
+// editor is a block of its own under the row rather than a cell inside the
+// control line, the other proves the numeric field kept the edge the retired card
+// recorded as necessary. The other nine `dmc-retry-*` names are covered by the
+// generic sweeps above plus the contrast registry; freezing all eleven here
+// would restate the sheet rather than pin the two contracts.
+const DMC_NEW_CLASSES = ['dmc-readout', 'dmc-manage', 'dmc-well', 'dmc-field-label', 'dmc-field-value', 'dmc-catalog', 'dmc-discover-group', 'dmc-model-ref', 'dmc-model-edit', 'dmc-model-well', 'dmc-model-danger', 'dmc-retry', 'dmc-retry-input']
+// §5.35 retires the control line's own anatomy: the row no longer HAS a second
+// segment of fixed tracks (`dmc-edit`), a credential cell (`dmc-key`), a
+// diagnostic glyph (`dmc-error-toggle`) or a table cell for the lifecycle verb
+// (`dmc-enable`). Their rules, their TSX and their copy-adjacent comments went with
+// the shape change, and the rows now state their facts on one line with the
+// controls in a settings well. `.dmc-catalog-count` is retired too: the model cell
+// states its count inside its own label instead of hanging a bare number beside it.
+const DMC_RETIRED_CLASSES = [
+  'dmc-list-head', 'dmc-list-head-cell', 'dmc-key-state', 'dmc-intro', 'dmc-title',
+  'dmc-edit', 'dmc-enable', 'dmc-error-toggle', 'dmc-error-text', 'dmc-catalog-count',
+  'dmc-model-actions', 'dmc-model-options', 'dmc-model-options-panel', 'dmc-model-remove',
+]
+const newClassState = DMC_NEW_CLASSES.map(name => ({ name, inSheet: dmcInSheet.has(name), inTsx: dmcInTsx.has(name) }))
+check('model config: the frozen new classes exist in BOTH the sheet and the TSX',
+  newClassState.every(entry => entry.inSheet && entry.inTsx), { newClassState })
+// ...and each one must have a TOP-LEVEL rule of its own. A name that survives only
+// inside a `@container` / `prefers-reduced-motion` override still satisfies the
+// presence check above while the element renders with none of its intended type:
+// deleting the base `.dmc-readout` rule (20px, the page's one large line) leaves
+// the name in two narrow-branch selectors, and the dead-class sweeps stay green.
+const newClassesWithoutBaseRule = DMC_NEW_CLASSES
+  .filter(name => !new RegExp(`^\\.${name}\\s*\\{`, 'm').test(modelConfigSheet))
+check('model config: each new class has a top-level rule, not only a narrow-branch override',
+  newClassesWithoutBaseRule.length === 0, { newClassesWithoutBaseRule })
+const retiredSeen = []
+for (const file of [...MODEL_CONFIG_TSX, ...MODEL_CONFIG_SHEETS]) {
+  const text = stripComments(read(file))
+  for (const name of DMC_RETIRED_CLASSES) if (text.includes(name)) retiredSeen.push(`${file}: ${name}`)
+}
+check('model config: the retired classes are gone from every surface',
+  retiredSeen.length === 0, { retiredSeen, retired: DMC_RETIRED_CLASSES })
+
+const modelConfigHardcoded = [
+  ...modelConfigSheet.matchAll(/#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/g),
+].map(m => m[0])
+check('model config: no hardcoded colour values', modelConfigHardcoded.length === 0, { modelConfigHardcoded })
+const modelConfigBadRadius = [...modelConfigSheet.matchAll(/border-radius:\s*([^;]+);/g)]
+  .map(m => m[1].trim())
+  .filter(value => !(value === '0' || value === '0px' || value === '50%' || value.startsWith('var(')))
+check('model config: border-radius is only 0 / 50% / var(...)', modelConfigBadRadius.length === 0, { modelConfigBadRadius })
+check('model config: no dashed/dotted borders', !/dashed|dotted/.test(modelConfigSheet))
+const modelConfigDimming = [
+  ...modelConfigSheet.matchAll(/(?:^|[{;])\s*(opacity|filter|text-shadow|mix-blend-mode)\s*:\s*([^;}]+)/g),
+].map(m => `${m[1]}: ${m[2].trim()}`)
+check('model config: no rule fades or blends its own text', modelConfigDimming.length === 0, { modelConfigDimming })
+check('model config: the sheets use host --dsw-* tokens', (modelConfigSheet.match(/--dsw-/g) ?? []).length >= 10)
+check('model config: :focus-visible branch exists', modelConfigSheet.includes(':focus-visible'))
+check('model config: prefers-reduced-motion branch exists', modelConfigSheet.includes('prefers-reduced-motion'))
+
+// The narrow branch, re-stated. The old assertion was `/@media[^{]*max-width:/`,
+// which is TRUE for any viewport media query — and on the PAGE a viewport one can
+// never fire: the host hands this section a content column of a fixed width
+// (measured 564px at a 1920px viewport, 106px at a 390px viewport), so a
+// `max-width: 900px` media query is dead code on every desktop and the row kept
+// demanding its 566px of fixed tracks inside a 106px column (measured overflow:
+// 460px). The semantics are unchanged — "a narrow branch exists", hence the OR —
+// but on this sheet the branch now has to exist in a form that can match, and the
+// container it queries has to be established; the NEXT check is the one that
+// demands that form. The OR is deliberately NOT a relaxation of the page's
+// requirement: the drawer is a different surface (see the drawer assertion below).
+check(
+  'model config: a narrow-container branch exists',
+  /@container[^{]*max-width\s*:/.test(modelConfigPageSheet) || /@media[^{]*max-width\s*:/.test(modelConfigPageSheet),
+  { containerBranches: (modelConfigPageSheet.match(/@container[^{]*\{/g) ?? []).length, mediaBranches: (modelConfigPageSheet.match(/@media[^{]*\{/g) ?? []).length },
+)
+check(
+  'model config: the page sheet queries the CONTAINER (@container + container-type: inline-size)',
+  /@container[^{]*max-width\s*:/.test(modelConfigPageSheet) && /container-type\s*:\s*inline-size/.test(modelConfigPageSheet),
+  { hasContainerQuery: /@container[^{]*max-width\s*:/.test(modelConfigPageSheet), hasContainerType: /container-type\s*:\s*inline-size/.test(modelConfigPageSheet) },
+)
+// Stated as a ban, because a single survivor is enough to hide a regression: the
+// page may carry NO viewport-width branch at all. Converting only the 520px branch
+// to `@media` used to leave the 360px `@container` branch behind, which satisfied
+// "a container query exists" while reintroducing the dead branch the audit found —
+// and the only remaining `@media` on this sheet is the reduced-motion one.
+check(
+  'model config: the page sheet has no viewport-width branch at all (@media is for motion only)',
+  !/@media[^{]*max-width\s*:/.test(modelConfigPageSheet),
+  { mediaWidthBranches: (modelConfigPageSheet.match(/@media[^{]*max-width[^{]*/g) ?? []) },
+)
+// And the drawer must NOT be "fixed" to match: it is `position: fixed` and sized
+// from the viewport, so its narrow branch is a media query. Pinned as an assertion
+// with the reason beside it, because the obvious "consistency" edit — copying the
+// page's `@container` onto the drawer — would make the drawer's narrow branch dead
+// (its own width is 100vw, and `container-type` on it would create a query context
+// nothing inside it needs).
+check(
+  'model drawer: the narrow branch stays a viewport media query (fixed panel, viewport width)',
+  /@media[^{]*max-width\s*:/.test(modelConfigDrawerSheet),
+  { mediaBranches: (modelConfigDrawerSheet.match(/@media[^{]*\{/g) ?? []).length },
+)
+// And the container property must sit on `.dmc-page` itself: `container-type` on
+// some inner element would make every `@container` query below it resolve against
+// a box that is not the one the host sizes.
+const dmcPageRule = /\.dmc-page\s*\{([^}]*)\}/.exec(modelConfigPageSheet)
+check('model config: .dmc-page is the query container',
+  /container-type\s*:\s*inline-size/.test(dmcPageRule?.[1] ?? ''),
+  { body: (dmcPageRule?.[1] ?? '').slice(0, 120).replace(/\s+/g, ' ') })
+
+// The two state tokens are GRAPHIC-only. They measure 4.4976:1 and 4.2349:1 on
+// the light ground — both UNDER the 4.5:1 AA floor for text — while clearing the
+// 3:1 bar for graphical objects, which is why the row's scan rail and the focus
+// ring may use them and a label may not. Asserted as "never reaches `color:`"
+// rather than "never appears", because a blanket ban would forbid the exact uses
+// the design depends on. See docs/design-model-config-tab.md §3.3.
+const modelConfigTextColours = [
+  ...modelConfigSheet.matchAll(/(?:^|[{;])\s*color\s*:\s*([^;}]+)/g),
+].map(m => m[1].trim())
+const stateTokenAsText = modelConfigTextColours.filter(value => /--dsw-alias-state-/.test(value))
+check('model config: the state colour tokens never paint text',
+  stateTokenAsText.length === 0, { stateTokenAsText })
+
+// Text on the accent FILL is forbidden, and the reason is a MEASUREMENT rather
+// than taste: the theme has no "ink on accent" role, and the white the retry
+// sheet pairs with that fill measures 4.235:1 on the light ground and 2.3278:1 on
+// the dark one — under the 4.5:1 floor every label in this sheet owes. The accent
+// may carry an EDGE (the graphical 3:1 bar, which it clears) or a focus ring,
+// never a background behind text. Found by review; the pairing was unmeasured
+// until this gate existed, and the same pairing still sits in `drc-btn-primary`.
+const accentFilledText = [...modelConfigSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter(rule => /background(?:-color)?\s*:\s*var\(--dsw-alias-state-business-primary\)/.test(rule[2])
+    && /(?:^|;)\s*color\s*:/.test(rule[2]))
+  .map(rule => rule[1].trim())
+check('model config: no text sits on the accent fill (measured 4.235:1, an AA fail)',
+  accentFilledText.length === 0, { accentFilledText })
+
+// --- the state model (§2 as ruled by §13.6) ----------------------------------
+// `data-state` is MUTUALLY EXCLUSIVE and names the row's ANSWER: `ready` /
+// `missing-key` / `unreachable` in the list, `dormant` in the picker. A diagnostic
+// is a separate boolean hook (`data-error="true"`) that may ride beside any answer,
+// so a failed write marks the row without rewriting what the row says about itself.
+// These four assertions are the whole contract in static form: the sheet may not
+// invent a state, may not style a state the component cannot produce, and the
+// component must produce the three answers plus the two hooks.
+const DMC_STATES = ['ready', 'missing-key', 'unreachable', 'dormant']
+const dmcStatesInSheet = new Set(
+  [...modelConfigSheet.matchAll(/data-state\s*=\s*['"]([^'"]+)['"]/g)].map(m => m[1]))
+const dmcWordsInCode = new Set(
+  DMC_STATES.filter(state => new RegExp(`['"\`]${state}['"\`]`).test(modelConfigStateCode)))
+check('model config: data-state is bound in the component',
+  /data-state\s*=/.test(modelConfigCode), { bound: /data-state\s*=/.test(modelConfigCode) })
+check('model config: the sheet styles no state outside the frozen four',
+  [...dmcStatesInSheet].every(state => DMC_STATES.includes(state)),
+  { inSheet: [...dmcStatesInSheet], allowed: DMC_STATES })
+check('model config: every data-state the sheet styles is a state the component produces',
+  [...dmcStatesInSheet].every(state => dmcWordsInCode.has(state)),
+  { inSheet: [...dmcStatesInSheet], produced: [...dmcWordsInCode] })
+check('model config: the component produces all three list answers',
+  ['ready', 'missing-key', 'unreachable'].every(state => dmcWordsInCode.has(state)),
+  { produced: [...dmcWordsInCode] })
+// The diagnostic hook, and its one job: it is the `!` ENTRY beside the answer.
+// §14 R2 settled the channel budget: the rail states "can this serve me" and
+// nothing else, so `data-error` may not touch it, and it may not paint anything.
+check('model config: the diagnostic is a separate data-error hook',
+  /data-error\s*=/.test(modelConfigCode)
+  && (/data-error=\{[\s\S]{0,120}?'true'/.test(modelConfigCode) || /data-error\s*=\s*['"]true['"]/.test(modelConfigCode)),
+  { inCode: /data-error\s*=/.test(modelConfigCode), inSheet: /data-error/.test(modelConfigSheet) })
+const errorRulePaints = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter(rule => /data-error/.test(rule[1]) && /(?:^|;)\s*(?:background|border)\s*:/.test(rule[2]))
+  .map(rule => rule[1].trim())
+check('model config: data-error paints nothing (the entry and the sentence carry it)',
+  errorRulePaints.length === 0, { errorRulePaints })
+
+// §14 R1 — THE ROW HAS NO REST FILL, not even for `unreachable`.
+// The refactor's first ruling: a filled row became the loudest element on the page
+// and fought the quiet-instrument direction, while §10.1 had already settled that
+// ten rows are carried by the WORD (primary channel) with the rail as the redundant
+// second. A third channel does not add information; it adds volume. So a row-level
+// rule may paint a fill only while the pointer, the focus ring or an open drawer is
+// present, and no `data-state` (or its `data-usable` alias) may paint at all.
+const dmcRowBackgrounds = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => {
+    const value = /(?:^|;)\s*background\s*:\s*([^;}]+)/.exec(rule[2])?.[1]?.trim()
+    if (value === undefined) return []
+    return rule[1].split(',').map(part => part.trim())
+      .filter(selector => /^\.dmc-row(?![a-z0-9-])/.test(selector))
+      .map(selector => ({ selector, value }))
+  })
+const transientFill = selector => /:(?:hover|focus-within|active)|\[data-open|\[data-well/.test(selector)
+const paintedRestFills = dmcRowBackgrounds.filter(entry => !transientFill(entry.selector) && !/^(?:transparent|none)$/i.test(entry.value))
+const stateFills = dmcRowBackgrounds.filter(entry => /data-state|data-usable/.test(entry.selector))
+const liveFills = dmcRowBackgrounds.filter(entry => transientFill(entry.selector))
+check('model config: a row has no rest-state fill (the state travels on rail + word)',
+  paintedRestFills.length === 0, { paintedRestFills })
+check('model config: no data-state paints a row, unreachable included',
+  stateFills.length === 0, { stateFills })
+check('model config: the live fill survives for :hover / :focus-within / [data-open]',
+  liveFills.length > 0 && liveFills.every(entry => /^var\(--dsw-/.test(entry.value)), { liveFills })
+
+// §14 R2 — the rail is the "can this serve me" channel and ONLY that: it branches
+// on `data-state`, never on the diagnostic, and it is empty at rest.
+const dmcRailRules = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => rule[1].split(',').map(part => part.trim())
+    .filter(selector => /^\.dmc-rail(?![a-z0-9-])/.test(selector))
+    .map(selector => ({ selector, declarations: rule[2] })))
+const railStateValues = new Set(
+  dmcRailRules.map(entry => /data-state\s*=\s*['"]([^'"]+)['"]/.exec(entry.selector)?.[1]).filter(Boolean))
+const railRestRule = dmcRailRules.find(entry => entry.selector === '.dmc-rail')
+check('model config: the rail never branches on the diagnostic',
+  dmcRailRules.every(entry => !/data-error/.test(entry.selector)),
+  { railSelectors: dmcRailRules.map(entry => entry.selector) })
+check('model config: the rail marks exactly missing-key and unreachable',
+  railStateValues.size === 2 && [...railStateValues].every(state => state === 'missing-key' || state === 'unreachable'),
+  { railStateValues: [...railStateValues] })
+check('model config: the rail is empty at rest',
+  railRestRule !== undefined && /(?:^|;)\s*background\s*:\s*transparent/.test(railRestRule.declarations),
+  { rest: railRestRule?.declarations?.slice(0, 120).replace(/\s+/g, ' ') ?? null })
+
+// §15.3 — THE DISABLED INK. A de-chromed control has no box, no fill and no edge;
+// its ink IS its affordance, so the one state that must never look available is the
+// unavailable one. Before this ruling the rest colour and the `:disabled` colour of
+// the page's text actions were the SAME token, which made a control that cannot be
+// pressed look exactly like one that can. The pair is now pinned: rest states the
+// word in the PRIMARY ink, `:disabled` in the SECONDARY one.
+//
+// Only the classes the component actually disables are required to carry the pair
+// (`disabled={…}` in the TSX). `.dmc-error-toggle` is never disabled, so demanding
+// an ink step for a state that cannot occur would be a false assertion — if it ever
+// gains one, the pair applies to it too (its entry is checked but not required).
+const disabledInkRequired = [
+  { sheet: 'page', name: '.dmc-key-action' },
+  { sheet: 'page', name: '.dmc-key-clear' },
+  { sheet: 'page', name: '.dmc-protocol' },
+  { sheet: 'page', name: '.dmc-danger' },
+  { sheet: 'drawer', name: '.dmc-btn' },
+]
+// The model cell is no longer a disabled-able control: reading the catalog is legal
+// in a read-only deployment, so it keeps the quiet ink at rest and states no
+// `:disabled` colour at all (the sweep above requires a registered style to state
+// its own ink or size, which it does).
+const disabledInkOptional = []
+/**
+ * The LAST `color` declaration a selector's own rule states, or null.
+ * @param css - one comments-stripped sheet.
+ * @param selector - the exact selector to look up.
+ * @returns the declaration value, or null.
+ */
+function colourOfSelector(css, selector) {
+  let found = null
+  for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = rule[1].split(',').map(part => part.trim())
+    if (!selectors.includes(selector)) continue
+    const value = /(?:^|;)\s*color\s*:\s*([^;}]+)/.exec(rule[2])
+    if (value !== null) found = value[1].trim()
+  }
+  return found
+}
+const disabledInkIssues = []
+const disabledInkPairs = []
+for (const entry of [...disabledInkRequired, ...disabledInkOptional]) {
+  const css = entry.sheet === 'page' ? modelConfigPageSheet : modelConfigDrawerSheet
+  const rest = colourOfSelector(css, entry.name)
+  const disabled = colourOfSelector(css, `${entry.name}:disabled`)
+  const required = disabledInkRequired.some(item => item.name === entry.name && item.sheet === entry.sheet)
+  if (rest === null) { disabledInkIssues.push(`${entry.name}: no rest colour`); continue }
+  if (disabled === null) {
+    if (required) disabledInkIssues.push(`${entry.name}: the component disables it but the sheet states no :disabled colour`)
+    continue
+  }
+  disabledInkPairs.push({ name: entry.name, rest, disabled })
+  if (!/--dsw-alias-label-primary/.test(rest)) disabledInkIssues.push(`${entry.name}: rest is not the primary ink (${rest})`)
+  if (!/--dsw-alias-label-secondary/.test(disabled)) disabledInkIssues.push(`${entry.name}: disabled is not the secondary ink (${disabled})`)
+  if (rest === disabled) disabledInkIssues.push(`${entry.name}: rest and disabled are the same ink`)
+}
+check('model config: an unavailable text action is dimmer than a resting one (primary rest -> secondary disabled)',
+  disabledInkIssues.length === 0 && disabledInkPairs.length >= disabledInkRequired.length,
+  { disabledInkIssues, disabledInkPairs })
+// §5.35 — THE DIAGNOSTIC IS A SENTENCE IN THE WELL, not a glyph on the row. The
+// `!` entry is retired with the control line: a failed write happens inside the
+// well, so its sentence belongs at the top of that same well, read next to the
+// controls that can change it. It carries no fill and no edge — it is a sentence —
+// and the sheet paints it in the primary ink, because the state colour is under the
+// 4.5:1 body bar and may never paint text.
+const dmcDiagnosticRules = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => rule[1].split(',').map(part => part.trim())
+    .filter(selector => /^\.dmc-diagnostic(?![a-z0-9-])/.test(selector))
+    .map(selector => ({ selector, declarations: rule[2] })))
+const diagnosticChrome = dmcDiagnosticRules.filter(entry => {
+  const border = /(?:^|;)\s*border\s*:\s*([^;}]+)/.exec(entry.declarations)?.[1]?.trim()
+  const background = /(?:^|;)\s*background\s*:\s*([^;}]+)/.exec(entry.declarations)?.[1]?.trim()
+  return (border !== undefined && !/^(?:none|0|0px)(?:\s|$)/.test(border))
+    || (background !== undefined && !/^(?:transparent|none)$/i.test(background))
+})
+check('model config: the diagnostic is a sentence — no fill, no edge',
+  dmcDiagnosticRules.length > 0 && diagnosticChrome.length === 0,
+  { diagnosticChrome, selectors: dmcDiagnosticRules.map(entry => entry.selector) })
+
+// The refactor's headline number, in static form, REVISED ONCE ON PURPOSE.
+//
+// §16 kept the page sheet to exactly ONE 1px edge — the protocol select — and
+// five outlined boxes per row became one. §5.33 (the retry move) makes it TWO,
+// and the reason is that the second one is the SAME KIND of thing: the inline
+// retry editor's numeric fields are real form controls, and the retired card's
+// own history recorded what removing that edge did — the number stopped reading
+// as something you can type into and read as a static label instead. A form
+// field is told apart from a label by its edge; that is the house rules' own
+// stated exemption, and it is the reason this is a revision of the assertion
+// rather than a relaxation of it. The budget is still a BUDGET: the closed page
+// keeps exactly one edge (the fields live inside a collapsed editor), the ground
+// under them is unchanged, and no third selector may join this list — a new 1px
+// edge anywhere else is still a failure, by name.
+//
+// The two are pinned as a SET rather than by position, because the cascade does
+// not promise the sheet writes them in this order; what is pinned is that these
+// two and no others carry an edge.
+const PAGE_1PX_EDGES = ['.dmc-protocol', '.dmc-retry-input'].sort()
+const pageBorderRules = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter(rule => /(?:^|;)\s*border\s*:\s*1px/.test(rule[2]))
+  .map(rule => rule[1].trim())
+  .sort()
+check('model config: the page sheet keeps exactly two 1px edges — the protocol select and the retry field',
+  pageBorderRules.length === PAGE_1PX_EDGES.length
+  && pageBorderRules.every((selector, index) => selector === PAGE_1PX_EDGES[index]),
+  { pageBorderRules, expected: PAGE_1PX_EDGES })
+
+// §16/V2 — THE ACCENT IS A SOLID BAR, NOT A HAIRLINE. It used to be a 2px
+// `border-bottom` under the add action, and the house rules forbid thin rules
+// outright (the juror capped the overall score on exactly that reading during the
+// narrow-container round). So on this sheet the accent may appear as
+//   - a FILL (`background`), which the separate "no text on the accent fill" check
+//     keeps away from copy, or
+//   - the focus RING (`outline`), or
+//   - a LEFT edge of at least 4px — a solid bar, which is a shape rather than a rule.
+// A 1px/2px accent edge, or one on any other side, is a failure.
+const ACCENT_TOKEN = '--dsw-alias-state-business-primary'
+const accentDeclarations = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => [...rule[2].matchAll(/(?:^|;)\s*(border[a-z-]*|background[a-z-]*|outline[a-z-]*)\s*:\s*([^;}]+)/g)]
+    .filter(declaration => declaration[2].includes(ACCENT_TOKEN))
+    .map(declaration => ({ selector: rule[1].trim(), property: declaration[1], value: declaration[2].trim() })))
+const accentWidth = value => Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(value)?.[1] ?? 'NaN')
+const badAccentEdges = accentDeclarations.filter(declaration => {
+  if (declaration.property.startsWith('background') || declaration.property.startsWith('outline')) return false
+  if (!declaration.property.startsWith('border')) return false
+  // A colour longhand only re-points a bar whose width is stated elsewhere.
+  if (/-color$/.test(declaration.property)) return !/^border-(?:left|inline-start)-color$/.test(declaration.property)
+  const leftBar = declaration.property === 'border-left' || declaration.property === 'border-inline-start'
+  return !(leftBar && accentWidth(declaration.value) >= 4)
+})
+const solidAccentBar = accentDeclarations.some(declaration =>
+  /^border-(?:left|inline-start)$/.test(declaration.property) && accentWidth(declaration.value) >= 4)
+check('model config: the accent is a >=4px solid left bar (or a fill / focus ring), never a thin edge',
+  badAccentEdges.length === 0 && solidAccentBar,
+  { badAccentEdges, solidAccentBar, accentDeclarations })
+
+// §16/V2 — ONE ROW, TWO ENTRIES, TWO NAMES. The credential-clear entry and the
+// lifecycle entry used to both read 删除, so the juror read a single row as
+// offering the same destructive action twice. The credential entry now carries its
+// own key (`config.key.clear`); this asserts the two keys resolve to DIFFERENT
+// copy in both languages AND that the component actually asks for the new one — a
+// key added to the dictionary but never rendered would satisfy neither half.
+const copyFile = read('src/client/modelConfigCopy.ts')
+const copyValue = (part, key) => {
+  const found = new RegExp(`'config\\.${key.replace(/\./g, '\\.')}':\\s*'([^']*)'`).exec(part)
+  return found === null ? null : found[1]
+}
+const zhCopyPart = copyFile.slice(copyFile.indexOf('export const zh'), copyFile.indexOf('/** English dictionary'))
+const enCopyPart = copyFile.slice(copyFile.indexOf('/** English dictionary'))
+const clearCopy = { zh: copyValue(zhCopyPart, 'key.clear'), en: copyValue(enCopyPart, 'key.clear') }
+const removeCopy = { zh: copyValue(zhCopyPart, 'remove'), en: copyValue(enCopyPart, 'remove') }
+check('model config: the credential-clear entry and the lifecycle entry have different words in both languages',
+  clearCopy.zh !== null && clearCopy.en !== null && removeCopy.zh !== null && removeCopy.en !== null
+  && clearCopy.zh !== removeCopy.zh && clearCopy.en !== removeCopy.en
+  && /config\.key\.clear/.test(modelConfigCode),
+  { clearCopy, removeCopy, usedInTsx: /config\.key\.clear/.test(modelConfigCode) })
+
+// §5.35 — THE SCAN LINE IS A LEDGER, AND THE WELL IS A FORM. Two static halves of
+// the alignment claim the live check measures:
+//   1. the row lays out on SHARED TRACKS (a wrapping flex line would let each row's
+//      cells march after each other's widths), and the answer word and the door are
+//      RIGHT-ALIGNED, so their right edges coincide down the whole list;
+//   2. the well is a two-column grid whose first column is the FIXED label track,
+//      so a value and its name can never drift apart.
+const dmcRowRule = /\.dmc-row\s*\{([^}]*)\}/.exec(modelConfigPageSheet)
+check('model config: the scan line lays out on shared tracks, not a ragged flex wrap',
+  /display\s*:\s*grid/.test(dmcRowRule?.[1] ?? '') && /grid-template-columns/.test(dmcRowRule?.[1] ?? ''),
+  { body: (dmcRowRule?.[1] ?? '').slice(0, 200).replace(/\s+/g, ' ') })
+const dmcVerdictEnd = /\.dmc-verdict\s*\{[^}]*justify-self\s*:\s*end/.test(modelConfigPageSheet)
+const dmcManageEnd = /\.dmc-manage\s*\{[^}]*justify-self\s*:\s*end/.test(modelConfigPageSheet)
+check('model config: the ledger\'s two right-hand cells are right-aligned',
+  dmcVerdictEnd && dmcManageEnd, { verdict: dmcVerdictEnd, manage: dmcManageEnd })
+const dmcWellRule = /\.dmc-well\s*\{([^}]*)\}/.exec(modelConfigPageSheet)
+const dmcWellGrid = /display\s*:\s*grid/.test(dmcWellRule?.[1] ?? '')
+const dmcWellLabelTrack = /grid-template-columns\s*:\s*\d+px\s+minmax\(0,\s*1fr\)/.test(dmcWellRule?.[1] ?? '')
+check('model config: the settings well is a two-column form with a fixed label track',
+  dmcWellGrid && dmcWellLabelTrack,
+  { body: (dmcWellRule?.[1] ?? '').slice(0, 200).replace(/\s+/g, ' '), dmcWellGrid, dmcWellLabelTrack })
+
+// The graphic-only label tiers, the sibling of the state-colour assertion above:
+// tertiary / caption / dimmed are 3.605:1 / 2.077:1 / 1.228:1 on the light ground
+// — under the 4.5:1 bar a body label owes — so a `color:` that reaches for one is
+// the same defect as painting text in the error colour. The contrast gate measures
+// every painted style as well; this keeps the rule visible in the static domain.
+const dmcGraphicOnlyText = modelConfigTextColours
+  .filter(value => /--dsw-alias-label-(?:tertiary|caption|dimmed)/.test(value))
+check('model config: the tertiary/caption/dimmed label tiers never paint text',
+  dmcGraphicOnlyText.length === 0, { dmcGraphicOnlyText })
+
+// The registration itself, asserted where a regression would actually land. The
+// section id must not become the shipped `models` cell (that is shadowing, which
+// ADR 0003 rejected) and the registration must carry no `priority` (the
+// shadowing rank). Both are ONE-LINE edits away, and neither fails loudly at
+// runtime: the shipped Models page would simply stop appearing.
+const indexSource = read('src/client/index.ts')
+check('model config: registered under a NON-shipped section id',
+  /id:\s*MODEL_CONFIG_SECTION_ID/.test(indexSource)
+  && /MODEL_CONFIG_SECTION_ID = 'rabbit-model-config'/.test(indexSource),
+  { id: /MODEL_CONFIG_SECTION_ID = '([^']*)'/.exec(indexSource)?.[1] ?? null })
+const sectionRegistration = indexSource.slice(
+  Math.max(0, indexSource.indexOf("scope.slots.inject('settings.section'")),
+)
+check('model config: the section registration carries no shadowing priority',
+  sectionRegistration.length > 0 && !/priority/.test(sectionRegistration.slice(0, 600)),
+  { head: sectionRegistration.slice(0, 200).replace(/\s+/g, ' ') })
+
+// §5.33 — THE MOVE, ASSERTED WHERE IT COULD SILENTLY COME BACK. The retry card used
+// to be registered into the SHIPPED Models section's keyed
+// `settings.models.provider-card` seat, which is why the official page showed it.
+// "Not registered any more" is the whole搬运: re-adding one `slots.inject(...)`
+// line would put the card back on someone else's page while every other gate
+// stayed green (the component and its copy would simply be used again).
+//
+// Asserted as an ABSENCE OF THE REGISTRATION, not as an absence of the words: the
+// entry point still explains WHY nothing claims that seat, and deleting that
+// explanation to satisfy a text search would trade a real hazard for a comment.
+// The registration has two spellings — the seat claim and the registered name —
+// so both are named.
+const retrySeatClaim = /slots\.inject\(\s*'settings\.models\.provider-card'/
+const retrySeatName = /name:\s*'settings\.models\.provider-card'/
+check('model config: the shipped Models page\'s provider-card seat is no longer claimed',
+  !retrySeatClaim.test(indexSource) && !retrySeatName.test(indexSource)
+  && !/registerRetryCard|injectRetryStyles/.test(indexSource),
+  {
+    claimed: retrySeatClaim.test(indexSource),
+    named: retrySeatName.test(indexSource),
+    imports: /registerRetryCard|injectRetryStyles/.test(indexSource),
+  })
+// …and the retry editor's ARIA pair is the other half of the wiring. The trigger
+// lives in `ModelConfigPage.tsx` and the element it controls lives in
+// `RetryEditor.tsx`, so the generic `a11y: every templated aria id reference has a
+// declared id` check above — which reads only the seat's TSX — cannot see it. The
+// id is derived from the provider in both places; a mismatch (one file using the
+// route, the other the display name) leaves `aria-controls` pointing at nothing,
+// which no runtime error and no screenshot reports.
+const retryControlIds = [...modelConfigCode.matchAll(/aria-controls=\{`([^`]*)`\}/g)].map(m => m[1])
+const retryEditorIds = [...modelConfigCode.matchAll(/\bid=\{`(dmc-retry[^`]*)`\}/g)].map(m => m[1])
+const ariaShape = value => value.replace(/\$\{[^}]*\}/g, '*')
+const retryAriaPairs = retryControlIds
+  .map(control => ({ control, shape: ariaShape(control) }))
+  .filter(entry => entry.shape.startsWith('dmc-retry'))
+check('model config: the retry trigger\'s aria-controls names an id the editor declares',
+  retryAriaPairs.length > 0
+  && retryAriaPairs.every(entry => retryEditorIds.map(ariaShape).includes(entry.shape))
+  && retryEditorIds.length > 0,
+  { controlIds: retryControlIds, editorIds: retryEditorIds })
 
 // --- 9. the row badge contract ----------------------------------------------
 // The row used to carry an interactive effort pill; effort is edited in the
@@ -858,10 +1478,18 @@ check(
 //     popover §5.25 folded into the rail), `prefs.ts` (the remembered scope §5.26
 //     removed, replaced by `retiredScope.ts`'s one-way sweep) and `recent.ts`
 //     ("recently used" §5.21/§5.16 removed). Their absence is the contract.
+//     §5.33 adds the retry move's two: `RetryCard.tsx` (the card that lived in the
+//     shipped Models page's keyed seat) and `retryStyles.ts` (its `drc-` sheet).
+//     The retry policy now renders INSIDE this plugin's own 模型配置 page, so both
+//     are deleted rather than kept as a second surface — and a `git checkout` of
+//     the wrong tree, or an editor restoring a deletion, is exactly the accident
+//     this list is here to catch.
 const REMOVED_MODULES = [
   'src/client/ProviderMenu.tsx',
   'src/client/prefs.ts',
   'src/client/recent.ts',
+  'src/client/RetryCard.tsx',
+  'src/client/retryStyles.ts',
 ]
 const resurrected = REMOVED_MODULES.filter(exists)
 check(
@@ -883,6 +1511,31 @@ check(
   'removed: nothing imports the deleted modules',
   reimported.length === 0,
   { imported: reimported, scanned: sourceFiles.length },
+)
+// c4. …and the retired IDENTITY is gone from every source file, not just from the
+//     two module paths above. `existsSync` proves the file is absent and the import
+//     walk proves nothing points at it; neither notices a `drc-` class left behind
+//     in another sheet, or a comment in a file that survived claiming an exemption
+//     from a module that no longer exists (which is worse than a dead rule: it
+//     argues for the rule using evidence that is no longer in the tree).
+//
+//     SCOPED TO `src/`, deliberately: DESIGN/README legitimately narrate the
+//     history — a name may appear there as the thing that was retired — while the
+//     shipped source may not. `scripts/` is out of scope for the same reason: these
+//     very checks quote the names in their own failure text.
+const retiredNames = ['drc-', 'RetryCard', 'retryStyles']
+const resurrectedNames = []
+for (const name of sourceFiles) {
+  const relative = `src/${name.split(sep).join('/')}`
+  const text = read(relative)
+  for (const retiredName of retiredNames) {
+    if (text.includes(retiredName)) resurrectedNames.push(`${relative}: ${retiredName}`)
+  }
+}
+check(
+  'removed: no source file still names the retry card, its sheet or its drc- domain',
+  resurrectedNames.length === 0,
+  { found: resurrectedNames, retired: retiredNames, scanned: sourceFiles.length },
 )
 
 // d. …and what is left of that record is a DATA contract: the keys an older build
@@ -1461,6 +2114,53 @@ check(
     && /'dsh-model-picker\.provider\.'/.test(retiredScopeCode),
   { sweptPrefix: /const RETIRED_SCOPE_PREFIX = '([^']+)'/.exec(retiredScopeCode)?.[1] ?? null },
 )
+
+// --- 16. the design skill's own linter, on this round's four surfaces -------
+// The skill ships the linter whose rules the design record quotes (`shadow`,
+// `outlined-box`, `em-dash`), and a gate that only re-states those rules in prose
+// drifts from the tool the reviewer actually runs. So the tool is RUN, on exactly
+// the four source files this round touches, and its FAIL block has to be empty.
+// WARN lines are printed with their count rather than failed: a 1px edge on a real
+// form field is the exemption the house rules themselves name, and the count is
+// the metric of this refactor (five outlined boxes per row became one).
+//
+// The linter lives in the user's skill install, so a machine without it prints a
+// note instead of a red: the missing tool is not a defect in this repository.
+// `lib/` is deliberately NOT passed — it is the build artifact of these files and
+// would report every finding a second time.
+const TASTE_LINT_CANDIDATES = [
+  process.env.TASTE_SKILL_LINT,
+  join(homedir(), '.dsh', 'skills', 'design-taste-frontend', 'scripts', 'lint.mjs'),
+  join(homedir(), 'AppData', 'Roaming', 'npm', 'node_modules', '@deepseek-ai', 'dsh', 'skills', 'design-taste-frontend', 'scripts', 'lint.mjs'),
+].filter(candidate => typeof candidate === 'string' && candidate !== '')
+const tasteLint = TASTE_LINT_CANDIDATES.find(candidate => existsSync(candidate))
+if (tasteLint === undefined) {
+  console.log('  note taste-skill lint: not installed on this machine — the four surfaces were not linted')
+} else {
+  const LINTED = [
+    'src/client/ModelConfigPage.tsx',
+    'src/client/modelConfigStyles.ts',
+    'src/client/ModelDrawer.tsx',
+    'src/client/drawerStyles.ts',
+  ]
+  const run = spawnSync(process.execPath, [tasteLint, ...LINTED], { cwd: root, encoding: 'utf8' })
+  const output = `${run.stdout ?? ''}${run.stderr ?? ''}`
+  const sections = { FAIL: [], WARN: [] }
+  let section = null
+  for (const line of output.split(/\r?\n/)) {
+    if (/^FAIL\s*$/.test(line)) { section = 'FAIL'; continue }
+    if (/^WARN\s*$/.test(line)) { section = 'WARN'; continue }
+    if (section !== null && /^\s{2}\[/.test(line)) { sections[section].push(line.trim()); continue }
+    if (/^(?:RESULT|TASTESKILL)/.test(line)) section = null
+  }
+  console.log(`  info taste-skill lint: fails=${sections.FAIL.length} warnings=${sections.WARN.length} (${LINTED.length} files)`)
+  for (const warning of sections.WARN) console.log(`  info taste-skill lint warn: ${warning}`)
+  check(
+    'taste-skill lint: no FAIL on the four round surfaces',
+    sections.FAIL.length === 0,
+    { fail: sections.FAIL, exitCode: run.status },
+  )
+}
 
 console.log(failures === 0 ? 'static selfcheck: all good' : `static selfcheck: ${failures} failure(s)`)
 process.exitCode = failures > 0 ? 1 : 0

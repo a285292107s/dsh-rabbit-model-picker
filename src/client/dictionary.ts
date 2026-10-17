@@ -44,8 +44,12 @@ export const zh: Record<string, string> = {
   'badge.text.off': '不支持文字输入',
   'badge.image.on': '图片输入',
   'badge.image.off': '不支持图片输入',
-  'badge.effort.on': '支持思考',
-  'badge.effort.off': '不支持思考',
+  // "推理" is the verb form of the fact the column states, and the stem of the
+  // panel's "推理等级" — the strip's key and the section title therefore call
+  // the same concept by the same word (CONTEXT.md: 推理等级, matching the host's
+  // own zh copy for `reasoning effort`).
+  'badge.effort.on': '支持推理',
+  'badge.effort.off': '不支持推理',
   'badge.context': '上下文窗口 {value}',
   'badge.rowAria': '{model}，{facts}',
   // The key to the strip's four columns, read once per card (see §5.24). One
@@ -53,7 +57,7 @@ export const zh: Record<string, string> = {
   // the columns so the row's glyphs do not have to be learned by hovering.
   'badge.key.text': '文字',
   'badge.key.image': '图片',
-  'badge.key.effort': '思考',
+  'badge.key.effort': '推理',
   'badge.key.context': '窗口',
   'badge.keyAria': '每一行右侧陈述的四个事实',
   'status.loading': '正在刷新模型列表…',
@@ -74,7 +78,7 @@ export const zh: Record<string, string> = {
   'settings.listJoin': '、',
   'settings.loading': '正在读取当前参数…',
   'settings.busy': '正在应用这次选择，参数暂时不能改…',
-  'settings.unavailable': '这个部署没有挂载设置服务，参数面板只能查看（思考强度仍可用）。',
+  'settings.unavailable': '这个部署没有挂载设置服务，参数面板只能查看（推理等级仍可用）。',
   'settings.loadFailed': '读不到当前设置：{message}',
   'settings.unaddressable': '这个模型来自适配器内置目录，没有可编辑的声明，只能查看。',
   'settings.readonly': '当前配置不接受表单修改，参数面板只能查看。',
@@ -97,8 +101,8 @@ export const zh: Record<string, string> = {
   'settings.context.capability': '适配器内置目录公布：{value}（不可编辑）',
   'settings.context.unset': '尚未声明，也没有兜底值；只有这里填了才会覆盖适配器内部的值。',
   'settings.context.invalid': '读不出这个数值：请写 128K、1M 或 131072，范围 1024–10485760',
-  'settings.effort.title': '思考强度',
-  'settings.note': '输入类型与上下文窗口会直接写进适配器对这个模型的声明，立即生效，与「设置 → 模型」页改的是同一处；思考强度是会话级设置，不写进声明。',
+  'settings.effort.title': '推理等级',
+  'settings.note': '输入类型与上下文窗口会直接写进适配器对这个模型的声明，立即生效，与「设置 → 模型」页改的是同一处；推理等级是会话级设置，不写进声明。',
 }
 
 /** English dictionary, complete against the zh key set. */

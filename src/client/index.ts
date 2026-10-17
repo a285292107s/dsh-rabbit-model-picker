@@ -16,11 +16,17 @@
  */
 
 import type {
-  ClientContext, RemoteFace, RemoteLlmFace, RemoteSettingsFace,
+  ClientContext, RemoteCredentialsFace, RemoteFace, RemoteLlmFace, RemoteSessionFace,
+  RemoteSettingsFace,
 } from './contract.ts'
 import { ADAPTER_CATALOGS, readCatalog } from './adapterCatalog.ts'
 import { CapabilityStore } from './capabilities.ts'
 import { dictionaries, localTranslate, NS } from './dictionary.ts'
+import { ModelConfigPage } from './ModelConfigPage.tsx'
+import {
+  configTranslate, dictionaries as modelConfigDictionaries, KEYS as MODEL_CONFIG_KEYS,
+} from './modelConfigCopy.ts'
+import { ModelConfigStore, type ModelConfigFaces } from './modelConfigStore.ts'
 import { ParamsStore } from './params.ts'
 import { Picker } from './Picker.tsx'
 import { retireStoredScope } from './retiredScope.ts'
@@ -94,6 +100,50 @@ function registerAdapterCatalogs(ctx: ClientContext, capabilities: CapabilitySto
 }
 
 /**
+ * The settings section id this plugin owns.
+ *
+ * Deliberately NOT `models`. `settings.section` is a `list` slot whose cells are
+ * keyed BY ID, so a new id is additive and two sections coexist by construction;
+ * reusing `models` with a lower priority would SHADOW the shipped page instead.
+ * ADR 0003 settled that question in favour of coexistence, so this constant is
+ * the one value that decision rests on — and `scripts/selfcheck-static.mjs`
+ * asserts it never becomes `models`.
+ */
+const MODEL_CONFIG_SECTION_ID = 'rabbit-model-config'
+
+/**
+ * Resolve the Host faces the 模型配置 page reads, per call.
+ *
+ * Resolved per call rather than captured, because the Remote namespaces mount
+ * asynchronously and a capture at activation can legitimately be "not yet" — the
+ * same ordering hazard the composer seat documents. Only the two reads the page
+ * cannot work without make it unavailable; a deployment that mounts no
+ * credentials or no session still gets a working page.
+ * @param ctx - the client scope the section is registered on.
+ * @returns the faces, or null when the page could not function at all.
+ */
+function modelConfigFacesOf(ctx: ClientContext): ModelConfigFaces | null {
+  const settings = ctx.get('remote.settings') as RemoteSettingsFace | undefined
+  const llm = ctx.get('remote.llm') as RemoteLlmFace | undefined
+  if (typeof settings?.describe !== 'function' || typeof settings.mutate !== 'function') return null
+  if (typeof llm?.listConfigurableProviders !== 'function') return null
+  const credentials = ctx.get('remote.credentials') as RemoteCredentialsFace | undefined
+  const session = ctx.get('remote.session') as RemoteSessionFace | undefined
+  const remote = ctx.get('remote') as
+    | { $on?: (event: string, listener: () => void) => () => void }
+    | undefined
+  return {
+    settings,
+    llm,
+    ...credentials === undefined ? {} : { credentials },
+    ...session === undefined ? {} : { session },
+    ...typeof remote?.$on !== 'function'
+      ? {}
+      : { on: (event: string, listener: () => void) => remote.$on!(event, listener) },
+  }
+}
+
+/**
  * Client plugin body: register copy and styles, then claim the model seat over
  * the shared directory.
  * @param ctx - client root context.
@@ -101,10 +151,29 @@ function registerAdapterCatalogs(ctx: ClientContext, capabilities: CapabilitySto
 export function apply(ctx: ClientContext): void {
   const locale = ctx.get('locale')
   const translate = locale === undefined ? localTranslate() : locale.bind(NS)
+  // One registration carrying BOTH dictionaries. `dictionary.ts` and
+  // `modelConfigCopy.ts` share this namespace by design (one plugin, one
+  // namespace), and registering twice would make the second call's dictionary the
+  // only visible one on a locale service that replaces rather than merges. Their
+  // key sets are disjoint by prefix (`config.` vs the seat's own), so folding
+  // them here is safe and keeps the outcome independent of that service's
+  // semantics.
+  const allDictionaries: Record<string, Record<string, string>> = {
+    zh: { ...dictionaries.zh, ...modelConfigDictionaries.zh },
+    en: { ...dictionaries.en, ...modelConfigDictionaries.en },
+  }
   if (locale !== undefined) {
-    ctx.effect(() => locale.register(NS, dictionaries), 'dsh-rabbit-model-picker: dictionaries')
+    ctx.effect(() => locale.register(NS, allDictionaries), 'dsh-rabbit-model-picker: dictionaries')
   }
   ctx.effect(() => injectStyles(), 'dsh-rabbit-model-picker: styles')
+  // The retry policy used to be a card registered into the shipped Models
+  // section's `settings.models.provider-card` seat. It moved INTO this plugin's
+  // own 模型配置 tab (the section registered at the bottom of this file), where
+  // every provider already has a row: a keyed seat could only ever name one
+  // adapter family, and the policy was being edited inside someone else's page.
+  // Nothing registers that seat any more, so the official page renders exactly as
+  // it did before this plugin was installed.
+
   // The provider scope is no longer remembered (§5.26); the keys older builds
   // wrote would otherwise sit in the store forever, unread and unexplained. The
   // sweep belongs to ACTIVATION rather than to a seat's mount: it is a data
@@ -152,5 +221,40 @@ export function apply(ctx: ClientContext): void {
         }
       },
     }, Picker))
+  })
+
+  // --- the 模型配置 tab -------------------------------------------------------
+  // A second settings surface alongside the shipped Models page, and one that
+  // NEVER shadows it (ADR 0003). A new section id makes the two different `list`
+  // cells, so they coexist by construction; and there is deliberately NO
+  // `priority`, because priority IS the shadowing rank — declaring one would be
+  // the single change that turns this page into a replacement of the shipped one.
+  // Removing this plugin's row therefore restores the shipped page untouched.
+  //
+  // NO SCHEMA SERVICE IS CONSUMED HERE, and that is a deliberate simplification
+  // rather than an omission. Reaching the host's `settingsSchema` cost a scoped
+  // `inject` plus a service binding, and the route it bought never produced the
+  // choices: it yielded a union whose members were lazy callables, so both readers
+  // came up empty with no error. The namespace view this plugin already receives
+  // carries the serialized schema in full, so the choices are walked straight out
+  // of it — one less service to resolve, and one less silent failure mode.
+  const modelConfig = new ModelConfigStore(() => modelConfigFacesOf(ctx))
+  const configT = configTranslate(locale === undefined ? undefined : translate)
+
+  // Live only while the page is mounted: `start`'s disposer is what keeps a CLOSED
+  // settings panel from being woken into a background fetch by another writer.
+  ctx.effect(() => modelConfig.start(), 'dsh-rabbit-model-picker: model config invalidation')
+
+  ctx.inject(['slots'], (scope) => {
+    scope.slots.inject('settings.section', () => scope.slots.register({
+      name: 'settings.section',
+      id: MODEL_CONFIG_SECTION_ID,
+      // Immediately after the shipped 模型 page, which registers at order 10.
+      order: 11,
+      // A thunk, not a string: the shell re-reads it on every locale revision, so
+      // the nav row follows a language change without re-registering.
+      label: () => configT(MODEL_CONFIG_KEYS['config.nav']),
+      inject: () => ({ store: modelConfig, t: configT }),
+    }, ModelConfigPage))
   })
 }

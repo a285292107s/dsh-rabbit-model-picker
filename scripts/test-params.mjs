@@ -372,9 +372,9 @@ try {
     t,
   }).map(spec => spec.sentence)
   equal('facts: every badge sentence is localized', sentences,
-    ['文字输入', '不支持图片输入', '支持思考', '上下文窗口 800K'])
+    ['文字输入', '不支持图片输入', '支持推理', '上下文窗口 800K'])
   equal('facts: the row name carries them all', t('badge.rowAria', { model: 'M', facts: sentences.join(t('settings.listJoin')) }),
-    'M，文字输入、不支持图片输入、支持思考、上下文窗口 800K')
+    'M，文字输入、不支持图片输入、支持推理、上下文窗口 800K')
 
   // --- what the parameter panel says in each state --------------------------
   // The panel's copy is a decision per state, not a paragraph: which single line
@@ -442,7 +442,7 @@ try {
   // line, and a refusal outranks them all.
   equal('panel copy: a missing settings service is explained',
     notice(copyState(second, { snapshot: { status: 'unavailable', error: null, writable: false } })),
-    '这个部署没有挂载设置服务，参数面板只能查看（思考强度仍可用）。')
+    '这个部署没有挂载设置服务，参数面板只能查看（推理等级仍可用）。')
   equal('panel copy: loading is stated',
     notice(copyState(second, { snapshot: { status: 'loading', error: null, writable: true } })),
     '正在读取当前参数…')

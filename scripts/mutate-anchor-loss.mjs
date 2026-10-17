@@ -15,8 +15,11 @@ import { spawnSync } from 'node:child_process'
 
 const SELFCHECK = 'scripts/selfcheck-static.mjs'
 const UNIT = 'scripts/test-params.mjs'
+const RECOVERY_GATE = 'scripts/test-rate-limit-recovery.mjs'
 const LOSS = 'src/client/anchorLoss.ts'
 const PICKER = 'src/client/Picker.tsx'
+const RECOVERY = 'src/host/rateLimitRecovery.ts'
+const WIRING = 'src/index.ts'
 
 /**
  * Both gates, because the two halves of this rule are checked in different places
@@ -26,8 +29,14 @@ const PICKER = 'src/client/Picker.tsx'
  * Running only the static gate is what let six logic mutations through unnoticed:
  * a regex can see that `setTimeout(confirm` is written, it cannot see whether the
  * second look actually happens, which is the entire rule.
+ *
+ * The recovery gate joins them because the newest decision in the repo lives in a
+ * module no other gate loads (a Host-side rule, not a page). Its seven mutations
+ * drop one condition of that rule, or one half of its wiring; none of them is
+ * visible to the static gate, which is exactly why the rule needs a gate that
+ * drives it.
  */
-const GATES = [SELFCHECK, UNIT]
+const GATES = [SELFCHECK, UNIT, RECOVERY_GATE]
 
 const MUTATIONS = [
   {
@@ -147,6 +156,52 @@ const MUTATIONS = [
     from: 'timer = window.setTimeout(confirm, CONFIRM_DELAY_MS)',
     to: 'window.setTimeout(confirm, CONFIRM_DELAY_MS)',
   },
+
+  // The five below are the rate-limit wording recovery's own four conditions plus
+  // its copy. Each one is a decision the feature rests on, and each is invisible
+  // to the static gate because nothing about it is in the client bundle.
+  {
+    name: 'recovery: promote on the wording alone (the card can no longer switch it off)',
+    file: RECOVERY,
+    from: 'if (codes === null || !codes.includes(RECOVERED_CODE)) return null',
+    to: 'if (codes === null) return null',
+  },
+  {
+    name: 'recovery: promote a code the shipped executor already retries (its budget is double-spent)',
+    file: RECOVERY,
+    from: 'if (codes.includes(read.code)) return null',
+    to: 'if (read.code === RECOVERED_CODE) return null',
+  },
+  {
+    name: 'recovery: let wording outrank a definitive status',
+    file: RECOVERY,
+    from: 'if (statusBlocksPromotion(read.status)) return null',
+    to: 'if (false && statusBlocksPromotion(read.status)) return null',
+  },
+  {
+    name: 'recovery: promote every failure, wording or not',
+    file: RECOVERY,
+    from: 'if (!statesRateLimit(read.message)) return null',
+    to: 'if (false) return null',
+  },
+  {
+    name: 'recovery: rewrite the recorded failure instead of copying it',
+    file: RECOVERY,
+    from: 'return { ...read, code: RECOVERED_CODE }',
+    to: ';(read as { code: string }).code = RECOVERED_CODE\n  return read',
+  },
+  {
+    name: 'wiring: register behind the shipped executor (the decision is already made)',
+    file: WIRING,
+    from: '    { prepend: true },',
+    to: '    {},',
+  },
+  {
+    name: 'wiring: skip the promotion (the rule never reaches the payload)',
+    file: WIRING,
+    from: 'if (recovered !== null) payload.failure = recovered',
+    to: '/* removed */',
+  },
 ]
 
 const original = new Map(MUTATIONS.map(m => [m.file, readFileSync(m.file, 'utf8')]))
@@ -203,7 +258,16 @@ for (const m of MUTATIONS) {
   try {
     for (const gate of GATES) {
       const run = spawnSync(process.execPath, [gate], { encoding: 'utf8' })
-      if ((run.stdout + run.stderr).includes('FAIL')) { caught = gate; break }
+      // A nonzero exit OR a line that STARTS with FAIL. The old test was a bare
+      // `includes('FAIL')`, which this repo's own selfcheck defeats on every run:
+      // one of its green lines reads "ok taste-skill lint: no FAIL on the four
+      // round surfaces", so the harness reported `caught by selfcheck-static.mjs`
+      // for mutations that selfcheck had exited 0 on — including all five of the
+      // rate-limit recovery mutations when they were first added. A gate that
+      // cannot fail is not a gate, and a detector that reads a success line as a
+      // failure is how a mutation suite starts certifying nothing.
+      const output = `${run.stdout ?? ''}${run.stderr ?? ''}`
+      if (run.status !== 0 || /(?:^|\n)\s*FAIL\b/.test(output)) { caught = gate; break }
     }
   } finally {
     writeFileSync(m.file, original.get(m.file), 'utf8')

@@ -4,12 +4,12 @@
 > 目标：在不改 DSH 安装目录的前提下，用本地外部插件遮蔽 `conversation.input.model` 座位，
 > 解决两个痛点：**模型太多难找**、**两级菜单太绕**。`/model` 弹窗与数据层保持原样。
 >
-> **2026-10-02 改版（§5.11）**：行内不再是"改强度的控件"——既然模型参数面板已经能改强度，
-> 每行改成**四个只读事实徽章**（文字 / 图片 / 思考强度 / 上下文窗口），图标自绘；强度只在齿轮里改。
+> **2026-10-02 改版（§5.11）**：行内不再是"改等级的控件"——既然模型参数面板已经能改等级，
+> 每行改成**四个只读事实徽章**（文字 / 图片 / 推理 / 上下文窗口），图标自绘；等级只在齿轮里改。
 >
-> **2026-10-02 第三次反馈（§5.13）**：提供商筛选改为**记住的偏好**；修掉参数面板卡片滚到下半截
-> 就没有底色的缺陷（根因是 `MenuSurface` 的底色层是绝对定位子元素，卡片自己滚就把它带走了）；
-> 触发器不再在模型名旁边重复思考强度。
+> **2026-10-02 第三次反馈（§5.13）**：提供商范围改为**记住的偏好**；修掉参数面板滚到下半截
+> 就没有底色的缺陷（根因是 `MenuSurface` 的底色层是绝对定位子元素，参数面板自己滚就把它带走了）；
+> 触发器不再在模型名旁边重复推理等级。
 >
 > **2026-10-02 第四次反馈（§5.14）**：参数面板的说明文字做**价值与可读性**审查——11px 说明文字
 > 原本用 `label-caption`，在浅色卡片上只有 2.08:1（深色 3.82:1），全部换成
@@ -19,12 +19,12 @@
 > 读宿主令牌表、按两种可能的下层底色合成卡片底色、逐样式按其**画出来的字号**判 WCAG AA。
 >
 > **2026-10-15 第十二次反馈（§5.25）**：提供商栏与模型列表合成**一张卡的两个窗格**（左范围、右模型）；
-> 卡片放宽到 520px 并新增 ≤536px 的单栏/横向条折叠；`全部` 回到左栏第一行，收窄的出口就是它；
+> 卡片放宽到 520px 并新增 ≤536px 的单栏/横向条折叠；`全部` 回到提供商栏第一行，收窄的出口就是它；
 > 座位上的 chip 退化成**只陈述"当前模型所属 provider"的只读事实**（不再是控件、不再有两态）；
 > 搜索不被范围限制（越界命中被计数并给出口）；`ProviderMenu.tsx` 与九个文案键一并删除。
 >
 > **2026-10-15 第十三次反馈（§5.26）**：提供商名**并进触发器**，座位行变成
-> `提供商/模型名 · 思考强度`（那个只读 chip 删除——同一件事不说两遍）；左栏的范围**不再持久化**，
+> `提供商/模型名 · 推理等级`（那个只读 chip 删除——同一件事不说两遍）；提供商栏的范围**不再持久化**，
 > **每次打开都从当前会话的 provider 开始**（`prefs.ts` 及其单元门删除，改为 `retiredScope.ts`
 > 一次性清理旧键）。
 
@@ -34,9 +34,9 @@
 
 **目标（可验收）**
 
-1. 输入框右下角显示新控件，且只有**一层**列表：模型与提供商筛选都不需要进二级面板；
-   每行把自己的事实（输入模态 / 强度 / 上下文窗口）以**只读徽章**陈述出来，行内没有任何子控件。
-   （2026-10-15 起"一层"改述为**一张卡两个窗格**：提供商不是二级面板，而是同一张卡的左栏，见 §5.25。）
+1. 输入框右下角显示新控件，且只有**一层**列表：模型与提供商范围都不需要进二级面板；
+   每行把自己的事实（输入模态 / 等级 / 上下文窗口）以**只读徽章**陈述出来，行内没有任何子控件。
+   （2026-10-15 起"一层"改述为**一张卡两个窗格**：提供商不是二级面板，而是同一张卡的提供商栏，见 §5.25。）
 2. 搜索**常驻**，跨 provider 模糊匹配；**按 provider 分组、可按 provider 窄化**，长目录不用滚很久。
    （原目标是"'最近使用'置顶"：先被 §5.16 改成菜单里的一个选项，再被 §5.21 整体删除。）
 3. 与 `/model` 弹窗共享同一份选择状态（任一处切换，另一处同步）。
@@ -44,10 +44,10 @@
 5. 不修改 DSH 安装目录；删除 profile 中的插行即可完全回退。
 6. **（追加需求）** 模型触发器**左边**再放一个提供商选择器：选中某个提供商后，模型列表
    只列该提供商的模型——这是「提供商太多 / 列表太长」的第二道闸门。
-   （2026-10-15 起这个选择器**移进卡片左栏**，座位上的同名 chip 变成只读事实，见 §5.25；
+   （2026-10-15 起这个选择器**移进模型卡的提供商栏**，座位上的同名 chip 变成只读事实，见 §5.25；
    同日晚些时候那条只读事实**并入触发器标签**（`提供商/模型名`），范围也不再记忆、每次打开
    取当前会话的 provider，见 §5.26。）
-7. **（追加需求，2026-10-02）** 右侧齿轮打开模型参数面板，真读写输入类型 / 上下文窗口 / 思考强度；
+7. **（追加需求，2026-10-02）** 右侧齿轮打开模型参数面板，真读写输入类型 / 上下文窗口 / 推理等级；
    行内徽章只陈述这些参数的事实，**不做**任何就地修改。
 
 **非目标**
@@ -71,7 +71,7 @@
 | 同优先级重复注册**抛错**；不同优先级＝遮蔽，**最低者渲染** | ✅ 一致（安装版含同一句错误文案） | `packages/client/ui-slots/src/index.ts:1212-1219, 1278-1284` |
 | `priority` 是 register 选项，默认 0，升序、最低者胜 | ✅ 一致 | 同上 `:787-793` |
 | 声明等待：必须 `ctx.slots.inject(name, cb)` | ✅ 官方占用者同样如此 | `ui-model-selection/src/client/index.ts:172` |
-| 座位注入面 `ModelSelectInjected = { available, directory: SnapshotStore<ModelDirectoryState>, load(), select() }` | ✅ 字段名逐一比对 | `ui-model-selection/src/client/slots.ts:13-26` |
+| 座位面 `ModelSelectInjected = { available, directory: SnapshotStore<ModelDirectoryState>, load(), select() }` | ✅ 字段名逐一比对 | `ui-model-selection/src/client/slots.ts:13-26` |
 | 目录状态字段 `current / retainedEffort / routable / groups / failures / status / pending / error` | ✅ 逐一比对 | `ui-model-selection/src/client/directory.ts:18-35` |
 | 与 `/model` 共用同一实例：`ctx.modelDirectories.directoryFor(sessionId)` | ✅ 同一 service（`ModelDirectoryResolver`） | `ui-model-selection/src/client/service.ts:37-90` |
 | **调用方注入要求**：service 方法跑在 Cordis 调用方上下文追踪下，`directoryFor()` 内部读 `this.ctx.remote.session`——**调用方 fiber 必须自己 inject `remote` + `remote.session`**，否则 `cannot get property "remote.session" without inject` 从 inject 面抛出、该座位**让位**给原占用者（静默回退） | ⚠️ 初版漏了这两项，实测被检出并修好（见 §8 验收记录） | `ui-model-selection/src/client/service.ts:38,76`；官方占用者 `ui-model-selection/src/client/index.ts:107` 同样声明 |
@@ -141,15 +141,15 @@ volatile（= 允许在线改）——这正是「设置 → 模型」页改同�
 
 ## 3. 三处细节的定稿（已确认）
 
-1. **effort 交互**（2026-10-02 改版，见 §5.11）：**行内不改强度**。参数面板的强度档位是唯一入口；
+1. **effort 交互**（2026-10-02 改版，见 §5.11）：**行内不改等级**。参数面板的推理等级的档位是唯一入口；
    行内只用一个只读徽章陈述"这一行生效的档位"。初版的行内 `pill` + 锚定小菜单已删除
    （`EffortMenu.tsx` 不再存在）——同一件事有两个入口时，两侧反馈必然出现分歧。
 2. ~~**最近使用范围**：**全局共享**一份 `localStorage`（模型偏好通常不分会话）。~~
    **已作废（§5.21）**：「最近使用」机制整体删除，这条没有对象了。
 3. **搜索时的分组**：**保留 provider 分组**，组内用 `rankByName` 排序、**组间按各自最佳匹配名次重排**。
-4. **（追加需求）提供商筛选**：做成**纯视图状态**——只在模型列表里收窄，**绝不写 Host**。
-   因此 `/model` 弹窗照旧列全部提供商，触发器也**始终显示真实选择**，即使它被当前筛选排除。
-   筛选是**记住的偏好**：切完模型仍是那个提供商（便于连续挑同家模型），刷新页面/重开会话也还是它
+4. **（追加需求）提供商范围**：做成**纯视图状态**——只在模型列表里收窄，**绝不写 Host**。
+   因此 `/model` 弹窗照旧列全部提供商，触发器也**始终显示真实选择**，即使它被当前范围排除。
+   范围是**记住的偏好**：切完模型仍是那个提供商（便于连续挑同家模型），刷新页面/重开会话也还是它
    （存本插件自己的 `localStorage`，见 §5.9 与 §5.13）。
 
 ---
@@ -163,28 +163,30 @@ dsh-rabbit-model-picker/
   src/index.ts             # 宿主半边：空 apply（行必须存在，行为为空）
   src/client/index.ts      # inject 声明（含 remote/remote.session）；ctx.get 取 settings/llm 面（取值函数，非激活时抓取）；slots.inject → register(priority:-10)
   src/client/contract.ts   # 外部结构类型（座位面/目录 store/插槽 registry/settings+llm remote/locale 面）+ 行身份 `rowKey`（原住 recent.ts，§5.21）
-  src/client/Picker.tsx    # 触发器（`提供商/模型名 · 强度`）+ 齿轮 + 单层菜单（搜索 / 分组 / 行内只读事实徽章）
+  src/client/Picker.tsx    # 触发器（`提供商/模型名 · 等级`）+ 齿轮 + 单层模型卡（搜索 / 分组 / 行内只读事实徽章）
   src/client/BadgeIcons.tsx# 四个徽章图标（16×16 自绘；只有"具备这个事实"一种形态）
   src/client/badges.ts     # 行内事实推导（纯函数）：resolveRoute + 能力目录 + reasoning → 该行能说的 1–4 条事实
   src/client/capabilities.ts # 适配器发布的能力目录（只读）：登记 reader、按需读取、按 rowKey 索引（§5.19）
   src/client/adapterCatalog.ts # 适配器自有目录的路由表与读取器（"还没挂载"≠"什么都没发布"，§5.27）
   src/client/snapshotEq.ts # "订阅者看得见的东西变了吗"——两个 store 的 publish guard 共用（§5.28）
   src/client/focusChain.ts # 卡片的 Tab 链：从渲出的 DOM 里读，只在某状态下出现的控件也够得到（§5.29）
-  src/client/effort.ts     # 强度档位的命名与列表（参数面板与行内徽章共用同一套说法）
-  src/client/SettingsMenu.tsx # 模型参数面板（输入类型 / 上下文窗口 / 思考强度 + 写入位置与失败原话）
+  src/client/effort.ts     # 推理等级的档位的命名与列表（参数面板与行内徽章共用同一套说法）
+  src/client/SettingsMenu.tsx # 模型参数面板（输入类型 / 上下文窗口 / 推理等级 + 写入位置与失败原话）
   src/client/params.ts     # 参数寻址与读写：show 快照 ← describe，resolveRoute(route) → 地址，write() → mutate
-  src/client/ProviderRail.tsx # 模型卡左栏：范围列表（全部 + 各 provider + 失败行），listbox + roving focus（§5.25）
+  src/client/ProviderRail.tsx # 模型卡提供商栏：范围列表（全部 + 各 provider + 失败行），listbox + roving focus（§5.25）
   src/client/retiredScope.ts # 旧范围记录的键前缀 + 一次性清理（§5.26 起这里只剩数据契约，没有行为）
+  src/client/RetryEditor.tsx # 「模型配置」页提供商行内展开的重试编辑器（§5.33）
+  src/client/retryPolicy.ts # 重试策略的解析与等待曲线（纯函数：编辑器渲染的每个数都由它算出，§5.33）
   src/client/dictionary.ts # zh/en 文案 + 无 locale 服务时的本地兜底
   src/client/styles.ts     # 注入样式表（幂等）
   src/client/primitives.d.ts # 唯一运行时基线依赖（ui-primitives）的类型边界
   scripts/build-client.mjs # esbuild（宿主 + 浏览器）+ 接线自检
-  scripts/selfcheck-static.mjs # 样式禁令 + 座位契约 + 死类双向比对 + 文案键 + 写入口契约 + 行内无控件契约 + 面板滚动/触发器/筛选持久化契约 + 宽度预算（走一遍盒模型，§5.30）
+  scripts/selfcheck-static.mjs # 样式禁令 + 座位契约 + 死类双向比对 + 文案键 + 写入口契约 + 行内无控件契约 + 面板滚动/触发器/范围持久化契约 + 宽度预算（走一遍盒模型，§5.30）
   scripts/test-params.mjs  # 参数寻址/容量 + 行内事实推导 + 锚点丢失决策的单元门（假 DOM/假观察者/可控时钟）
   scripts/mutate-anchor-loss.mjs # "门自己的门"：15 条改坏必须条条变红；打不上去算失败（§5.31）
   scripts/_icons-probe.cjs # 徽章图标候选的浏览器对比图（开发用）
   scripts/_accept-capabilities.cjs # §5.19 浏览器验收（只读）：行内徽章 + 面板 + 两张证据截图
-  scripts/_verify-fixes.cjs # 三次返工的浏览器验收（筛选持久化 / 面板底色 / 触发器文案；只写 localStorage）
+  scripts/_verify-fixes.cjs # 三次返工的浏览器验收（范围持久化 / 面板底色 / 触发器文案；只写 localStorage）
   DESIGN.md / README.md
 ```
 
@@ -204,14 +206,14 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
         ├─ useSyncExternalStore(params) ──► ① 齿轮的"已自定义"标记 ② 行内徽章的事实（只读快照）
         │         └─ badges.ts badgeSpecsOf(resolveRoute(snapshot, route), capabilityOf(route), reasoning, effort)
         │                    ──► 1–4 条 { fact, off, value, sentence }（纯函数，单元门覆盖）
-        ├─ useSyncExternalStore(capabilities) ──► §5.19：适配器发布的能力事实（菜单打开时 ensure）
+        ├─ useSyncExternalStore(capabilities) ──► §5.19：适配器发布的能力事实（模型卡打开时 ensure）
         │         └─ capabilities.ts ensure(providers) ──┬─ 登记的适配器自有 Remote（opencodeGoModels/read）
         │                                                └─ llm/discoverModels（仅 declared !== true 的路由）
         └─ SettingsMenu ── resolveRoute(snapshot, route) ──► 地址（ns + entryPath + revision）
                      ├─ 显示：describe.value / describe.user / adapter 默认值 / 适配器目录公布的事实
                      └─ 写入：settings.mutate(ns, ops, revision) ──► profile 的 cordis.patch.yml
                                   └─ 冲突 → 重读一次再重试；拒绝 → 原话显示、值不动
-                     强度那一项仍走 directory.select() ──► Host（面板是唯一入口）
+                     等级那一项仍走 directory.select() ──► Host（面板是唯一入口）
 ```
 
 状态划分：**外部数据**（catalog/current/pending/error）全部读 `directory.store`；
@@ -226,7 +228,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 所以提交被拒时不会留下一个假的"已写入"；行内徽章同理（"查不到"就不画，绝不画成"不支持"）。
 
 > 偏离说明（有意）：`packages/client/AGENTS.md:25` 要求业务组件不自己接订阅。
-> 本插件与官方占用者 `ModelSelect.tsx:68-71` 用**同一写法**（`useSyncExternalStore` 读注入面的
+> 本插件与官方占用者 `ModelSelect.tsx:68-71` 用**同一写法**（`useSyncExternalStore` 读座位面的
 > `directory` store）。理由：外部插件没有 `store` / `hooks` 隔间的声明通道（那是 register 选项里
 > 面向同仓包的机制），而 `directory` 正是宿主提供的唯一共享快照。行为与官方座位逐字一致。
 
@@ -238,7 +240,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 
 | 状态 | 表现 |
 |---|---|
-| 常态 | `[模型图标] 模型名`（**不带强度**：强度是参数，行内徽章陈述它、齿轮面板改它，见 §5.13）；完整信息进 `aria-label` 与 hover/focus 气泡 |
+| 常态 | `[模型图标] 模型名`（**不带等级**：等级是参数，行内徽章陈述它、齿轮面板改它，见 §5.13）；完整信息进 `aria-label` 与 hover/focus 气泡 |
 | 窄屏 | 由宿主 CSS 变量切换为仅图标；`Tooltip`（portal）在 hover/focus 显示完整信息 |
 | 选择中 | 右侧 chevron 换成 `StateDot state="ongoing"`，`aria-busy` |
 | `locked` | disabled |
@@ -247,19 +249,19 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 偏离说明：设计稿同时要求 `title` 与 `Tooltip`；两者并存会出现「原生气泡 + 自绘气泡」双气泡，
 故只保留 `Tooltip`（portal，`side="top"`，`align="end"`）＋ `aria-label`，菜单打开时 `disabled`。
 
-注记（2026-10-02 第三次反馈后定稿）：触发器**只写模型名**，不再跟一段 ` · 强度`。理由是强度本身
+注记（2026-10-02 第三次反馈后定稿）：触发器**只写模型名**，不再跟一段 ` · 等级`。理由是等级本身
 的边界变了——它现在是一个可以被齿轮面板修改的参数，行内用徽章陈述它、面板改它，触发器再重复一遍
-只会在窄屏上和模型名抢宽度（§5.12 那次已经把名字宽度争到 122px，再挂一段强度又打回去一半）。
+只会在窄屏上和模型名抢宽度（§5.12 那次已经把名字宽度争到 122px，再挂一段等级又打回去一半）。
 早先那版注释里关于「分隔符不能用伪元素画、必须作为独立元素渲染」的坑随之一并消失：
 `.dmp-trigger-sep` / `.dmp-trigger-effort` 已删除，`selfcheck-static.mjs` 第 11 组断言它们不得回来。
 `aria-label` **保留**「推理等级 {effort}」（`trigger.ariaEffort`）：那不是显示，屏幕阅读器不该因为这次
 减负而少一条事实。
 
-> **2026-10-15（§5.26）的补充**：触发器标签从"模型名 [+ 强度]"变成 **`提供商/模型名 · 强度`**——
+> **2026-10-15（§5.26）的补充**：触发器标签从"模型名 [+ 等级]"变成 **`提供商/模型名 · 等级`**——
 > 提供商前缀并进来了（两个 provider 真的有同名模型），那个只读 provider chip 删除；`aria-label`
-> 随之从"当前 {model}"改成"当前 {provider}/{model}"。强度分段的形态与理由（§5.13 反向恢复的那段）不变。
+> 随之从"当前 {model}"改成"当前 {provider}/{model}"。等级分段的形态与理由（§5.13 反向恢复的那段）不变。
 
-### 5.2 单层菜单（核心改动）
+### 5.2 单层模型卡（核心改动）
 
 从上到下：
 
@@ -273,21 +275,21 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 **行结构**：`模型名（400 字重，可省略号）` + 右侧 **四个只读事实徽章** + 选中勾，
 **同一行**内完成（2026-10-02 改版：初版是"模型名 + 行内 effort pill"，pill 已删）。
 
-> 2026-10-15（§5.25）起，本节描述的"从上到下"改成了**左右两栏**：搜索框 / 表头 / 列表在右栏，
-> 提供商范围在左栏（窄屏时左栏折成横向条放到右栏上方）。第 2 条的"provider 分组"仍在，
+> 2026-10-15（§5.25）起，本节描述的"从上到下"改成了**左右两栏**：搜索框 / 表头 / 列表在模型列表，
+> 提供商范围在提供商栏（窄屏时折成横向条放到模型列表上方）。第 2 条的"provider 分组"仍在，
 > 但同一件事不再同时出现在 chip、popover 单选组和卡内提示条三处。
 
 ### 5.3 行内事实徽章（2026-10-02 改版，取代初版的"effort 原位切换"）
 
-**为什么删掉行内改强度**：参数面板（§5.10）已经能改强度，而且是**唯一能真写进去**的地方；
-行内再放一个改强度的入口，等于同一件事有两个反馈源。所以行内改成**只陈述事实**，
+**为什么删掉行内改等级**：参数面板（§5.10）已经能改等级，而且是**唯一能真写进去**的地方；
+行内再放一个改等级的入口，等于同一件事有两个反馈源。所以行内改成**只陈述事实**，
 四个徽章的形态、顺序、语义都固定：
 
 | 徽章 | 图标（自绘，见 §5.11） | 值 | 事实来源 |
 |---|---|---|---|
 | 文字输入 | 字母 `T` | 无（图标即结论） | `resolveRoute(...).input`，空则 `defaultInput` |
 | 图片输入 | 相框 + 地平线 + 太阳 | 无 | 同上 |
-| 思考强度 | 大脑（24×24 宿主同款造型） | 档位名（`High` / `Off` / `Default`） | 目录条目的 `reasoning` + 该行生效档位 |
+| 推理 | 大脑（24×24 宿主同款造型） | 档位名（`High` / `Off` / `Default`） | 目录条目的 `reasoning` + 该行生效档位 |
 | 上下文窗口 | 窗口（框 + 标题栏 + 内容线） | `1M` / `128K` / `786K`（**只出现整数 + K/M**） | `contextWindow`，空则 `defaultContextWindow` |
 
 - **两态而不是三态（§5.24 收敛）**：supported（neutral 色调胶囊，图标 + 值）/
@@ -297,7 +299,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
   进 `title` 与 `aria-label`（`badges.ts` 的 `off` 字段就是为这句话留的）。
   斜杠变体与其样式已于 2026-10-15 删除——**画不出来的东西不该留在代码和设计记录里**。
 - **"查不到"绝不画成"不支持"**：这是 §6 里"不给按了没反应的开关"同一条原则的镜像。
-- **强度徽章永远在**：模型没有 `reasoning` 元数据时，它说的是"未声明思考档位"（整句在 `aria-label` / `title` 里），
+- **推理徽章永远在**：模型没有 `reasoning` 元数据时，它说的是"未声明推理档位"（整句在 `aria-label` / `title` 里），
   因为"没有档位"本身就是一条事实；模态/窗口则可能整条缺席（见上）。
 - **值来自 Host，不来自记忆**：`badges.ts` 的 `badgeSpecsOf` 是纯函数，输入是
   `resolveRoute(params 快照, route)` + `reasoning` + 该行生效档位 + 本地化函数，
@@ -310,7 +312,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
   `max-width: 64px` + 省略号，极端长的档位名只会截断自己的值，不会把最后那枚**上下文窗口**徽章顶出卡片。
   徽章条**不换行**（`flex-wrap: nowrap`）：换行会让行高随名字长度变化（实测 46px），列表扫读时会跳。
 - **点徽章 = 点行**：徽章是 `Tag`（渲染 `span`）+ 属地 `aria-hidden`，行是唯一目标。
-- 触发器**不再重复**这一行的事实（`模型 · 强度` 已去掉，见 §5.1/§5.13）：强度归徽章与参数面板，
+- 触发器**不再重复**这一行的事实（`模型 · 等级` 已去掉，见 §5.1/§5.13）：等级归徽章与参数面板，
   触发器只回答"现在是哪个模型"。
 
 ### 5.4 搜索
@@ -325,14 +327,14 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 |---|---|
 | 打开 | 焦点落在搜索框；`↑↓` 移动行高亮；`Enter` 选中高亮行 |
 | 行内 | **没有子控件**（2026-10-02 改版）：行是单一目标，`Enter` 只选行；`→` 不再有任何含义 |
-| `Tab` / `Shift+Tab` | 在 提供商 chip → 搜索框 → 各行 之间遍历；链尾 Tab 回到 chip，链首 Shift+Tab 关闭并把焦点交还触发器 |
+| `Tab` / `Shift+Tab` | 在 提供商栏 → 搜索框 → 各行 之间遍历；链尾 Tab 回到提供商栏，链首 Shift+Tab 关闭并把焦点交还触发器 |
 | `Esc` | 有查询→清空；否则关闭并归还焦点到触发器 |
 | 外点 | 关闭 |
 
 ### 5.6 视觉
 
 - 全部走 `--dsw-*` 语义令牌；材质/模糊/圆角由 `MenuSurface` 提供，不自造。
-- 面板宽 ≤ 320px（`min(320px, 100vw - 32px)`）；定位 `useAnchoredPosition`（gap 8 / margin 12），`side:'top'`、`align:'end'`。
+- 模型卡宽 ≤ 320px（`min(320px, 100vw - 32px)`）；定位 `useAnchoredPosition`（gap 8 / margin 12），`side:'top'`、`align:'end'`。
 - 字号：模型名 13px/400；分组头与徽章为 caption 级（徽章 11px/400，`Tag` 胶囊）；字重不超过 600（仅重试按钮）。
 - 行高 38px（实测量到的就是这个值）：单行放得下"名字 + 4 个 22px 胶囊 + 选中勾"。
 - 胶囊宽度按**紧凑**定：图标格 = 字形本身（14px），水平内边距 4px，图标与文字间距 3px，胶囊间距 2px。
@@ -343,7 +345,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 触发器 `aria-haspopup="menu"` / `aria-expanded` / `aria-controls` / `aria-label` / `aria-busy`；
 列表 `role="menu"`、分组 `role="group"`、行 `role="menuitemradio"` + `aria-checked`；
 行内的徽章条 `aria-hidden="true"`，整行的事实由行的 `aria-label` 一次性给出
-（`"{模型名}，文字输入、不支持图片输入、思考强度 High、上下文窗口 1M"`，用 `badge.rowAria` + `settings.listJoin` 拼）；
+（`"{模型名}，文字输入、不支持图片输入、支持推理、上下文窗口 1M"`，用 `badge.rowAria` + `settings.listJoin` 拼）；
 模型名的 `title` 与徽章条的 `title` 分别给"完整名字"和"整句事实"；
 状态区 `role="status"`；关闭后焦点归还触发器，再开重置查询与高亮。
 
@@ -369,10 +371,10 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 换来的是任何页签状态下都不会出现两层文字重叠。`observeStickyMenuGroups` 的调用保留着
 （它现在只是冗余；宿主哪天修好观察器也不会冲突）。两个卡片（模型 / 提供商）共用这条规则。
 
-### 5.9 提供商筛选控件（追加需求，2026-10-01）
+### 5.9 提供商范围控件（追加需求，2026-10-01）
 
-> **2026-10-15（§5.25）整节被取代**：筛选控件不再是座位上的一个按钮 + 一个独立 popover，
-> 而是**模型卡自己的左栏**；座位上的 chip 退化为只读事实（只写当前模型所属 provider），
+> **2026-10-15（§5.25）整节被取代**：范围控件不再是座位上的一个按钮 + 一个独立 popover，
+> 而是**模型卡自己的提供商栏**；座位上的 chip 退化为只读事实（只写当前模型所属 provider），
 > 该只读事实又在**当日晚些的 §5.26 被并入触发器标签**（`provider/model`）。
 > 本节的"位置 / 点击 / 菜单内容 / 选中后 / 键盘 / 与模型菜单的关系"六条按新形态见 §5.25 与 §5.26；
 > 仍然成立的是：收窄只影响视图、不写 Host、不影响 `/model` 与触发器；记忆按会话且只记 id
@@ -381,17 +383,17 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 | 维度 | 规格 |
 |---|---|
 | 位置 | 模型触发器**左边**，同一个座位内（同一 `dmp-root` flex 行），保证两个 chip 永远相邻 |
-| 常态（2026-10-04 由 §5.22 改写） | `[提供商图标] 主语`——**两种状态、两个主语**：**筛选生效时** chip 写那个 provider，并转强墨色（`data-filtered`），与菜单的单选组逐行一致；**没筛选时** chip 写**当前模型所属的 provider**（次级墨色、`data-filtered` 不亮），它是关于"这个模型住在哪"的事实，**不是**"列表被收窄成了什么"。它仍然**不回答**"列表范围有多大"，也不回答"会话在用哪个模型"（后者是触发器的活，前者由模型卡内的分组头与提示条陈述）。**只有还没选中模型**（目录未答 / 新会话）时 chip 才是「全部」（`provider.all`），那个 `null` 分支不能删 |
+| 常态（2026-10-04 由 §5.22 改写） | `[提供商图标] 主语`——**两种状态、两个主语**：**收窄生效时** chip 写那个 provider，并转强墨色（`data-filtered`），与菜单的单选组逐行一致；**未收窄时** chip 写**当前模型所属的 provider**（次级墨色、`data-filtered` 不亮），它是关于"这个模型住在哪"的事实，**不是**"列表被收窄成了什么"。它仍然**不回答**"列表范围有多大"，也不回答"会话在用哪个模型"（后者是触发器的活，前者由模型卡内的分组头与提示条陈述）。**只有还没选中模型**（目录未答 / 新会话）时 chip 才是「全部」（`provider.all`），那个 `null` 分支不能删 |
 | 窄屏 | 与模型 chip 一样消费 `--dsh-composer-model-text-display` / `--…-icon-display`，整对一起折成图标 |
 | 点击 | 打开**锚定在 chip 上的**提供商小菜单（`MenuSurface` + `useAnchoredPosition`，portal） |
 | 菜单内容 | 常驻搜索框 + 单个粘性分组「模型提供商」：各提供商（模型数）→ **加载失败的提供商排在最后、只列不可选**并标「加载失败」。**菜单里只有真实 provider 行**——`全部` 与 `最近使用` 两行已在 §5.21 删除。**这个会话正在用的那个提供商，行尾多一个「当前会话」**（§5.17） |
 | 计数 | 取自已加载目录（`opencode-go 30`、`commandcode 19`…），tabular-nums；每一行的数字都等于点进去能看到的行数 |
-| 选中后 | 模型列表收窄到该提供商；chip 写该 provider 名并转强墨色（`data-filtered`、`aria-label` 换成 `provider.chipAria`）；**模型卡内**出现一行 `仅显示 {name}` + 「显示全部」一键清除（§5.21：这是退出筛选的唯一出口；§5.22：清除后 chip 回到当前模型的 provider，不是「全部」） |
-| 记住（2026-10-02 追加，2026-10-03 改为**按会话**） | 选择写进本插件自己的 `localStorage['dsh-model-picker.provider.v1:<会话 id>']`（`prefs.ts`），刷新页面/重开**这个会话**后仍是它；清除筛选 = 删掉该会话的项。目录里**已经没有**的 id 会在目录 `ready` 后被丢弃（否则用户会面对一个没有解释的空列表）；**失败但仍列在菜单里**的 provider 不算"没有"，保留。详见 §5.13、§5.15 |
-| 键盘 | 菜单内 `↑↓` 走行、`Tab` 走整卡的焦点链（`聚焦的 DOM` 顺序：左栏 → 搜索框及其按钮 → 各行），`Enter` 选中，`Esc` / `←` 退回 chip；链首 Shift+Tab 关闭并交还触发器。**链是从渲出的卡片里读出来的**，不是手写清单——否则只在某个状态下出现的控件（清除搜索、显示全部、重试）键盘够不到（§5.29） |
+| 选中后 | 模型列表收窄到该提供商；chip 写该 provider 名并转强墨色（`data-filtered`、`aria-label` 换成 `provider.chipAria`）；**模型卡内**出现一行 `仅显示 {name}` + 「显示全部」一键清除（§5.21：这是退出收窄的唯一出口；§5.22：清除后 chip 回到当前模型的 provider，不是「全部」） |
+| 记住（2026-10-02 追加，2026-10-03 改为**按会话**） | 选择写进本插件自己的 `localStorage['dsh-model-picker.provider.v1:<会话 id>']`（`prefs.ts`），刷新页面/重开**这个会话**后仍是它；清除范围 = 删掉该会话的项。目录里**已经没有**的 id 会在目录 `ready` 后被丢弃（否则用户会面对一个没有解释的空列表）；**失败但仍列在菜单里**的 provider 不算"没有"，保留。详见 §5.13、§5.15 |
+| 键盘 | 菜单内 `↑↓` 走行、`Tab` 走整卡的焦点链（`聚焦的 DOM` 顺序：提供商栏 → 搜索框及其按钮 → 各行），`Enter` 选中，`Esc` / `←` 退回 chip；链首 Shift+Tab 关闭并交还触发器。**链是从渲出的卡片里读出来的**，不是手写清单——否则只在某个状态下出现的控件（清除搜索、显示全部、重试）键盘够不到（§5.29） |
 | 与模型菜单的关系 | 互斥：开一个就关另一个（它们是两个独立 popover，不嵌套） |
-| 空状态 | 筛选后无行 → 「该提供商没有可用模型。」；失败的 provider 该行本来就被禁用，选不到 |
-| **不做什么** | 不改 Host、不改 `/model`、不改触发器显示值；筛选绝不参与 `select()` 的参数 |
+| 空状态 | 收窄后无行 → 「该提供商没有可用模型。」；失败的 provider 该行本来就被禁用，选不到 |
+| **不做什么** | 不改 Host、不改 `/model`、不改触发器显示值；范围绝不参与 `select()` 的参数 |
 
 ### 5.10 模型参数面板（追加需求，2026-10-02；同日按 §2.1 的复核结论重做）
 
@@ -409,7 +411,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 |---|---|---|
 | 文字 / 图片 | `describe.value` 里该条目声明的模态列表（`input` / `inputModalities`） | `mutate · set <entry>.input = ['text'\|'image'…]`；未声明时开关显示适配器默认（见 §5.14：文案只称"当前按适配器默认"，不声称它就是生效值），一旦拨动就写成显式列表 |
 | 上下文窗口 | `describe.value` 里该条目的 `contextWindow`；没有则显示 provider 的 `defaultContextWindow`（适配器默认） | `mutate · set <entry>.contextWindow = tokens`；**留空 = `unset`**，回到适配器默认 |
-| 思考强度 | 共享目录的 `current.reasoningEffort ?? defaultEffort`（Host 已接受的值） | `directory.select({ provider, model, reasoningEffort })`——**这是全插件唯一能改强度的地方**（§5.3 改版后行内只剩只读徽章） |
+| 推理等级 | 共享目录的 `current.reasoningEffort ?? defaultEffort`（Host 已接受的值） | `directory.select({ provider, model, reasoningEffort })`——**这是全插件唯一能改等级的地方**（§5.3 改版后行内只剩只读徽章） |
 
 **地址怎么来的**（`params.ts` 的 `resolveRoute`，纯函数，单元门覆盖）：
 `llm/listConfigurableProviders()` 找到 `route.provider` → `{ settingsNs, settingsPath }`；
@@ -422,13 +424,13 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 | 位置 | 模型触发器右侧、同一 `dmp-root` 行内；28×28 图标按钮（`--dsw-radius-sm`） |
 | 标记 | 当前路由在 profile patch 里带着本面板的字段（`describe.user` 命中）时，齿轮加 `data-edited` 小圆点；「恢复默认」同时在此时才可用 |
 | 面板 | `createPortal` + `MenuSurface`，`role="group"`，`aria-label="{模型名} 的模型参数"`，宽 `min(280px, 100vw - 32px)` |
-| 高度预算 | 由父级按齿轮的**实测余量**传入 `maxHeight`（`clamp(240, 可用空间, 460)`）：composer 贴着视口底部，固定的 460px 会让页脚说明掉到视口外 |
-| 滚动（2026-10-02 修缺陷） | **滚动的必须是卡片里的 `.dmp-settings-body`，不能是卡片本身**（§5.13）：`MenuSurface` 把卡片的底色画成自己的绝对定位子元素 `.material`（`inset: 0`），卡片一旦自己滚，这层底就跟着内容上移，卡片下半截没有底色、页面从面板自己的页脚透出来。头部（模型名 + 恢复默认）与状态行留在滚动区外，其余滚动 |
+| 高度预算 | 由父级按齿轮的**实测余量**传入 `maxHeight`（`clamp(240, 可用空间, 460)`）：输入条贴着视口底部，固定的 460px 会让页脚说明掉到视口外 |
+| 滚动（2026-10-02 修缺陷） | **滚动的必须是参数面板里的 `.dmp-settings-body`，不能是参数面板本身**（§5.13）：`MenuSurface` 把参数面板的底色画成自己的绝对定位子元素 `.material`（`inset: 0`），参数面板一旦自己滚，这层底就跟着内容上移，参数面板下半截没有底色、页面从面板自己的页脚透出来。头部（模型名 + 恢复默认）与状态行留在滚动区外，其余滚动 |
 | 侧向 | 按齿轮的上下余量选 `top`/`bottom`（`useAnchoredPosition` 只 clamp 不翻转） |
 | 状态行 | 面板在控件**上方**给出一行状态：正在应用选择（`busy`，优先）/ 读取中 / 部署没挂设置服务 / 读取失败 / 路由不可寻址 / profile 只能查看；写入被拒时换成设置服务的原话（`role="alert"`）；**这是解释"为什么不能用"的唯一位置**，下面的分区提示不再重复（§5.14） |
 | 互斥 | 与模型菜单、提供商菜单互斥：开一个就关另外两个 |
-| 键盘 | 打开后**焦点落在面板卡片本身**，不落在任何控件上；`Tab` 按**渲染顺序**走 文字 → 图片 → 上下文输入 → 各强度档 → 「恢复默认」（都从渲染出的面板里查，**不靠 ref**）；`Esc` / `←` 关闭并把焦点交还齿轮；`↑↓` 留给输入框自己的光标 |
-| 会话切换 | 面板是会话域的（`sessionId` 进注入面），会话一变就自动关闭 |
+| 键盘 | 打开后**焦点落在参数面板本身**，不落在任何控件上；`Tab` 按**渲染顺序**走 文字 → 图片 → 上下文输入 → 各等级档 → 「恢复默认」（都从渲染出的面板里查，**不靠 ref**）；`Esc` / `←` 关闭并把焦点交还齿轮；`↑↓` 留给输入框自己的光标 |
+| 会话切换 | 面板是会话域的（`sessionId` 进座位面），会话一变就自动关闭 |
 | 写入位置 | 面板底部用 `命名空间 · 字段路径` 标出这次编辑落在哪（`title` 里给全文）——可直接对着 `cordis.patch.yml` 核对 |
 
 **打开时焦点落在哪里（2026-10-03 改）**
@@ -438,22 +440,22 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 1. **`Tab` 链与渲染顺序相反**。`chain()` 当时是 `上下文输入 → 文字 → 图片 → …`，而卡片把两个模态开关渲染在
    上下文分区**上面**——面板一打开焦点停在第二个区块，按 `Tab` 焦点却往回跑（WCAG 2.4.3 Focus Order）。
 2. **把首焦点放进唯一的文本框**。这个字段 `onBlur` 即提交，等于把一次 `settings/mutate` 放在随手一下 `Tab`
-   之外；`inputMode="numeric"` 在触屏上会立刻拉起数字键盘，而面板贴着 composer 底部、被键盘盖掉一半；
+   之外；`inputMode="numeric"` 在触屏上会立刻拉起数字键盘，而参数面板贴着输入条底部、被键盘盖掉一半；
    读屏用户听到的第一句是字段和它的 placeholder，而不是「{模型名} 的模型参数」和上面那行状态。
 
-改法：**首焦点落在卡片本身**（`MenuSurface` 加 `tabIndex={-1}`，测量完成后 `panelRef.current?.focus()`），
+改法：**首焦点落在参数面板本身**（`MenuSurface` 加 `tabIndex={-1}`，测量完成后 `panelRef.current?.focus()`），
 `Tab` 的第一跳因此落在阅读顺序的第一个控件上。顺带得到三个好处：只读态不再需要"跳过 disabled 控件"的特判
-（卡片永远可聚焦，而那时所有控件都是 disabled）；`.dmp-settings-input:focus-within` 的蓝框不再默认点亮；
-卡片自带 `:focus-visible` 描边（与该蓝框同一个 token），键盘打开时焦点仍然可见。
+（参数面板永远可聚焦，而那时所有控件都是 disabled）；`.dmp-settings-input:focus-within` 的蓝框不再默认点亮；
+参数面板自带 `:focus-visible` 描边（与该蓝框同一个 token），键盘打开时焦点仍然可见。
 
 两个配套的细节，也是各自独立的缺陷：
 
-- **`chain()` 按渲染顺序重排**（文字 → 图片 → 上下文输入 → 强度档 → 「恢复默认」）。唯一偏离渲染顺序的是
+- **`chain()` 按渲染顺序重排**（文字 → 图片 → 上下文输入 → 等级档 → 「恢复默认」）。唯一偏离渲染顺序的是
   「恢复默认」：它画在卡片头部右上，却排在链尾——破坏性动作不该是打开面板后第一个 `Tab` 落点。
 - **只在第一次测量时取焦点**（`tookFocus`）。`position` 会随滚动/缩放重新测量，每次都重跑会把焦点从用户正在用的
-  控件上拽走——正编辑容量输入、或正在强度档上按方向键时。
+  控件上拽走——正编辑容量输入、或正在等级档上按方向键时。
 
-这三条现在由 selfcheck 的 §5.10 四条门守着（链序 == 渲染序、首焦点是卡片、重新测量不夺焦点、聚焦的卡片自带描边）。
+这三条现在由 selfcheck 的 §5.10 四条门守着（链序 == 渲染序、首焦点是参数面板、重新测量不夺焦点、聚焦的参数面板自带描边）。
 其中两条做过**反向注入**验证门会咬：把链首改回输入框 → 链序门红；把 `panelRef.current?.focus()` 改回
 `chain()[0]?.focus()` → 首焦点门红。**没有在真实 GUI 上复跑**（新链与新焦点只有静态门与类型门），需要在刷新页面
 取到新产物后按 `Tab` 读一遍 `document.activeElement`。
@@ -471,11 +473,11 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 
 **实现中踩到并修掉的两个坑（都在真实 GUI 上复现过）**
 
-1. **写入时卡片自己关掉**：提交瞬间面板把控件整体 `disabled`，React 因此把正在聚焦的输入框
+1. **写入时参数面板自己关掉**：提交瞬间参数面板把控件整体 `disabled`，React 因此把正在聚焦的输入框
    从 DOM 里摘掉，`focusout` 的 `relatedTarget` 为 null —— 座位的 `onBlur` 把"没有去向的焦点变化"
    当成了离场，于是 `close()` 把整个座位关了。修复：`onBlur` 里先看
    `event.currentTarget.contains(document.activeElement)`（或焦点落到 body），这两种情况不算离场。
-   现象是"回车提交后卡片消失、看不到结果"，很容易被误判成写入失败。
+   现象是"回车提交后参数面板消失、看不到结果"，很容易被误判成写入失败。
 2. **`Switch` 不转发 ref**：基线 `Switch` 是普通函数组件（`primitives.d.ts` 里也没有 `ref`），
    初版按 ref 表维护 Tab 链，于是两个开关**静默地不在链里**——键盘根本够不到它们。
    修复：`chain()` 直接查渲染出的面板 DOM（`.dmp-settings-input input` / `[role="switch"]` /
@@ -493,7 +495,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 但严格照宿主自己的规矩：`fill="none"`、`stroke="currentColor"`、圆角线帽/拐角。
 **按 14px 渲染**（不是 12px）：图标过窄是返工的第一条反馈，14px 下字形才立得住。
 
-**两套网格，一个线重。** 前三个字形画在宿主的 16 单位网格上；思考强度用**宿主自己那颗 24×24 的大脑**
+**两套网格，一个线重。** 前三个字形画在宿主的 16 单位网格上；推理徽章用**宿主自己那颗 24×24 的大脑**
 （用户指定造型，9 条 path 原样），保留自己的 `viewBox`。于是线重必须**按网格各写一份**：
 `stroke-width` 的单位是自己的 viewBox，屏幕上 = `值 × 渲染尺寸 / viewBox`。16 网格取 1.6、
 24 网格取 2.4，两者在 14px 下**都落在 1.4px**（大脑若照搬宿主的 2 单位只有 1.17px，比邻居淡 17%；
@@ -503,7 +505,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 |---|---|---|
 | 文字输入 | 带折角的页面 + 两行文字 | 文档本身（参考站 commandcode.ai 的 "Text input"）。**淘汰过**光秃秃的字母 `T`：带衬脚在中文界面里读成「工」 |
 | 图片输入 | 圆角相框 + 一条地平线 + 一个小太阳 | 太阳是"图片"和"矩形边框"的分水岭 |
-| 思考强度 | 两个脑叶在脑干处相接的**大脑剪影** | 这是这个产品自己用来说"思考"的记号（聊天的 reasoning 折叠行、输入框的强度 chip 都是它）；用户指定保留 24×24 原稿。**淘汰过**三级递增竖条——它说的是"有几档"，没说是什么的档位 |
+| 推理 | 两个脑叶在脑干处相接的**大脑剪影** | 这是这个产品自己用来说"思考"的记号（聊天的 reasoning 折叠行、输入框的等级 chip 都是它）；用户指定保留 24×24 原稿。**淘汰过**三级递增竖条——它说的是"有几档"，没说是什么的档位 |
 | 上下文窗口 | 窗口：圆角框 + 标题栏 + 一行内容 | 直译"窗口"。**淘汰过两个方案**：`[—]`（括号夹一条容量条）与 `|—|`（两端帽夹一条跨度线）——两者在小尺寸都读成一个减号，可能被当成"不支持"，语义正好反了 |
 
 **画不出来的东西不留**：这里曾经定义过第二形态——同一字形叠一条左上到右下的斜杠（通用的
@@ -560,16 +562,16 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 "具备这个事实"一种形态**（不得出现 `off` 分支或 `SLASH`，且行仍须 `filter(spec => !spec.off)`）。
 每一条都用「改坏 → 断言必须红 → 改回」验证过，不是摆设。
 
-### 5.13 第三次反馈（2026-10-02）：筛选持久化、面板底色缺陷、触发器文案
+### 5.13 第三次反馈（2026-10-02）：范围持久化、面板底色缺陷、触发器文案
 
-> **其中"筛选持久化"这一条已被 §5.26 反向**：范围不再记忆，每次打开都取当前会话的 provider；
+> **其中"范围持久化"这一条已被 §5.26 反向**：范围不再记忆，每次打开都取当前会话的 provider；
 > `prefs.ts` 删除，只留 `retiredScope.ts` 清理旧键。本节其余两条（面板底色缺陷、触发器文案）仍然成立。
 
 三条反馈一起改，彼此无关，各自留一条机器门（`selfcheck-static.mjs` 第 11 组）。
 
-**①「模型提供商的选项也持久化」** —— 提供商筛选从"组件存活期内保持"变成**记住的偏好**：
+**①「模型提供商的选项也持久化」** —— 提供商范围从"组件存活期内保持"变成**记住的偏好**：
 `src/client/prefs.ts`（当时的 `localStorage['dsh-model-picker.provider.v1']`，**已由 §5.15 改成按会话分片**；
-拿不到 store 就吞掉异常）。筛选仍然是**纯视图状态**——它不写 Host、
+拿不到 store 就吞掉异常）。范围仍然是**纯视图状态**——它不写 Host、
 不改 `/model`、不改触发器显示的真实模型，持久化只改变"这个视图状态活多久"。
 （同一次改动里「最近使用」用了同一套读写策略，那个模块与策略已在 §5.21 整体删除。）
 
@@ -578,7 +580,7 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 只会看到「该提供商没有可用模型」，而菜单里根本没有那一行可以取消——那种状态比"没记住"糟得多。
 目录还没加载完时**不能**判（`idle/loading` 时"没有任何 provider"是正常的），所以判据挂在 `status === 'ready'` 上。
 
-**②「模型参数列表，样式有 bug」** —— 面板卡片滚到下半截时，**卡片自己的底色没了**，页面从面板页脚
+**②「模型参数列表，样式有 bug」** —— 参数面板滚到下半截时，**参数面板自己的底色没了**，页面从面板页脚
 （写入位置 + 说明那一段）透出来，同时那个底层的圆角出现在卡片中间（修复前见
 `shots/panel-scroll-before.png`，修复后 `shots/panel-scrolled.png` / `-light.png`）。
 
@@ -589,15 +591,15 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 .material { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--dsw-menu-surface-fill); }
 ```
 
-卡片底色不是 surface 自身的 `background`，而是它内部一个**绝对定位子元素** `.material`。绝对定位子元素
+参数面板底色不是 surface 自身的 `background`，而是它内部一个**绝对定位子元素** `.material`。绝对定位子元素
 锚在滚动容器的 padding box 上、并**随内容一起滚动**，所以只要 surface 自己滚（旧版 `.dmp-settings`
 写了 `overflow-y: auto`），这层底就会随 `scrollTop` 上移，露出下边 `scrollTop` 那么高的一条**没有底色**
-的区域——内容的边框、文字照常画（它们不在那层里），看起来就是"卡片下半截透明"。用真实 GUI 量到的数字
-也对得上：卡片 337px 高、滚动 ~100px 时，底色正好只盖到 189px 处，与用户截图里那条圆角边界一致。
+的区域——内容的边框、文字照常画（它们不在那层里），看起来就是"参数面板下半截透明"。用真实 GUI 量到的数字
+也对得上：参数面板 337px 高、滚动 ~100px 时，底色正好只盖到 189px 处，与用户截图里那条圆角边界一致。
 
 修法是**把滚动交给内部元素**（模型卡早就是这么做的：surface `overflow: hidden`，`.dmp-groups` 滚）：
 `.dmp-settings { overflow: hidden }` + 新增 `.dmp-settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto }`，
-卡片头部（模型名 + 恢复默认）和状态行留在滚动区外。
+参数面板头部（模型名 + 恢复默认）和状态行留在滚动区外。
 
 **③「模型选择器名称边上没必要显示思考强度」** —— 触发器只写模型名：删除 `.dmp-trigger-sep` /
 `.dmp-trigger-effort` 两个元素与它们的样式，气泡文案同步改成只报模型名（见 §5.1）。
@@ -618,18 +620,18 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 | 连接重置 | 由 `modelDirectories` 作废旧 generation，组件只读 store，无需自管 |
 | ~~**最近项已不在目录**~~ | **不适用（§5.21）**：「最近使用」机制整体删除，没有"最近项"了 |
 | **记住的提供商已不在目录**（被删/改名） | 目录 `ready` 后把该项丢掉、列表回到全部；**不打**开一个只解释"该提供商没有可用模型"的空列表。目录还没加载完（`idle/loading`）时不动它——"还没读到"不等于"没有了" |
-| **localStorage 不可用**（隐私模式/沙箱） | 读写都吞掉：筛选本身照常工作，只是记不住 |
-| **筛选排除了当前模型** | 列表里没有它，但**触发器照旧显示真实模型**（筛选是浏览辅助，不是状态改写）；`/model` 弹窗、Host 全部不受影响 |
-| **被筛选的提供商加载失败** | 该行在提供商菜单里禁用并标「加载失败」；若筛选已指向它（此前加载成功、后来失败），列表空 + 空状态文案 + 上方照旧显示 provider 警告行与重试 |
+| **localStorage 不可用**（隐私模式/沙箱） | 读写都吞掉：范围本身照常工作，只是记不住 |
+| **收窄排除了当前模型** | 列表里没有它，但**触发器照旧显示真实模型**（范围是浏览辅助，不是状态改写）；`/model` 弹窗、Host 全部不受影响 |
+| **被收窄掉的提供商加载失败** | 该行在提供商菜单里禁用并标「加载失败」；若范围已指向它（此前加载成功、后来失败），列表空 + 空状态文案 + 上方照旧显示 provider 警告行与重试 |
 | **参数面板：路由不可寻址** | 控件整体禁用 + 状态行说明"模型来自适配器内置目录、没有可编辑的声明"；不提供按了没反应的开关。适配器**公布过**的事实照常陈述（§5.19），分区提示写明来源；**没公布**的分区整块不渲染 |
 | **行内徽章：模态/窗口查不到** | 对应徽章**不渲染**（不是画成"不支持"）：路由不在 `llm/listConfigurableProviders`、条目既没声明、适配器默认也没有、**且适配器目录也没公布**时就是这种情况 |
-| **行内徽章：模型没有 reasoning 元数据** | 强度徽章仍然渲染，但**划掉**并说明"未声明思考档位"；四个事实里"没有档位"也是事实，删除徽章会让行看起来缺了一块 |
+| **行内徽章：模型没有 reasoning 元数据** | 推理徽章仍然渲染，但**划掉**并说明"未声明推理档位"；四个事实里"没有档位"也是事实，删除徽章会让行看起来缺了一块 |
 | **行内徽章：档位名很长**（适配器自由文本） | `.dmp-badge-value` 有 `max-width: 64px` + 省略号：只截断自己的值，徽章条被封顶在 161px，四枚胶囊始终完整留在行内（详见 §5.12） |
 | **行内徽章：模型名很长** | 名字先省略号（`min-width: 48px` 兜底），徽章条保持自己的宽度、不换行 |
 | **参数面板：读不出的容量** | 红框 + `aria-invalid` + 提示文案，**保持原值不动**（不静默写成 0/NaN），也不发出写入 |
 | **参数面板：写入被 Host 拒绝** | 状态行换成 Host 原话（`role="alert"`），值保持不动；`settings/conflict` 由 store 重读一次后自动重试，第二次仍冲突才报给用户 |
-| **参数面板：部署没挂设置服务 / 读取失败** | 状态行说明原因，面板只能查看；思考强度与选模型不受影响（设置面是 `ctx.get` 取的可选服务，不进必需注入，见 §6 的静默回退那条） |
-| **参数面板：路由不在当前目录里** | 面板照常打开（地址与目录无关）；没有 `reasoning` 元数据就不渲染强度区 |
+| **参数面板：部署没挂设置服务 / 读取失败** | 状态行说明原因，面板只能查看；推理等级与选模型不受影响（设置面是 `ctx.get` 取的可选服务，不进必需注入，见 §6 的静默回退那条） |
+| **参数面板：路由不在当前目录里** | 面板照常打开（地址与目录无关）；没有 `reasoning` 元数据就不渲染等级区 |
 
 ---
 
@@ -662,9 +664,9 @@ Picker ── useSyncExternalStore(directory.store) ──► 列表/搜索/每�
 - **事实单元门**（`scripts/test-params.mjs`）：把 `params.ts` + `badges.ts` + `dictionary.ts`
   打包成一个无依赖 ESM，在 node 里断言寻址、容量解析**与行内事实推导**。
   徽章那批断言用**真实 zh 文案**（不是桩）比对整句，因为一个"句子写错的徽章"比一个缺失的徽章更糟：
-  `['文字输入','不支持图片输入','思考强度 High','上下文窗口 800K']`、以及行 `aria-label` 的完整拼句。
-  退化分支也都有断言：不可寻址的路由只留强度徽章（**适配器也没公布**时）；既没声明又没有适配器默认时模态条整条不出现；
-  没有 `reasoning` 元数据时强度是划掉的；而适配器**公布过**的行内事实（§5.19 的能力轴）单独有一批断言。
+  `['文字输入','不支持图片输入','支持推理','上下文窗口 800K']`、以及行 `aria-label` 的完整拼句。
+  退化分支也都有断言：不可寻址的路由只留推理徽章（**适配器也没公布**时）；既没声明又没有适配器默认时模态条整条不出现；
+  没有 `reasoning` 元数据时等级是划掉的；而适配器**公布过**的行内事实（§5.19 的能力轴）单独有一批断言。
   能力目录本身（读取顺序、`declared` 守卫、一次一 provider、晚挂载的 reader）在同一门里用假 Remote 覆盖。
   `npm test` = build + selfcheck + test:params + test:mutations（§5.31 把改坏验证也收进来自动跑）。
 - **浏览器验收**：座位只有一层（无 root 两格）；搜索常驻并跨 provider；行内四个只读徽章与模型名同行，
@@ -692,9 +694,9 @@ occupants:
 | 2 | 搜索常驻且打开即聚焦 | ✅ | `searchFocused: true`，placeholder「搜索模型…」 |
 | 3 | 跨 provider 模糊搜索 | ✅ | 输入 `glm` → 分组收敛为 opencode-go / zai / commandcode / WorkBuddy（组间按最佳匹配上移） |
 | 4 | ~~最近使用置顶~~ | ⚠️ **已过期** | 当时：分组首位为「最近使用」，`localStorage['dsh-model-picker.recent.v1']` 存在，`/model` 里的切换也会被记录。先被 §5.16 取消"置顶分组"（存储与记录逻辑当时还在），**整个机制又已在 §5.21 连同 `recent.ts` 一起删除——这一行现在描述的东西完全不存在了** |
-| 5 | 行内 effort 一次提交切模型+强度 | ✅ | GLM-5.1（pill=Default）→ 小菜单 6 档 → 选 `Off` → 触发器 `GLM-5.1 · Off`，`aria-label` 同步 · **已被 §8.4 的改版取代**（行内不再改强度），此处保留为当时的事实记录 |
-| 6 | 触发器格式 | ✅ | `DeepSeek-V41-Flash · Off`：名字、` · ` 分隔符、强度三段；强度取 caption 墨色 |
-| 7 | 选择落到 Host（不只是本地状态） | ✅ | 切换后**刷新整页**，触发器仍显示该模型+强度（durable projection 往返） |
+| 5 | 行内 effort 一次提交切模型+等级 | ✅ | GLM-5.1（pill=Default）→ 小菜单 6 档 → 选 `Off` → 触发器 `GLM-5.1 · Off`，`aria-label` 同步 · **已被 §8.4 的改版取代**（行内不再改等级），此处保留为当时的事实记录 |
+| 6 | 触发器格式 | ✅ | `DeepSeek-V41-Flash · Off`：名字、` · ` 分隔符、等级三段；等级取 caption 墨色 |
+| 7 | 选择落到 Host（不只是本地状态） | ✅ | 切换后**刷新整页**，触发器仍显示该模型+等级（durable projection 往返） |
 | 8 | 与 `/model` 弹窗共享状态 | ✅ | 打开 `/model`：弹窗把 `DeepSeek V4.1 Flash Fast` 标为当前项，与座位触发器逐字一致 |
 | 9 | 外点 / Esc 关闭 | ✅ | `outsideCloses: true`；Esc 先清查询、再关面板并把焦点交还触发器（`aria-expanded=false`） |
 | 10 | `↑↓` 高亮 + `aria-activedescendant` | ✅ | 搜索框内按 `↓` 后焦点仍在搜索框，`aria-activedescendant` 由 row-0 移到 row-1 |
@@ -776,12 +778,12 @@ occupants:
 
 | # | 验收项 | 结果 |
 |---|---|---|
-| 1 | 行内不再有可点的强度控件 | ✅ 全表 0 个 `button[role=menuitem]`、0 个 `.dmp-pill`；`EffortMenu` 已从产物中消失 |
+| 1 | 行内不再有可点的等级控件 | ✅ 全表 0 个 `button[role=menuitem]`、0 个 `.dmp-pill`；`EffortMenu` 已从产物中消失 |
 | 2 | 徽章与模型名**同一行** | ✅ 行高 **38px**（改版初稿的双行版是 47px）；`.dmp-row-copy` 是 `flex-direction: row` |
 | 3 | 四个事实都画出来了 | ✅ 80 行共 **282** 枚徽章：68 行 × 4 枚 + 12 行 × 1 枚（见第 6 条） |
 | 4 | 徽章句子成立 | ✅ 例：`"DeepSeek V4.1 Flash，文字输入、图片输入、思考强度 Default、上下文窗口 1M"`——四个事实的措辞与值都来自 Host 快照 |
 | 5 | "没有这一项"由空轨道陈述，不靠颜色也不靠斜杠 | ✅ 例：`"DeepSeek-V4-Pro，文字输入、不支持图片输入、思考强度 High、上下文窗口 1M"`——`aria-label` 说全，行内那一列留空（`dmp-badge-slot`）；无 reasoning 元数据的行读到 `"…，未声明思考档位"` |
-| 6 | **查不到就不画**（不猜） | ✅ 9 行只有强度徽章：`xiaomiMiMo` 6 行（`MiMo-V2.5`…）+ `WorkBuddy` 3 行（`Hy4 preview · x0.29`…）——这两个 provider 不在 `llm/listConfigurableProviders` 里，所以模态与窗口读不到，徽章整条不渲染 |
+| 6 | **查不到就不画**（不猜） | ✅ 9 行只有推理徽章：`xiaomiMiMo` 6 行（`MiMo-V2.5`…）+ `WorkBuddy` 3 行（`Hy4 preview · x0.29`…）——这两个 provider 不在 `llm/listConfigurableProviders` 里，所以模态与窗口读不到，徽章整条不渲染 |
 | 7 | 空间预算 | ✅ 行内宽 298px（320px 卡片实测）：名字 **122px** + 徽章条 **151px**（纯图标胶囊各 22px、`Default` 60px、`1M` 41px）+ 选中勾 14px。二次返工把徽章条从 211.9px 压到 150.9px、名字从 52.7px 提到 122.1px，见 §5.12 |
 | 8 | 不可交互 | ✅ 徽章是 `Tag` 渲染的 `span`（`data-tone="neutral" / "quiet"`）+ 徽章条 `aria-hidden`，行是唯一目标 |
 | 9 | 浅/深两主题 | ✅ 深色 `shots/row-badges-dark.png`、浅色 `shots/row-badges-light.png`（浅色是把 `body[data-ds-dark-theme]` 临时摘掉渲染的，截图后已恢复） |
@@ -821,7 +823,7 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 
 | # | 验收项 | 结果 |
 |---|---|---|
-| 1 | 触发器不再显示强度 | ✅ `.dmp-trigger` 文本 = `DeepSeek-V41-Flash`；`.dmp-trigger-effort` / `.dmp-trigger-sep` 计数 **0** |
+| 1 | 触发器不再显示等级 | ✅ `.dmp-trigger` 文本 = `DeepSeek-V41-Flash`；`.dmp-trigger-effort` / `.dmp-trigger-sep` 计数 **0** |
 | 2 | 触发器气泡同样只有模型名 | ✅ 气泡 `textContent` = `DeepSeek-V41-Flash`（`role=tooltip`，`data-side=top`） |
 | 3 | 屏幕阅读器的名字不缩水 | ✅ `aria-label` = 「选择模型，当前 DeepSeek-V41-Flash，推理等级 High」 |
 | 4 | 提供商筛选跨刷新存活 | ✅ 选 `DeepSeek 账号` → chip 变它、`localStorage = deepseek-account` → **刷新整页** → chip 仍是它 |
@@ -935,7 +937,7 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 
 **① 一个"看不见"的缺陷：11px 说明文字只过 2.08:1。**
 `.dmp-settings-hint` / `-notice` / `-note` / `-label` 用的是 `--dsw-alias-label-caption`
-（浅色 `#adb2b8`），在本插件自己的卡片底色（`--dsw-menu-surface-fill` 合成到 `--dsw-alias-bg-base`
+（浅色 `#adb2b8`），在本插件自己的面板底色（`--dsw-menu-surface-fill` 合成到 `--dsw-alias-bg-base`
 之上，浅色 `rgb(251,252,252)`）上只有 **2.08:1**，深色也只有 **3.82:1**——而它们写着
 「尚未声明，当前按适配器默认：文字、图片」「已声明；留空并回车 = 恢复适配器默认」这类**必须先读懂才能
 操作**的话。WCAG AA 对这么小的字要求 4.5:1，两条主题都不通过。这个缺陷能活这么久，是因为
@@ -943,7 +945,7 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 
 宿主给得起的墨色只有两级能过：`--dsw-alias-label-secondary`（浅 5.64:1 / 深 9.40:1）与
 `--dsw-alias-label-primary`。所以面板里**凡是真话**（分区标题、提示、状态行、页脚说明、
-写入位置、字段 placeholder、状态区文案、筛选条）一律改用 `label-secondary`，
+写入位置、字段 placeholder、状态区文案、收窄提示条）一律改用 `label-secondary`，
 层级改由**字号**承担（11px / 12px / 13px）。`--dsw-alias-label-caption` 仍然保留给
 **图标**（齿轮、chevron、提供商 chip）——图标不是文字，没有对比度下限的问题，
 而它作为"最安静的一级"正好是图标该有的位置。
@@ -963,7 +965,7 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 （浅 `#ec1313` 4.38:1 / 深 `#f25a5a` 3.61:1），并靠 **24px** 进 WCAG"大字"档（3:1）过关。
 这个做法被推翻撤掉了：
 
-1. **24px 与面板 11–13px 的字阶严重冲突**，一条拒绝语会把 280px 的卡片撑成横幅；
+1. **24px 与面板 11–13px 的字阶严重冲突**，一条拒绝语会把 280px 的参数面板撑成横幅；
 2. 24px 的长原话会换行到 3 行以上，被顶出视口，或者只能塞进一个**没有键盘入口**的内层滚动区
    ——那是把"布局缺陷"换成了"内容够不到"的缺陷；
 3. 更根本的是：**这套调色板里没有能在两个主题下做正文的红色**
@@ -978,7 +980,7 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 
 **③ 文案：把"解释为什么"和"说明值从哪来"分开。**
 改版前，路由不可寻址时同一件事被说了**三遍**（状态行 + 两个分区的提示），三句都在说
-"这里不能编辑"；而真正没有解释的状态是 **`busy`**：在面板里点一个强度档会提交共享选择，
+"这里不能编辑"；而真正没有解释的状态是 **`busy`**：在面板里点一个等级档会提交共享选择，
 `pending` 立刻让整个面板的控件变灰——用户自己点的那一下把自己的面板点停了，屏幕上却一句话都没有
 （`aria-busy` 只告诉屏幕阅读器）。
 
@@ -1011,8 +1013,8 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 字段显示值改为从 `address` 派生、只有"半途输入"是本地状态（`capacityDraft`），
 并把"提交时到底该做什么"抽成纯函数 `capacityAction`。抽出来才看清两个缺陷：
 
-1. **没碰过的字段也会写**：`onBlur` 在每次关闭卡片时都会触发（点触发器、点页面、切窗口），
-   而字段显示的就是 Host 的值，于是"提交"等于一次原值 `set`——每次关卡片都白发一次
+1. **没碰过的字段也会写**：`onBlur` 在每次关闭参数面板时都会触发（点触发器、点页面、切窗口），
+   而字段显示的就是 Host 的值，于是"提交"等于一次原值 `set`——每次关参数面板都白发一次
    `settings/mutate`、顺带推高 revision。现在 `draft === null || draft === committed` 直接 `skip`。
 2. **被拒的值一失焦就"好了"**：旧 `onBlur` 发现 `capacityError` 为真就清掉标志并返回，
    于是按 Tab 出去再回来，红框和提示消失、字段里还是那段读不出来的文本。
@@ -1022,8 +1024,8 @@ Host 往返记录覆盖，且这次没有改动提交逻辑）；② 浅色截�
 
 `scripts/check-contrast.mjs`（`npm run contrast`，已进 `npm test`）读**安装版宿主的令牌表**
 （`dsh-client-ui-theme/lib/client.js`，只解析 `const CSS` 模板本身，不会把模块里的 TypeScript
-误当成规则），自己解析 `var()` 链、把半透明的卡片底色合成到**两种可能的下层底色**
-（页面 `--dsw-alias-bg-base` 与 composer 卡 `--dsw-specific-input-major`——深色下后者更暗，
+误当成规则），自己解析 `var()` 链、把半透明的面板底色合成到**两种可能的下层底色**
+（页面 `--dsw-alias-bg-base` 与输入条卡 `--dsw-specific-input-major`——深色下后者更暗，
 只看页面底色会把深色的 3.61:1 算成 4.30:1），然后：
 
 - 逐个样式**从 styles.ts 里读**它自己的 `color` 令牌与 `font-size`（不在本文件里硬编码期望值，
@@ -1063,7 +1065,7 @@ caption 规则；`.dmp-settings-hint { opacity: 0.55 }`；TSX 行内 `style={{ o
 > 这个改法当时让 chip 和它自己的菜单互相打脸（菜单勾「全部 ✓」而 chip 写 `commandcode`）。§5.21 把
 > 「全部」那一行从菜单里删掉之后，这个矛盾的前提没了——菜单里没有任何一行在说「全部」，chip 也就不再
 > 是在跟单选组抢同一句话。现在的形态与本节 ② 相同（`chipProviderId = filterProviderId ??
-> state.current?.provider ?? null`），但**筛选生效时 chip 仍以筛选为准**，而且两个状态用墨色 +
+> state.current?.provider ?? null`），但**收窄生效时 chip 仍以范围为准**，而且两个状态用墨色 +
 > `data-filtered` 分开。①（按会话分片记忆）和 ④（会话边界重读）一直在。
 
 **反馈原文**：「在不同对话窗口，模型选择器展示的模型是当前任务使用的模型，但是模型提供商没有继承这个
@@ -1077,14 +1079,14 @@ caption 规则；`.dmp-settings-hint { opacity: 0.55 }`；TSX 行内 `style={{ o
 | # | 位置 | 缺陷 |
 |---|---|---|
 | 1 | `Picker.tsx` `useState(() => readProviderFilter())` | 只在挂载时读一次。座位在换会话时**不重挂载**（§5.10 的 `settingsSession` 就是为这个事实专门写的补丁），所以初值永不再跑 |
-| 2 | `activeProviderLabel` | 只从 `providerFilter` 推导，从不读 `state.current.provider`——没筛选时永远显示「全部」，而旁边的触发器正显示着某个具体模型 |
-| 3 | `groups` 的收窄 | 全局筛选会把新会话**正在用的那一组整个挡掉**，列表里连它的行都没有 |
+| 2 | `activeProviderLabel` | 只从 `providerFilter` 推导，从不读 `state.current.provider`——未收窄时永远显示「全部」，而旁边的触发器正显示着某个具体模型 |
+| 3 | `groups` 的收窄 | 全局范围会把新会话**正在用的那一组整个挡掉**，列表里连它的行都没有 |
 | 4 | `currentVisibleIndex` → `activeIndex` | 当前模型被挡掉时它是 `-1`，打开菜单高亮落到无关的第一行，勾选标记也消失 |
 
 复现：窗口 A 跑 `opencode-go`、窗口 B 跑 `deepseek-account` → 两个触发器各自正确，但 B 的 chip 仍写着
 `opencode-go`，菜单里 `deepseek-account` 那组被过滤掉了，B 当前的模型既看不见也选不回来。
 
-这不是宿主座位缺了行为：官方 `ModelSelect` 的 composer 只显示模型名、提供商只作为 `/model` 弹窗的分组
+这不是宿主座位缺了行为：官方 `ModelSelect` 的输入条只显示模型名、提供商只作为 `/model` 弹窗的分组
 标题，**本来就没有 chip**，所以没有可继承的东西——会话级 provider 真值必须由本插件自己接上。
 
 **改法：把"会话真值"和"用户覆盖"分成两层。**
@@ -1093,9 +1095,9 @@ caption 规则；`.dmp-settings-hint { opacity: 0.55 }`；TSX 行内 `style={{ o
 有效提供商 = providerFilter ?? state.current?.provider ?? null
 ```
 
-- **未筛选**：chip 写当前会话那个模型的提供商（与触发器同源），`data-filtered` 不亮，**列表不收窄**。
+- **未收窄**：chip 写当前会话那个模型的提供商（与触发器同源），`data-filtered` 不亮，**列表不收窄**。
   收窄语义仍然只属于用户的显式选择——否则 chip 会藏掉用户从没要求藏的模型，「显示全部」也会变成假话。
-- **已筛选**：chip 与列表都以用户的选择为准，会话自己跑在哪个提供商上不参与（用户有意把列表带到别处，
+- **已收窄**：chip 与列表都以用户的选择为准，会话自己跑在哪个提供商上不参与（用户有意把列表带到别处，
   不该被它恰好在跑的模型拽回去）。
 - **会话还没选模型**时回到「全部」。
 
@@ -1105,10 +1107,10 @@ caption 规则；`.dmp-settings-hint { opacity: 0.55 }`；TSX 行内 `style={{ o
 两者由同一段代码保持一致。旧版那个不带会话 id 的全局键在挂载时清掉（`retireLegacyProviderFilter`），
 否则它会永远留在 store 里，不被读也没有解释。
 
-**没有做的**：§5.9 原本还剩一条——"当前模型被筛选挡掉时把它单开一个置顶分组"。改完按会话记忆后，跨会话
-的错配已经不存在，剩下的唯一情形是**用户亲手把这个会话的列表筛到了它正在跑的模型之外**——那是明确的
+**没有做的**：§5.9 原本还剩一条——"当前模型被范围挡掉时把它单开一个置顶分组"。改完按会话记忆后，跨会话
+的错配已经不存在，剩下的唯一情形是**用户亲手把这个会话的列表收窄到了它正在跑的模型之外**——那是明确的
 意图，卡内的 `仅显示 {name}` + 「显示全部」和触发器上那个诚实的 `provider/model` 已经把它说清楚了。
-强行把被筛掉的模型塞回列表，等于让"筛选"这个词失去意义。
+强行把被收窄掉的模型塞回列表，等于让"范围"这个词失去意义。
 
 **机器门**（`selfcheck-static.mjs` 第 11 组，从 1 条扩到 5 条）：窄化按 `sessionId` 读、按 `filterSession`
 写；键必须由会话 id **拼出来**且必须退役旧键；座位必须在会话边界重读；chip 标签必须从
@@ -1137,7 +1139,7 @@ caption 规则；`.dmp-settings-hint { opacity: 0.55 }`；TSX 行内 `style={{ o
 于是「最近使用」被定义成**只换一组行，不换分组方式**——
 
 ```
-未筛选：  DeepSeek 账号          （只有 provider 分组，最近使用不再置顶）
+未收窄：  DeepSeek 账号          （只有 provider 分组，最近使用不再置顶）
 选中后：  ▍DeepSeek 账号         ← 现成的粘性分组头
            V4.1-Flash-Fast
            V4.1
@@ -1193,10 +1195,10 @@ caption 规则；`.dmp-settings-hint { opacity: 0.55 }`；TSX 行内 `style={{ o
 ### 5.17 第七次反馈：chip 和菜单互相打脸
 
 > **⚠ 本节是历史记录，且已被 §5.22 部分反转。** 本次结论里"chip 必须能说出 `全部` 和 `最近使用`"这一半
-> 已被 §5.21 部分推翻：菜单不再有 `最近使用` 行，`全部` 也从菜单行变成了 chip 自己的未筛选文案。
+> 已被 §5.21 部分推翻：菜单不再有 `最近使用` 行，`全部` 也从菜单行变成了 chip 自己的未收窄文案。
 > **2026-10-04 又进一步（§5.22）**：本节"chip 只回答列表范围、绝不读会话"这条也被反转——`全部` 那一行
 > 从菜单里消失后，本节反对 chip 读会话的**论据**（"菜单勾 `全部 ✓` 而 chip 写 `commandcode`"）不存在了。
-> 现在未筛选时 chip 写当前模型的 provider，**筛选生效时仍然只写筛选**；本节留下的两条要求继续成立：
+> 现在未收窄时 chip 写当前模型的 provider，**收窄生效时仍然只写范围**；本节留下的两条要求继续成立：
 > 会话真值必须在菜单那一行上有「当前会话」（§5.22 里它正好给 chip 的说法做背书），以及"chip 必须说得清
 > 自己处在哪个状态"——靠墨色 + `data-filtered` + 两套 aria 文案说清。
 
@@ -1212,16 +1214,16 @@ chip，于是同一个控件开始说两件互斥的事：chip 说"你在这个 
 
 | | 是什么 | 什么时候变 | 在哪显示 |
 |---|---|---|---|
-| **列表范围** | 视图状态。未筛选 / 某个 provider（**当时还有 `全部`、`最近使用` 两项，§5.21 删除**） | 用户改筛选 | **chip**（菜单勾什么它写什么；未筛选那一项§5.21 起由 chip 自己说，§5.22 起 chip 改说模型所在 provider、只有没选模型时才说 `全部`） |
+| **列表范围** | 视图状态。未收窄 / 某个 provider（**当时还有 `全部`、`最近使用` 两项，§5.21 删除**） | 用户改范围 | **chip**（菜单勾什么它写什么；未收窄那一项§5.21 起由 chip 自己说，§5.22 起 chip 改说模型所在 provider、只有没选模型时才说 `全部`） |
 | **会话实际在用的 provider** | Host 已接受的事实 | 换模型、换会话 | **提供商菜单里那一行的行尾**，标「当前会话」 |
 
 于是：
 
 - chip 回到单一职责 `providerFilter`。「全部」和「最近使用」**必须能显示**——它们是这个单选组的正式
   成员，chip 要能表示菜单的范围，就得能说出它的每一项；把它们从 chip 上拿掉，chip 在四个状态里有
-  两个说不出来。（**§5.21 更新**：单选组缩到只剩 provider 一项，`全部` 以 chip 未筛选文案的形式活下来，
+  两个说不出来。（**§5.21 更新**：单选组缩到只剩 provider 一项，`全部` 以 chip 未收窄文案的形式活下来，
   `最近使用` 整个删掉——这句话的前提没了，但"chip 必须说得清自己处在哪个状态"这条要求还在。
-  **§5.22 再更新**：未筛选的 chip 改说当前模型的 provider，`全部` 只在"还没选中模型"时出现。）
+  **§5.22 再更新**：未收窄的 chip 改说当前模型的 provider，`全部` 只在"还没选中模型"时出现。）
 - 「当前会话」落在 `opencode-go` 那一行的行尾，紧挨计数，构成一列尾部信息。位置选在这里，是因为
   **问"这个会话在用哪个 provider"的人，此刻正看着这张菜单**。样式与 `.dmp-provider-count` 同墨同号
   （`label-secondary` 11px——caption 在这张卡上只有 2.08:1，§5.14 已经判过一次），放行内是因为
@@ -1325,7 +1327,7 @@ chip，于是同一个控件开始说两件互斥的事：chip 说"你在这个 
 
 | 面 | 改动前 | 问题 |
 |---|---|---|
-| 行内徽章 | 只有强度徽章（模态与窗口整条不出现） | 不算错，但把"读不到"和"不支持"混在一起——用户无法区分 |
+| 行内徽章 | 只有推理徽章（模态与窗口整条不出现） | 不算错，但把"读不到"和"不支持"混在一起——用户无法区分 |
 | 面板输入分区 | **两个开关都画成关闭** | 这是**主动的错误陈述**：等于宣布该模型既不收文字也不收图片。`panelCopy` 的注释当时写着"禁用开关仍然显示模型接受什么"，而 `shownInputOf(null)` 返回 `[]`，两者互相打脸 |
 | 面板上下文分区 | 整块不渲染 | 用户拿不到窗口大小 |
 
@@ -1341,7 +1343,7 @@ chip，于是同一个控件开始说两件互斥的事：chip 说"你在这个 
    去打 endpoint（联网 + 用凭据）。开一次模型菜单就偷偷发这种请求，是选模型菜单无权付的代价，
    所以这类路由保持"什么都没公布"。
 4. **一次一 provider，一页一次**：`CapabilityStore.ensure()` 合并重复请求、只读一次、不轮询、不订阅推送。
-   行内徽章在**菜单打开时**才触发读取（不开菜单不花这次调用），面板在**它自己打开时**触发。
+   行内徽章在**模型卡打开时**才触发读取（不开模型卡不花这次调用），面板在**它自己打开时**触发。
    provider 目录（`listConfigurableProviders`）也只在第一次需要时读一次。
 5. **挂载顺序不参与**：Remote 命名空间是异步挂载的（§2.2 最后一行），所以 LLM 面用**取值函数**而不是
    激活时抓一次；适配器自有目录**每次读时**才 `ctx.get('remote.<ns>')`。晚注册的 reader 会把已经问过
@@ -1356,7 +1358,7 @@ chip，于是同一个控件开始说两件互斥的事：chip 说"你在这个 
 busy × capacityError = 320 个状态），Rule 6 另外保证"公布"那条提示列出的模态与开关状态一致。
 
 **为此收窄的一处显示**：不可寻址 + 适配器什么都没公布时，输入分区整块不再渲染。以前它渲染两个关闭的
-开关，那是一个没人验证过的断言；现在面板在该状态下只留状态行 + 强度分区。新增 `showsInputSection`
+开关，那是一个没人验证过的断言；现在面板在该状态下只留状态行 + 等级分区。新增 `showsInputSection`
 与既有的 `showsContextField` 对称，两者都由单元门覆盖。
 
 **已知边界**：
@@ -1384,7 +1386,7 @@ busy × capacityError = 320 个状态），Rule 6 另外保证"公布"那条提�
 2. **快照只在「自己写」时更新。** 设置快照原来只在挂载时 `ensure()` 读一次，之后只有本插件
    自己写成功才会动——在「设置 → 模型」页改了声明，本插件的徽章、齿轮圆点、面板显示全部
    停在旧值，README 里写的「重开面板」其实也读不到（`ensure` 只在 `idle` 时读）。现在
-   模型菜单与参数面板**每次打开**都 `refresh()`；`read()` 在途时保留上一份好快照并合并并发
+   模型卡与参数面板**每次打开**都 `refresh()`；`read()` 在途时保留上一份好快照并合并并发
    读，所以代价是每次打开一次读、画面在答案落地前不变。**仍未订阅 host 的设置推送**：
    面板开着的时候去别处改，要等下次打开才看得到。门：selfcheck §13。
 
@@ -1408,28 +1410,28 @@ toast 的 `[data-composer-card]` 锚点这三个宿主内部标识补进了 self
 
 | 被删的东西 | 去处 |
 |---|---|
-| 「全部」菜单行（`{ id: null, … }`） | **删除**。它说的"未筛选"是一个**列表状态**，不是一个提供商。`provider.all` 字典键**保留**，改由 chip 在未筛选时使用（见下）。**§5.22 又把它改成"只在还没选中模型时"用**——未筛选的 chip 现在说当前模型的 provider |
+| 「全部」菜单行（`{ id: null, … }`） | **删除**。它说的"未筛选"是一个**列表状态**，不是一个提供商。`provider.all` 字典键**保留**，改由 chip 在未收窄时使用（见下）。**§5.22 又把它改成"只在还没选中模型时"用**——未收窄的 chip 现在说当前模型的 provider |
 | 「最近使用」菜单行（`RECENT_ID = '__recent__'`） | **删除**。连同整条机制一起：`src/client/recent.ts` 删除、`recentGroupsFor` / `readRecent` / `remember` / `RECENT_VISIBLE` / `RECENT_ID` 全部删除，`localStorage['dsh-model-picker.recent.v1']` 不再有人读写，`groups` memo 里的 `RECENT_ID` 分支、`empty.recent` / `provider.filteredRecent` 文案键一并消失 |
 
 `rowKey` 是 `recent.ts` 里唯一还被别处需要的导出（`Picker` / `SettingsMenu` / `capabilities` 都按它
 索引行），所以它**搬到 `src/client/contract.ts`**——那个模块本来就是"跨模块的结构与身份"的住处，
 不是新建一个 `rowKey.ts` 只为放一个两行的函数。
 
-**「全部」的角色变化：从菜单行变成 chip 的未筛选文案。** 这是这次改动里唯一需要想一下的地方。
-菜单删掉那一行之后，`activeProviderLabel` 的 `null` 分支成了"未筛选"**唯一的说法**：
+**「全部」的角色变化：从菜单行变成 chip 的未收窄文案。** 这是这次改动里唯一需要想一下的地方。
+菜单删掉那一行之后，`activeProviderLabel` 的 `null` 分支成了"未收窄"**唯一的说法**：
 
 - 删menu行之前：chip 说「全部」有菜单那一行兜着，chip 只是个复述。
 - 删menu行之后：chip 说「全部」是**这个状态仅存的陈述**。改坏它（让 `null` 走 provider 查表）会让
-  未筛选状态在界面上完全无名——所以它有一条自己的门。
+  未收窄状态在界面上完全无名——所以它有一条自己的门。
 
 > ⚠️ **上面这段已被 §5.22 改写（同日晚些时候）**：用户随后指出，菜单里既然不再有「全部」，chip 就
-> 不该在没筛选时也说「全部」——它应该说**当前模型所属的 provider**。于是 `null` 分支现在只在
+> 不该在未收窄时也说「全部」——它应该说**当前模型所属的 provider**。于是 `null` 分支现在只在
 > **还没选中模型**时生效（`provider.all` 仍然保留，门也仍然保留，只是守的状态换了名字）。本节关于
 > "菜单里不许有非 provider 行"与"「显示全部」是唯一退路"的两条结论**不受影响**。
 
-**退出筛选的唯一出口**：模型卡内的 `.dmp-filter-hint`（`provider.filtered` + 「显示全部」按钮，
+**退出收窄的唯一出口**：模型卡内的 `.dmp-filter-hint`（`provider.filtered` + 「显示全部」按钮，
 `provider.showAll`）。以前可以点菜单里的「全部」行退出，现在那行没了，所以这条提示条**不是装饰**：
-它若停止渲染，用户会被一个按会话持久化的筛选困住，刷新页面也还在。它同样有自己的门。
+它若停止渲染，用户会被一个按会话持久化的范围困住，刷新页面也还在。它同样有自己的门。
 
 **历史演变线条（第三次，也是最后一次改这个方向）**：
 
@@ -1462,7 +1464,7 @@ toast 的 `[data-composer-card]` 锚点这三个宿主内部标识补进了 self
 单元门同步：`test-params.mjs` 删掉构建入口里的 `recent.ts`、解构里的四个 recent 导出、以及
 「"recently used" as a provider-menu option」整段（10 条断言）与它专用的 `catalog` / `route` /
 `labelOf` / `idsOf` / `labelsOf` / `walk` / `bucketed` 辅助。**`prefs` 那一组一条不动**——
-provider 筛选记忆还在，`readProviderFilter` / `rememberProviderFilter` / `providerKeyOf` /
+provider 范围记忆还在，`readProviderFilter` / `rememberProviderFilter` / `providerKeyOf` /
 `retireLegacyProviderFilter` 照旧被驱动。
 
 **改坏验证**（每条都实际打上并确认门变红，用**副本备份法**还原后全绿；改坏是否真的落到盘上，
@@ -1523,7 +1525,7 @@ provider 筛选记忆还在，`readProviderFilter` / `rememberProviderFilter` / 
 13 组用例对**真实源码 + 洗注释后的真实管线**跑过：6 组"必须绿"（含嵌套泛型、尾随逗号）、
 5 组"必须红"（含上述 `.concat` 夹带与顺序对调）。
 
-### 5.22 第十一次反馈（2026-10-04）：chip 没筛选时也要说出 provider
+### 5.22 第十一次反馈（2026-10-04）：chip 未收窄时也要说出 provider
 
 > **已被取代**：本节的整套"chip 两态 + `provider.chipAria*` 文案 + `data-filtered` 墨色分级"在
 > §5.25（chip 退化为只读事实）与 §5.26（该事实并入触发器标签、chip 删除）里先后下线。
@@ -1537,8 +1539,8 @@ provider 筛选记忆还在，`readProviderFilter` / `rememberProviderFilter` / 
 
 | 问题 | 用户选定 |
 |---|---|
-| 未筛选时 chip 写什么？ | **写当前模型所属的 provider**（不是把菜单那一行勾上、也不是只留图标） |
-| 点提供商菜单里一行是什么语义？ | **继续只筛选视图**（不写 Host、不切会话、不改 `/model`） |
+| 未收窄时 chip 写什么？ | **写当前模型所属的 provider**（不是把菜单那一行勾上、也不是只留图标） |
+| 点提供商菜单里一行是什么语义？ | **继续只收窄视图**（不写 Host、不切会话、不改 `/model`） |
 
 **为什么 §5.17 的反对这次不成立。** §5.17 禁止 chip 读会话，理由是同一个控件说了两句互斥的话：菜单
 勾着 `全部 ✓`，chip 却写 `commandcode`。§5.21 把 `全部` 那一行从菜单里**删掉**之后，单选组里没有任何
@@ -1549,18 +1551,18 @@ provider 筛选记忆还在，`readProviderFilter` / `rememberProviderFilter` / 
 
 | 状态 | chip 写什么 | 墨色 | `data-filtered` | `aria-label` |
 |---|---|---|---|---|
-| 筛选生效 | 那个 provider（= 菜单里打勾的那一行） | `label-primary` | 置位 | `provider.chipAria` |
-| 没筛选、已选模型 | **当前模型所属的 provider** | `label-secondary` | 不亮 | `provider.chipAriaModel`（写明"模型列表未筛选"） |
-| 没筛选、还没选模型 | `provider.all`（「全部」） | `label-secondary` | 不亮 | `provider.chipAria` |
+| 收窄生效 | 那个 provider（= 菜单里打勾的那一行） | `label-primary` | 置位 | `provider.chipAria` |
+| 未收窄、已选模型 | **当前模型所属的 provider** | `label-secondary` | 不亮 | `provider.chipAriaModel`（写明"模型列表未筛选"） |
+| 未收窄、还没选模型 | `provider.all`（「全部」） | `label-secondary` | 不亮 | `provider.chipAria` |
 
 - **派生**：`filterProviderId = providerFilter`；`chipProviderId = filterProviderId ?? state.current?.provider ?? null`。
   卡内提示条用的 `filterLabel` **只**从 `filterProviderId` 来——它说的是"列表被窄化成了什么"，与 chip
   的主语不是同一件事，两者共用一个是以后最容易重新并成一句话的地方。
 - **背书**：菜单里 `session: group.id === state.current?.provider` 那一行的「当前会话」标，与 chip 用的是
-  同一个真值。所以 chip 的未筛选说法在它自己打开的菜单里有**一行可核对**——这正是 §5.17 缺的那一半。
-- **代价（明说）**：未筛选时界面上不再有"列表不限 provider"这句话。它由模型卡里的各个 provider 分组头、
-  以及筛选时那一行 `仅显示 {name}` 承担；chip 的 tooltip 与 aria 都补了"（列表未筛选）"，免得把
-  provider 名读成筛选状态。
+  同一个真值。所以 chip 的未收窄说法在它自己打开的菜单里有**一行可核对**——这正是 §5.17 缺的那一半。
+- **代价（明说）**：未收窄时界面上不再有"列表不限 provider"这句话。它由模型卡里的各个 provider 分组头、
+  以及收窄时那一行 `仅显示 {name}` 承担；chip 的 tooltip 与 aria 都补了"（列表未筛选）"，免得把
+  provider 名读成收窄状态。
 - **样式**：`.dmp-provider`（次级）与 `.dmp-provider[data-filtered]`（primary）的墨色分级原样复用，
   它现在的职责从"强调"变成"区分两个主语"，注释已按这个含义重写。
 
@@ -1626,13 +1628,13 @@ provider 筛选记忆还在，`readProviderFilter` / `rememberProviderFilter` / 
 | 事实网格 | `.dmp-badges` 由 flex 改 **grid**：`--dmp-col-icon` ×3 + `--dmp-col-window`，间隔 `--dmp-col-gap`；每行按 `BADGE_FACTS` 顺序**恒定渲染四条轨道** | 改造前徽章右挤：三枚徽章的行与四枚徽章的行把同一个事实画在**不同的 x** 上，"哪一列是什么"逐行变化，眼睛无法上下比较。固定轨道后四列逐行对齐，而且**模型名那一列的宽度逐行相同**（实测 10 行全是 160px、`nameRight` 全是 888）——省略号落点也统一了 |
 | 缺失的事实 | 该模型没有的事实在**它自己的轨道里留空**（`dmp-badge-slot`），不画图标、不把邻居左移 | 位置本身就是陈述："这一列是空的"= 这个模型不声明这个事实；行内 `title` 与 `aria-label` 仍把整句（含"不支持图片输入"）说出来。斜线图标（斜杠 + quiet）是当时能想到的最弱标记，固定列把这件事讲得更干净——**它随后就被从代码里删掉了**，因为改完固定轨道后已经没有渲染点 |
 | 宽度预算 | 轨道 = 14 + 8 + 14 + 8 + 14 + 8 + 47 = **113px**（window 轨道 = 14 图标 + 3 间距 + 30 值） | 改造前常见三事实行约 107px、四事实行约 129px：**最坏情况反而变窄**，四事实行的名字多出 16px，三事实行基本不变；名字列从此是一个定值 |
-| 列名（表头） | 搜索框下加一行 `.dmp-legend`：四枚同样的字形 + 各自一个词（文字/图片/思考/窗口），11px 次级墨色，**不滚动** | 四个 14px 字形是这席位的全部发明，而改造前它们的含义只存在于行的 `title` 里——不悬停就无从知道。表头说一次即可；它是**真文案**（不是 `aria-hidden` 装饰），所以 a11y 门"不许藏自己的文案"对它成立 |
+| 列名（表头） | 搜索框下加一行 `.dmp-legend`：四枚同样的字形 + 各自一个词（文字/图片/推理/窗口），11px 次级墨色，**不滚动** | 四个 14px 字形是这席位的全部发明，而改造前它们的含义只存在于行的 `title` 里——不悬停就无从知道。表头说一次即可；它是**真文案**（不是 `aria-hidden` 装饰），所以 a11y 门"不许藏自己的文案"对它成立 |
 | 值列 | 值仍**贴着自己的字形**（3px 间距），不设 `text-align: right` | 试过右对齐 47px 值列：`262K` 贴住图标而 `1M` 被甩开 16px，"一个事实 = 一枚徽章"的读法散掉。图标才是列的对齐基准，值跟着图标走（实测每行值左缘都是 976） |
 | 分组头 | 12px/500，**`label-secondary`**（宿主原样式是 11px `label-tertiary`），保留 §5.8 的常驻底色带；组间距 8px | 分组头是这张卡**唯一的路标**，却是卡上最难读的一行：`label-tertiary` 在本仓对比度门里就有结论（浅色 2.08:1，正是其它说明文字全部改用 secondary 的原因）。改后实测 dark 头墨/带底 **8.66:1**。底色带**不换成不透明**是有意的：卡片材质实测 `backdrop-filter: blur(40px) saturate(1.5)`（宿主给的玻璃），行从带下穿过时 6% 影影绰绰，比一条与身后内容不同步的实心条纹更轻 |
 | 行不被压住 | `.dmp-groups { scroll-padding-top: 26px }` | 搜索框里打字会把高亮行 `scrollIntoView({block:'nearest'})`，而浏览器不知道粘性头占 26px：实测改造前第一条命中**正好停在分组头底下**。scroll-padding 把滚动视口内缩，实测首行 `rowTop = headingBottom = 103` |
 | 搜索框 | 用回宿主 `Input` 自己的材质（`bg-layer-1` + 0.5px `border-l4`），输入文字 13px（与行名同级） | 改造前它是一片透明底 + 12px 占位文字，读起来像标签不像输入框；而卡上第一条内容恰恰是"要打字的地方"。13px 是因为 12px 让第一个控件比它筛的行还小 |
 | 参数面板 | 五处 `border-top: 1px` 全部删掉，改由 **12px 间距** 分节；节标签 11px→**12px**；写入位置 10px→**11px**；容量输入框改用宿主 Input 材质 | 五条细线是小面板里最多余的装饰（"no thin rules"），分组交给空间与字号；10px 那一行是全席位最小的字，偏偏是复核者唯一要读的路径 |
-| 触发器层级 | 强度 `11px` + `tabular-nums`（名字仍 13px） | 改造前名字与强度同号同墨，"DeepSeek V4.1 Flash · Max"读成一整条标签 |
+| 触发器层级 | 等级 `11px` + `tabular-nums`（名字仍 13px） | 改造前名字与等级同号同墨，"DeepSeek V4.1 Flash · Max"读成一整条标签 |
 
 **没有做的**（想过、否掉）：给缺席的轨道画一个极淡的点（位置已经说了这件事，再画就是装饰）；
 把分组头底色换成不透明（见上，卡片是玻璃）；把列名字直接换成行内文字（4 个 CJK 词比 4 枚 14px
@@ -1661,7 +1663,7 @@ selfcheck §10b 断言"四条轨道由一条规则给出、每行都渲染 `BADG
    之后，`onPick` 立刻关掉它并 `show()` 打开模型卡（§5.21 时代的 `Picker.tsx`）。也就是说用户要的
    "先 provider 再模型"这条流程**已经存在**，只是被拆成两个弹窗、还要按顺序接力。
 2. **旧 chip 是一个隐藏模式**：退出收窄的唯一出口是模型卡里那条提示 +「显示全部」（§5.21 的
-   `dmp-filter-hint`，代码注释写着 "the ONLY way back out"）。用户必须先意识到"我在筛选态"才能退出——
+   `dmp-filter-hint`，代码注释写着 "the ONLY way back out"）。用户必须先意识到"我在收窄态"才能退出——
    典型的 mode error，与好不好看无关。
 3. **provider 这件事被画了三遍**：座位 chip、popover 里的单选组、模型卡里的提示条；chip 还背着
    §5.22 承认过的"两种状态两个主语"（README 当时写"不必去猜这个 provider 名是哪个意思"）。
@@ -1675,20 +1677,20 @@ chip 退化成**只陈述"当前模型所属 provider"的事实**；参数面板
 
 | 件 | 决策 | 为什么 |
 |---|---|---|
-| 卡片宽度 | `min(520px, 100vw - 32px)`，且只挂在**模型卡**的新类 `.dmp-card` 上 | 520 = 181（左栏盒子）+ 8（卡片内边距）+ 331（实测模型列），模型列因此 ≥320 且名字列从 ~160px 涨到**实测 175px**。**不能写在 `.dmp-menu` 上**：那是三个卡片共用的材质类，参数面板同时带 `.dmp-menu` + `.dmp-settings`，写在它上面会把面板的头部与正文并排（见下"踩到的坑"） |
-| 左栏 | `role="listbox"`，`全部` + 各 provider（带计数）+ 加载失败行（disabled、排最后），`flex: 0 0 176px`、独立滚动、右侧 1px `border-l1` 分隔 | 176 是实测下限：最长真实 provider 名在 13px 下要 ~132px，加计数与选中勾后不能省略号——**说出 provider 名是这一栏唯一的活**。13 行实测不滚动（412px 高），15 个以上才滚 |
-| 「全部」行 | **加回来**，作为左栏第一行（`id: null`，计数 = 全目录） | §5.21 把「全部」从 popover 里删掉，理由是"那一行看起来像 provider 却不是"——在 popover 里成立，在**范围列表**里不成立：列表成员本来就是范围。它同时就是收窄的出口，替掉了卡内那条 `dmp-filter-hint` 提示条 |
+| 卡片宽度 | `min(520px, 100vw - 32px)`，且只挂在**模型卡**的新类 `.dmp-card` 上 | 520 = 181（提供商栏盒子）+ 8（卡片内边距）+ 331（实测模型列），模型列因此 ≥320 且名字列从 ~160px 涨到**实测 175px**。**不能写在 `.dmp-menu` 上**：那是三个卡片共用的材质类，参数面板同时带 `.dmp-menu` + `.dmp-settings`，写在它上面会把面板的头部与正文并排（见下"踩到的坑"） |
+| 提供商栏 | `role="listbox"`，`全部` + 各 provider（带计数）+ 加载失败行（disabled、排最后），`flex: 0 0 176px`、独立滚动、右侧 1px `border-l1` 分隔 | 176 是实测下限：最长真实 provider 名在 13px 下要 ~132px，加计数与选中勾后不能省略号——**说出 provider 名是这一栏唯一的活**。13 行实测不滚动（412px 高），15 个以上才滚 |
+| 「全部」行 | **加回来**，作为提供商栏第一行（`id: null`，计数 = 全目录） | §5.21 把「全部」从 popover 里删掉，理由是"那一行看起来像 provider 却不是"——在 popover 里成立，在**范围列表**里不成立：列表成员本来就是范围。它同时就是收窄的出口，替掉了卡内那条 `dmp-filter-hint` 提示条 |
 | 选中语义 | `aria-selected` + 复用行侧那个 `.dmp-check` 勾；**不换墨色、不加边框** | 两个窗格用同一个"选中"记号，读法一致；`dmp-check` 是图标，不欠对比度 |
 | 「当前会话」 | **不写字**，改为 `aria-current="true"` + 名字 `font-weight: 500` | 一行里再塞 5 个 CJK 字（~55px）会把 provider 名挤成省略号，而这正是不能失败的那件事；这条事实由**卡外的 chip** 用字说出来（卡片打开时它就在屏幕上） |
-| chip | 变成 `span`：无 hover/按下/焦点环、无 `aria-haspopup`/`aria-expanded`、无 `data-filtered`；只读 `state.current.provider`；**未选中模型时不渲染** | 它只剩一个主语，§5.22 的两态歧义随问题一起消失。`全部` 现在是**范围**、归左栏；没有模型时没有 provider 可陈述，此时不画比画「全部」更真。**（2026-10-15 当日晚些的 §5.26 把这一格删掉了**：同一个事实由触发器自己说） |
+| chip | 变成 `span`：无 hover/按下/焦点环、无 `aria-haspopup`/`aria-expanded`、无 `data-filtered`；只读 `state.current.provider`；**未选中模型时不渲染** | 它只剩一个主语，§5.22 的两态歧义随问题一起消失。`全部` 现在是**范围**、归提供商栏；没有模型时没有 provider 可陈述，此时不画比画「全部」更真。**（2026-10-15 当日晚些的 §5.26 把这一格删掉了**：同一个事实由触发器自己说） |
 | 搜索越界 | 收窄时若查询在**别的 provider** 里有命中，卡里写「其他提供商还有 N 个匹配」+「显示全部」 | 范围只约束**列表**、不约束**搜索**：不然在收窄状态下打模型名会读成"没这个模型"，而出口在另一栏、用户没理由去看。`elsewhereCount = rankByName(全目录).length - rows.length` |
-| 键盘 | 列表：`←`（搜索框为空时 / 焦点在行上）进左栏；左栏：`↑↓`/`Home`/`End` 移焦点、`Enter`/空格采纳并回搜索框、`→` 回搜索框、`Esc` 关卡片；`Tab` 链 = 左栏的**单一 tab stop** → 搜索 → 各行（DOM 顺序） | 左栏是 listbox：roving tabindex 让它只占一个 Tab 站，否则 12 个 provider 就是 12 次 Tab。`←` 在搜索框里带文字时**必须是光标键**，所以只在空查询时接管 |
-| 窄屏 | `@media (max-width: 536px)`：`.dmp-card` 变列、左栏变**横向条**（`overflow-x: auto`）、名字 `max-width: 132px` | 536 是算出来的：两栏要 505px 卡片宽，而卡片在视口 <552px 时等于 `100vw-32px` → 视口 537px 是临界。**同一份 DOM、同一套 role、同一套键**，只有 flex 方向变，所以不需要两套测试 |
+| 键盘 | 列表：`←`（搜索框为空时 / 焦点在行上）进提供商栏；提供商栏：`↑↓`/`Home`/`End` 移焦点、`Enter`/空格采纳并回搜索框、`→` 回搜索框、`Esc` 关卡片；`Tab` 链 = 提供商栏的**单一 tab stop** → 搜索 → 各行（DOM 顺序） | 提供商栏是 listbox：roving tabindex 让它只占一个 Tab 站，否则 12 个 provider 就是 12 次 Tab。`←` 在搜索框里带文字时**必须是光标键**，所以只在空查询时接管 |
+| 窄屏 | `@media (max-width: 536px)`：`.dmp-card` 变列、提供商栏变**横向条**（`overflow-x: auto`）、名字 `max-width: 132px` | 536 是算出来的：两栏要 505px 卡片宽，而卡片在视口 <552px 时等于 `100vw-32px` → 视口 537px 是临界。**同一份 DOM、同一套 role、同一套键**，只有 flex 方向变，所以不需要两套测试 |
 | 空状态 | 收窄 + 有查询时空态改用 `empty.providerSearch`（这个提供商里没有匹配的模型） | 旧文案 `empty.provider`（该提供商没有可用模型）在这个状态下是**假话**：它有模型，只是不匹配。两栏让这个状态更容易到达（点一行 + 打字两下） |
 | 删除 | `ProviderMenu.tsx`；`data-filtered`；`provider.chipAria/chipAriaModel/chipTipModel/sessionHere/filtered/menuAria/search/searchEmpty` 九个键；`providerAt`/`providerSide`/`providerMenuRef`/`toggleProviderMenu`/`closeProviderMenu` | 三弹窗变两弹窗：外面点击、座位消失、`onBlur` 三处互斥判定同时少一条边 |
 
-**没有做的**（想过、否掉）：把参数面板并进右栏第三层（一次任务里同时出现导航/选择/编辑三种事，
-测试面积翻倍，用户已明确本轮不做）；左栏加自己的搜索框（12 行不需要，而且卡里已经有一个搜索框，
+**没有做的**（想过、否掉）：把参数面板并进模型列表第三层（一次任务里同时出现导航/选择/编辑三种事，
+测试面积翻倍，用户已明确本轮不做）；提供商栏加自己的搜索框（12 行不需要，而且卡里已经有一个搜索框，
 两个搜索框正是旧设计要删的东西）；按 provider 分组头在收窄时隐藏（留着头更省逻辑，且"全部"时它仍是路标）；
 给「当前会话」画一个点（点也得有解释，而名字重一档不需要）。
 
@@ -1705,21 +1707,21 @@ chip 退化成**只陈述"当前模型所属 provider"的事实**；参数面板
 **门**：`npm test` 五道门全绿，其中 selfcheck §11 被**重写**（不是删掉）：
 `e`（chip 只读 `state.current.provider`、且不再有 `data-filtered`）、`e2`（会话 provider 标在自己那一行，
 由 `aria-current` + 一条字重规则承载，且 `provider.sessionHere` 键必须已经不在）、
-`g`（左栏行 = **字面量「全部」+ 目录 spread + 失败 spread**，恰好三个顶层元素，用深度 0 逗号切分逐个判）、
-`h`（没有模型时 chip **不渲染**）、`h2`（出口是左栏第一行）、`h3`（越界命中被计数 + 「显示全部」真的调 `pickProvider(null)`）、
+`g`（提供商栏行 = **字面量「全部」+ 目录 spread + 失败 spread**，恰好三个顶层元素，用深度 0 逗号切分逐个判）、
+`h`（没有模型时 chip **不渲染**）、`h2`（出口是提供商栏第一行）、`h3`（越界命中被计数 + 「显示全部」真的调 `pickProvider(null)`）、
 `h4`（选择只走 `pickProvider` 一条路：写范围 + 焦点交回搜索框，且 `closeProviderMenu`/`providerAt` 不得回潮）。
 §14 从"三个弹窗一起关"改成两个。`check-contrast.mjs` 的 STYLES 把 `.dmp-provider[data-filtered]` 换成
-`.dmp-provider` 并新增 `.dmp-rail-name`，CONTAINERS 补上左栏四级祖先链（否则它的规则会被扫描静默跳过）。
+`.dmp-provider` 并新增 `.dmp-rail-name`，CONTAINERS 补上提供商栏四级祖先链（否则它的规则会被扫描静默跳过）。
 `_accept-provider-menu.cjs` 删除，代之以 `_accept-provider-rail.cjs`（26 条断言）。**`test-params.mjs`
 一行未改**：本次没碰任何纯逻辑（寻址 / 徽章推导 / 文案决策），范围本来就是组件内的视图状态。
 
-**实测（真实 GUI 1440×900，`rev=3484a7e55cdb`）**：卡片 520×420；左栏 181×412、行高 30、13 行且不滚动；
+**实测（真实 GUI 1440×900，`rev=3484a7e55cdb`）**：卡片 520×420；提供商栏 181×412、行高 30、13 行且不滚动；
 模型列 331、模型名列**每行 175**、徽章条 113（与 §5.24 的预算逐位相符）；chip `SPAN`、
 `title=当前模型所在提供商：opencode-go`、无 `data-filtered`；点 `DeepSeek 账号`（2 个模型）后
 模型行数 2、该行 `aria-selected`、卡片仍开、`activeElement` 是搜索框、chip 文本不变；
 点「全部」回到 64 行；`←` 落到 `全部`、`↓` 到 `DeepSeek 账号`、`→` 回搜索框；
 查询 `dots` 在 `DeepSeek 账号` 范围内 0 命中 → 条带「其他提供商还有 2 个匹配 / 显示全部」→
-点它回到「全部」且 2 行。窄屏 500×820：卡片 468 宽、左栏 460×35 在列表**上方**、模型列 460。
+点它回到「全部」且 2 行。窄屏 500×820：卡片 468 宽、提供商栏 460×35 在列表**上方**、模型列 460。
 截图 `shots/accept-rail-wide.png`、`accept-rail-scoped.png`、`accept-rail-narrow.png`、
 `accept-rail-search-elsewhere.png`、`accept-settings-column.png`；README 用的
 `row-badges-*` / `provider-*` / `rail-stacked-*` / `composer-with-gear.png` 已重拍。
@@ -1735,29 +1737,29 @@ chip 退化成**只陈述"当前模型所属 provider"的事实**；参数面板
 | 件 | 决策 | 为什么 |
 |---|---|---|
 | 触发器标签 | 一个字符串 `provider/model`（渲染为 `opencode-go/DeepSeek V4.1 Flash`），**不是两个 span** | 它是模型的身份，不是两个并列事实；合成一个标签让 §5.1 的宽度契约原样生效（整段跟着 composer 的 `--dsh-composer-model-text-display` 折叠、尾部省略号），也不必再决定"名字和提供商谁先让位"。提供商是**前缀**，所以被截断时仍然说得出是哪个 provider |
-| 强度分段 | 仍是独立的 `.dmp-trigger-effort`（`·` 由 CSS `::before` 画） | 它是参数、不是身份：一行徽章陈述它、齿轮面板改它，触发器只顺带说出当前值。§5.1 的"名字弹性、强度固定一词"分工不变 |
+| 等级分段 | 仍是独立的 `.dmp-trigger-effort`（`·` 由 CSS `::before` 画） | 它是参数、不是身份：一行徽章陈述它、齿轮面板改它，触发器只顺带说出当前值。§5.1 的"名字弹性、等级固定一词"分工不变 |
 | chip | **整个删除**：`.dmp-provider` / `.dmp-provider-label` / `.dmp-provider-icon` 三条规则、`provider.chipTip` 文案键、那段 JSX | 触发器已经把同一件事说得更全（连模型名一起）。两个元素说同一个 provider 是重复，而且 chip 占的 ~94px 正是模型名最缺的宽度 |
-| 无模型时 | 标签退回 `trigger.fallback` / `trigger.loading`，**没有前缀** | 没有模型就没有 provider 可陈述；`全部` 是**范围**，只属于左栏 |
+| 无模型时 | 标签退回 `trigger.fallback` / `trigger.loading`，**没有前缀** | 没有模型就没有 provider 可陈述；`全部` 是**范围**，只属于提供商栏 |
 | 参数面板的 `aria` | 仍只说模型名（`settings.openAria`） | provider 不是模型参数，那一句的主语是"这个模型的参数" |
 | 触发器 `aria-label` | `选择模型，当前 {provider}/{model}[，推理等级 {effort}]` | 屏幕阅读器拿到的两段身份与可见标签一致（`/` 也照读，这正是屏幕上写的东西） |
 | 范围默认值 | 打开时 `setProviderFilter(currentProviderId)`（无模型则 `null` = `全部`） | "每次点击打开面板，都是显示当前会话使用的模型提供商" 就是这一行。顺带一个好处：`activeIndex` 的兜底是 `currentVisibleIndex`，于是**高亮直接落在当前模型上**，而不再是从 `全部` 列表的第一行开始 |
 | 范围生命周期 | 只活在这一次打开；会话边界（`scopeSession !== sessionId`）重置为**新会话的** provider | 座位不随会话重挂载，跨会话残留的范围会指向一个跟当前对话无关的 provider |
 | 持久化 | **全删**：`prefs.ts`（读/写/按会话键/旧键清理）删除，`pickerFilter` 不再读写 `localStorage` | 记住的范围与触发器说的身份**几乎必然在某次会话恢复后不一致**（范围是上次的，身份是这次的），而两者在屏幕上只差一栏；"每次打开重新回答"比"记住但要解释为什么不同"更便宜 |
 | 旧数据 | 新增 `retiredScope.ts`：前缀 `dsh-model-picker.provider.` 的**一次性全扫**，在**插件激活**时执行 | 删掉读它的代码不会删掉键。前缀保留**改名前的拼写**（它描述的正是旧包名写下的数据），并同时覆盖两种历史形状（按会话的 `…v1:<id>` 与更早的单键 `…v1`）。放在激活而不是座位挂载：这是数据迁移、幂等、与对话无关，从不开卡的会话也不该留着死键 |
-| 左栏 `全部` | **保留** | §5.26 之后"全部"不再是新开的默认值，它变成唯一的横向浏览入口（以及越界搜索的落点），更该留着 |
-| 文案 | `provider.chipTip` 删除；`trigger.aria` / `trigger.ariaEffort` 的占位符从 `{model}` 改成 `{provider}/{model}` | 占位符的名字要说清它填的是什么；两处强度键同时改，zh/en 键集不变 |
+| 提供商栏 `全部` | **保留** | §5.26 之后"全部"不再是新开的默认值，它变成唯一的横向浏览入口（以及越界搜索的落点），更该留着 |
+| 文案 | `provider.chipTip` 删除；`trigger.aria` / `trigger.ariaEffort` 的占位符从 `{model}` 改成 `{provider}/{model}` | 占位符的名字要说清它填的是什么；两处等级键同时改，zh/en 键集不变 |
 
 **没有做的**（想过、否掉）：把 provider 做成会先于模型名省略的独立 span（需要 `flex-shrink` 权重，
 而"整段是一个身份"本来就不需要谁先让位）；给 `全部` 行加一个"上次"标记（范围不再有历史）；
 把旧键的清理塞进 `Picker` 的挂载（数据迁移不该跟着座位走）；在触发器里用 `·` 分隔 provider 与模型
-（`·` 已经是强度分隔符，两个 `·` 会让"哪一段是身份"读不出来）。
+（`·` 已经是等级分隔符，两个 `·` 会让"哪一段是身份"读不出来）。
 
 **门**：`npm test` 五道门全绿。selfcheck §11 再次改写（不是删除）：
 `c`（不再读写存储 + 打开时取会话 provider）、`c2`（会话边界重置，新增）、
 `d`（旧记录一次性全扫、前缀保持旧拼写、挂在 `ctx.effect` 上而不是座位里）、
 `e`（标签就是 `provider/model`，且无 provider 时不加前缀）、
 `h`（座位行**没有** chip：类名与文案键都不得回潮）、
-`e2`/`f`/`g`/`h2`–`h5` 的文字随新语义更新（左栏结构、出口、越界计数、`pickProvider` 单一写路径、
+`e2`/`f`/`g`/`h2`–`h5` 的文字随新语义更新（提供商栏结构、出口、越界计数、`pickProvider` 单一写路径、
 Tab 跳过 disabled 全部保留）。§15 的 identity 门从"持久化键不跟包名"改成"**被清理的键前缀**不跟包名"。
 `check-contrast.mjs` 删除 `.dmp-provider` 条目（chip 没了），并把几处举例用的死类名换成仍在的类。
 `test-params.mjs` 的 prefs 单元套件删除，换成 `retiredScope` 套件（两种历史形状都被清掉、
@@ -1766,9 +1768,9 @@ Tab 跳过 disabled 全部保留）。§15 的 identity 门从"持久化键不�
 **首次打开落在会话 provider**、**重开（选过别的 provider 之后、以及选过 `全部` 之后）都回到会话 provider**、
 `localStorage` 里没有任何范围键。
 
-**实测（真实 GUI，`rev=6b4bfe386156`）**：触发器 `opencode-go/DeepSeek V4.1 Flash` + 强度 `Default`；
+**实测（真实 GUI，`rev=6b4bfe386156`）**：触发器 `opencode-go/DeepSeek V4.1 Flash` + 等级 `Default`；
 `aria-label = 选择模型，当前 opencode-go/DeepSeek V4.1 Flash，推理等级 Default`；
-首次打开左栏选中 `opencode-go`（`aria-current` 同一行）、右栏 6 个模型（= 该行计数，全目录 64）；
+首次打开提供商栏选中 `opencode-go`（`aria-current` 同一行）、模型列表 6 个模型（= 该行计数，全目录 64）；
 点 `DeepSeek 账号` → 2 行、卡片不关、焦点在搜索框、触发器不变；关闭再打开 → 回到 `opencode-go`（6 行）；
 点 `全部` → 64 行且该行选中；再关闭再打开 → 仍是 `opencode-go`（6 行）；
 `Object.keys(localStorage).filter(k => k.startsWith('dsh-model-picker.provider'))` 前后都是 `[]`。
@@ -1803,7 +1805,7 @@ Tab 跳过 disabled 全部保留）。§15 的 identity 门从"持久化键不�
 **边界（实测，不是推断）**：把重跑挪到两条 settle 路径之后，唯一值得警惕的是"循环"。
 对一个**永远抛错**的 reader 实测：每次 `ensure` 恰好读一次（登记时一次、下次打开一次），
 状态停在 `ready` 而不是卡在 `loading`，没有任何风暴。另一个方向也钉住了：
-reader 落地事实后连开 10 次菜单，读数仍是 **1**（"已答复的 provider 不再读"这条预算没有因为
+reader 落地事实后连开 10 次模型卡，读数仍是 **1**（"已答复的 provider 不再读"这条预算没有因为
 重跑而失守）；同一 provider 三个座位同时 `ensure`，读数仍是 1（合并请求照旧）。
 
 **门**：`npm test` 五道门全绿。
@@ -1839,7 +1841,7 @@ store 自己建对象，所以**引用比较永远不可能相等**：每一次 
 
 | 场景 | 修复前 | 修复后 |
 |---|---|---|
-| 打开菜单（`ensure` 全部 provider） | **16 次叫醒 / 8 次真有内容变化** —— 一半是空转 | **8 / 8**，空转 0 |
+| 打开模型卡（`ensure` 全部 provider） | **16 次叫醒 / 8 次真有内容变化** —— 一半是空转 | **8 / 8**，空转 0 |
 | 什么都没变时的 `getSnapshot()` | —— | 身份稳定（React 可跳过渲染） |
 | 参数面板：已 settled 后再开 3 次（每次 `refresh()`） | **6 次叫醒 / 只有 1 次内容变化** | **0 次叫醒**（identity 不变） |
 
@@ -1856,7 +1858,7 @@ store 比不了引用，只能比内容——这正是这个小模块存在的�
 **边界（实测）**：guard 不能把**真的**变化吞掉，这一点单独钉了断言——外部在「设置 → 模型」页
 改了声明后 `refresh()` 必须照样发布（因为 revision/value 变了）；`ParamsStore` 那个真的会移动的
 `status`（`idle/loading/ready/unavailable/error`）也仍然照发，因为那确实是订阅者看得见的变化。
-`sameSnapshot` 的语义边界由单测逐条钉死：数组**顺序**算变化（provider 顺序就是左栏顺序）、
+`sameSnapshot` 的语义边界由单测逐条钉死：数组**顺序**算变化（provider 顺序就是提供商栏顺序）、
 键**集合**增减算变化、键**顺序**不算（没有消费方读它）、`undefined → 值` 算变化
 （`contextWindow`/`maxTokens`/`error` 都是可选字段，真的有"有/无"两态）、函数按引用比。
 
@@ -1892,23 +1894,23 @@ chain = [ railRefs[railStop], searchRef, ...rowRefs ]   // 三种成员，手写
 | 控件 | 出现条件 | 原来的键盘出口 |
 |---|---|---|
 | `.dmp-search-clear` | 搜索框非空 | 有：`Esc` 清空 |
-| `.dmp-filter-clear` | 别的 provider 也有匹配 | 有：左栏的「全部」行 |
+| `.dmp-filter-clear` | 别的 provider 也有匹配 | 有：提供商栏的「全部」行 |
 | `.dmp-retry`（读取失败） | 目录读失败 | **没有** |
 | `.dmp-retry`（分组失败） | 某个 provider 组失败 | **没有** |
 
 前两个只是不方便，后两个是 **WCAG 2.1.1（键盘）失败**：`reload()` 全文只被调用两处，一处是
-打开菜单时（`openMenu`），一处就是这个按钮的 `onClick`。也就是说**某个 provider 组加载失败后，
+打开模型卡时（`openMenu`），一处就是这个按钮的 `onClick`。也就是说**某个 provider 组加载失败后，
 想重试只有鼠标一条路**——而那正是最需要重试的时刻。这类缺陷连截图都看不出来：按钮画得好好的。
 
 **改法**：把链从"手写清单"改成**从渲出的卡片里读**，并且把这套规则抽成 `src/client/focusChain.ts`
 （纯函数，可被单测直接驱动，而不是只能在源码上做正则匹配——§5.27 抽 `adapterCatalog.ts` 的同一理由）。
 两条规则各有来历，都不是顺手加的：
 
-1. **`disabled` 排除，`aria-disabled` 不排除。** 这就是 §5.10 那条坑的正面：选中写入期间左栏整列
+1. **`disabled` 排除，`aria-disabled` 不排除。** 这就是 §5.10 那条坑的正面：选中写入期间提供商栏整列
    `disabled`，而 `.focus()` 打在一个 disabled 按钮上**什么都不做**，链里留着它就会**吞掉**按键
    （搜索框上 Shift+Tab 看起来像坏了）。模型行反过来故意用 `aria-disabled`，正是为了写入期间**不**
    把键盘丢掉——所以判据必须是 `disabled` 而不是 `aria-disabled`。
-2. **listbox 是一个 Tab 停靠点，不是每行一个。** 左栏靠自己的方向键在内部移动，`ProviderRail` 为此
+2. **listbox 是一个 Tab 停靠点，不是每行一个。** 提供商栏靠自己的方向键在内部移动，`ProviderRail` 为此
    把选中的那行留在 `tabIndex=0`、其余 `-1`。麻烦在于**模型行也用 `-1` 表示"在链里"**——同一个值
    两种含义，所以只能靠 `role` 分辨（`role="option"` 且 `tabIndex===0` 才算）。
 
@@ -1921,14 +1923,14 @@ chain = [ railRefs[railStop], searchRef, ...rowRefs ]   // 三种成员，手写
 
 **门**：`npm test` 五道门全绿。
 
-- `test-params.mjs` 新增 **28 条**：selector 覆盖三种形态；`disabled` 进出链；左栏 `role=option`
+- `test-params.mjs` 新增 **28 条**：selector 覆盖三种形态；`disabled` 进出链；提供商栏 `role=option`
   在 `tabIndex=0` 时是唯一停靠点、`-1` 的其余行**不是**、而模型行（`role=menuitemradio` at `-1`）
   **是**；三个只在某状态下出现的按钮都**在**链里；链顺序 = 渲染顺序；**"只按 Tab 能走遍渲出的每一个
   控件"**（这条才是那个缺陷的正面表述——指针独占的控件走不到）；端点回绕 / 首端后退关闭 / 焦点不在
   链上时从哪端进入 / 空链；以及失败态里重试按钮在链上。
 - `selfcheck-static.mjs`：原来的 `filter: the Tab chain skips disabled controls` 断言的是**已被删掉的
   手写链形状**，改写为 **6 条**——座位必须走 `stepChain(cardChainOf(...))`、手写 ref 链不得回来、
-  selector 必须含 `[tabindex]`、左栏必须靠 `role` 判、`disabled` 排除而 `aria-disabled` 不得出现、
+  selector 必须含 `[tabindex]`、提供商栏必须靠 `role` 判、`disabled` 排除而 `aria-disabled` 不得出现、
   首端后退必须关闭座位。
 - **变异测试**（五条，都实测炸）：① 把链改回"只收有 role 的 + input"（= 原缺陷：普通按钮全丢）→
   3 条 FAIL，其中恰好是"重试按钮在链上"那条；② 左栏不再是一个停靠点 → 3 条 FAIL；③ `disabled`
@@ -1949,7 +1951,7 @@ chain = [ railRefs[railStop], searchRef, ...rowRefs ]   // 三种成员，手写
 
 | 变异 | 修复前门的结果 |
 |---|---|
-| A 左栏 176 → 260（挤掉名字 84px） | **0 条 FAIL** |
+| A 提供商栏 176 → 260（挤掉名字 84px） | **0 条 FAIL** |
 | B 卡片 520 → 380（挤掉名字 140px） | **0 条 FAIL** |
 | C 名字 `min-width` 48 → 96 | **0 条 FAIL** |
 | F 行内边距 7 → 30（挤掉名字 46px） | **0 条 FAIL** |
@@ -1972,16 +1974,16 @@ chain = [ railRefs[railStop], searchRef, ...rowRefs ]   // 三种成员，手写
 
 **7 条新断言**（`selfcheck-static.mjs`）：① 校准（算出的模型列/名字列 = 实测 331/175）；
 ② 名字列 ≥ 事实条（名字是会被省略号吃掉的那一方，一旦比事实条还窄，每行都不再能说明
-自己是哪个模型）；③ 卡片够宽到能摆下两栏（左栏 + 模型列地板 320 + 内边距），否则**任何**
+自己是哪个模型）；③ 卡片够宽到能摆下两栏（提供商栏 + 模型列地板 320 + 内边距），否则**任何**
 视口下都摆不成两栏；④ 名字地板必须**小于**它实际拿到的空间（地板抬到超过可用空间，
 浏览器只能溢出）；⑤ 名字地板至少显示几个字符（按 13px 约每字符 7px 算，**故意写弱**——
 地板的真实约束是下一条，这条只拦"地板塌成 0"）；⑥ **折叠断点正好是两栏装不下的那一点**
-（536 − 32 = 504 = 左栏 + 320 + 8）：两个数字是同一个决定的两种写法，改一个不改另一个
+（536 − 32 = 504 = 提供商栏 + 320 + 8）：两个数字是同一个决定的两种写法，改一个不改另一个
 就是自相矛盾；⑦ 最窄实测视口（320px，§5.24 记录的五档之一）下名字仍在地板之上。
 每一条都从样式表读参数，**没有一个魔数**——包括我自己先写进去又删掉的 `48` 和 `2.6`
 （前者正是本节要消灭的写法，后者是我编的比例）。
 
-**变异测试（6 条全炸，修复前只有 2 条会炸）**：A 左栏 176→260 → 4 条 FAIL；
+**变异测试（6 条全炸，修复前只有 2 条会炸）**：A 提供商栏 176→260 → 4 条 FAIL；
 B 卡片 520→380 → 4 条 FAIL；E 行内边距 7→30 → 1 条；F 折叠断点 536→400 → 1 条；
 G 选中标记 14→40 → 1 条；H 名字与事实条的间距 5→40 → 4 条 FAIL。源文件按 hash 校验还原。
 
@@ -2042,6 +2044,410 @@ the second look does dismiss — {"lost":0}`——**弹窗永远不关**，一�
 
 **现状**：15 条改坏全炸（8 条接线 → 静态门，7 条决策 → 单元门），进 `npm test`；
 整个 `npm test` 16.6s。
+
+### 5.32 整体 UI 重构（2026-10-16）：把「模型配置」页交给 quiet-instrument
+
+§5.24–§5.26 那几轮做的是**模型卡**（座位上的弹层）。这一轮做的是**另一个表面**——
+设置里的平行 tab「模型配置」（ADR 0003）。它此前只有一份视觉方向稿
+（[docs/design-model-config-tab.md](docs/design-model-config-tab.md)）和一次真机审计，
+审计自己给出了结论：**它的 idea 句与数据层不符**（§9.6），**那一栏的 4px 竖条在真机上 0 次出现**，
+**`data-usable` 这个布尔既不表示「缺 key」、筛选后又恒为 true**（§10.3），
+**所有断点都在测视口而可用宽度来自容器**（§9.2）。所以这一轮不是「打磨」，是重做。
+
+**方向**：`design-taste-frontend` 的 `draw.mjs`，`--sector dev-tool --tone technical --keep palette,type`，
+三选一里抽到 **`quiet-instrument`（seed 1258196331）**，另两个是 `dense-tiles`（贴边瓦片板）与
+`one-motif`（单一形体母题）。选前者是因为**这页的核心事实就是「十行里没有一行需要我；若有一行需要，它是唯一一个」**，
+而克制本身就是可读性——`dense-tiles` 字面要求贴边填满，正是要避开的东西；`one-motif` 需要一个形体，这里没有形体可借。
+
+**idea 句**（skill 第 4 步要求填空）：
+
+> 在这页上，**「这个提供商现在能不能服务我的请求」——数据层已经逐行回答的那个问题
+> （`providerUsable` / `keyConfigured`）——成为页面唯一的大声处**：顶部一句只数「需要处理的提供商」的就绪陈述；
+> 下面每一行保持同一个小组尺寸，**身份在左端、那一行的答案在右端**，于是列表读起来是一列陈述。
+
+**live thing**：那句**就绪陈述**（`.dmc-readout`）。它读自己的十行真实状态印出需要处理的条数，
+用户存 key / 清 key / 添加 / 删除后当场重算；零问题时说「全部可用」，一行都没有时说「尚未添加」；
+没有脚本也照样读得懂（每行的答案词就是它的平铺版）。
+
+**构图与状态（实现契约）**
+
+| 项 | 决定 |
+|---|---|
+| 一列 | `.dmc-page` `max-width: 560px`（实测 clientWidth **560**），左对齐；`container-type: inline-size` |
+| 唯一的大东西 | `.dmc-readout`，**20px/28px/600**、primary ink、`tabular-nums`、≤2 行。**可见的段标题已退役**（见下） |
+| 行 | 两段：段 1 = `.dmc-name`（含 `.dmc-route`）＋ `.dmc-verdict`（右端、`tabular-nums`、逐行成列）；段 2 = `.dmc-edit`（**固定轨道网格**，缺格留空、不把邻居左移） |
+| 状态 | `data-state` **互斥三值** `ready`/`missing-key`/`unreachable`；诊断另用 `data-error="true"` **可叠加**；`data-usable` 保留为别名（`false` ⇔ `unreachable`） |
+| 颜色 | **行的 rest 态永远没有填充**（`unreachable` 也不铺）；状态只由**竖条 + 词**两个通道承载，竖条**只**表示「能不能服务」 |
+| 词 | 每行一个词，取自既有词表 `config.verdict.*`；**会话行（账号）用宿主自己的话「已登录」**（`data-state` 仍是 `ready`）——它比「可用」多说一个「为什么这里没有密钥格」 |
+| accent | 只在页尾那一个动作上，载体是 **4px 实心左竖条**（与行首的状态竖条同形、不同角色不同色：红＝事实、蓝＝行动） |
+| 去铬 | 每行只剩 **1 个**带 1px 边的控件（协议 `<select>`，真表单控件豁免）。旧稿是每行最多 **5 个**描边框（实测 2–4 个/行） |
+| 窄容器 | `@container (max-width: 520px)` / `(max-width: 360px)`；旧的 `@media (max-width: 900px)` 删掉 |
+| 墨色阶梯 | 去铬动作 **rest = primary ink、`:disabled` = secondary ink、`:hover` = live 填充**（旧稿 rest 与 disabled 同色 → 禁用态看不出来） |
+
+**真机前后对照（§8.13 是同一轮的完整实测）**
+
+| 指标 | 重构前 | 重构后 |
+|---|---|---|
+| 「模型目录」按钮 | 52px 盒内**逐字竖排 4 行**（label 12×76，溢出盒底 4px） | 88px 盒内 **1 行**（48×16） |
+| 凭据格 | 88×82 **三层堆叠** | **180×28** 一行 |
+| route id 断词 | **2/10 行**（`openrout\|er`、`com\|mandcode`） | **0/11 行** |
+| 名字列 | 140px / 高 44px | **493px** / 高 22px |
+| 右端答案词 | **1/10 行**有 | **11/11 行**，右沿 spread **0** |
+| 每行 1px 边控件 | 2–4 | **1** |
+| 行 rest 底色 | 38/48 行（更早）→ 10 行里 `unreachable` 铺底 | **0 行** |
+| 「模型目录」标签与计数 | `space-between` 顶到两端（裸数字） | 相邻（gap 6px） |
+| 协议标签 | 156px 轨 → `OpenAI Chat Completio` 截断 | 176px 轨 → headroom **28.01px**；≤520 容器整行独占 |
+| 106px 容器 | 溢出 242px（旧审计记为「未解决」） | 无溢出、**无单字孤行**（页尾动作末行 2 字）；≤~140px 下协议标签必然截断（宿主 800px 面板 + 390 视口的外部约束，见下） |
+
+**四件有意不做的**（每条都写进交付报告，不是漏做）
+
+1. **0 张照片**。方向书自己写明「此题材是软件，它的图片就是它自己的界面」，而房子规则同时禁装饰形状与假仪表盘。
+   本页的「图片」是十行**真实渲出的界面片段**（真 provider 名、真 route id、真错误原话、真协议取值）。
+2. **不做滚动入场编排**。这是**别人的设置面板里的一个分区**（skill 的 Special case），在里面做首屏动画是错的。
+   skill 的「≥8 个移动元素」下限我们不接受，替代证据是**在真机里直接量**：控件反馈、答案词落定、就绪陈述重算、
+   抽屉进出四条都在，且 `prefers-reduced-motion` 下内容齐全、位移为零（§8.13）。
+3. **不做 `data-ui` 片段**。本页整块是宿主页面的真实界面，不是裁出来的片段；套上 `data-ui` 会把房子规则整片关掉。
+4. **段标题保持退役**。可见的 `<h2>模型配置</h2>` 被删：① 设置侧栏那条被选中的 tab 已经写着同一个词；
+   ② 两位视觉 juror 独立把它读成 **eyebrow**（房子规则禁、且是 skill 的硬 cap）；
+   ③ 段的可访问名不丢——`<section>` 上的 `aria-label` 仍是 `config.title`。
+
+**这一轮的三条方法论收获**
+
+1. **视觉 juror 的读数要当线索、不当证据。** 同一批截图给三个 juror 看，得到的断言里
+   有真缺陷（协议标签逐字截断、一行两个「删除」、编辑行 ragged），也有明确误读：
+   「内容宽 1090/1224px，不是窄列」（**DPR=2**，1090/2≈545）、
+   「表头错位 40px」（实测 **0px**，且表头本身已删）、
+   「右边控件 x 逐行跳动」（抽屉遮住半个面板造成的观感，实测每类控件左沿 spread **0**）、
+   「右下幽灵字符串」（是**宿主输入条**透过我们**有意半透明**的 scrim 显出来）、
+   「106px 里名字断词」（拿拉丁词的标准判中文换行）。
+   所以每一条都先过一遍真机测量再决定改不改——**改的是测量能证的，驳回的是测量能驳的。**
+2. **门要连门自己一起验。** verifier 把 skill 的 `lint.mjs` 接进 `selfcheck` 之后，
+   立刻暴露出「注释里出现 shadow 一词」这类假阳性；而**改坏验证**又逮到两条门自己的漏洞：
+   ① 「窄分支只把 520 档改成 `@media`」原本全绿（360 档仍是 `@container`，旧语义「存在 @container」过松）；
+   ② 「删掉 `.dmc-readout` 的规则」原本全绿（`effectiveInk` 会一路继承到 `.dmc-page`，13px primary 也合格）。
+   两条都补了断言并各自留下改坏证明。**顺带**：对比度注册表在 `.dmc-title` 退役后仍登记着它，
+   是本轮**真实变红**——被 verifier 自己那条「登记样式必须自己声明 ink 或 size」抓到，不是合成变异。
+3. **门补上了本该早就在的地方。** `dmc-` 与 `drc-` 的文字**在此之前一个像素都没被量过**：
+   `check-contrast.mjs` 只读 `src/client/styles.ts`。现在它读三张表、登记 36 条 `dmc-` 样式，
+   并新增三条断言（登记样式必须自陈 ink/size；画字规则不许静默跳过；只有 primary/secondary 可作文字）。
+   实测最紧 `.dmc-route` / `.dmc-verdict` / `.dmc-catalog-count` 浅色 **5.22:1**，两主题全过 AA。
+   **§5.33 起**：那张从未被量过的第二张表（`drc-`）连同它的 `.drc-btn-primary` 缺陷一起退役——重试策略搬进本页，
+   样式并入 `dmc-` 域，于是这里的登记覆盖了页内每一处文字（闭环见 §5.33）。
+
+**残留与已知边界（如实记，不算已解决）**
+
+- **106px 容器是降级而非构图。** 宿主设置面板 800px 宽、390 视口下导航占 188px，内容列只剩约 94–106px。
+  这一轮把「溢出 242px」修成「不溢出、无单字孤行、可点目标 40px」，但**没有**在 106px 做出一个漂亮版式，
+  也做不到：协议标签（`Anthropic Messages` 98.3px）在 106px 里必然截断。**根因在宿主的面板宽度，不在本页。**
+- **rest 时最后一行在宿主窗格可视区之外**（宿主 scroller `scrollHeight 952 / clientHeight 746`，向下可滚 206px 可达）。
+  重构前同样是 9/10 可达，**本页 `pageOverflow` 为 0**——这是宿主 800px 模态 + 746px 可视窗格造成的。
+- **`data-usable` 过渡别名仍在**（row 与 rail 两处）。删它要同时改门与测试，本轮不做。
+- **scrim 没有淡入**：`opacity` 会被本仓库的「不许淡化」样式门拦下，旧稿也没有。
+- **`.dmc-catalog` / `.dmc-error-toggle` 当前组件不会进入禁用态**，所以 §15.3 的墨色阶梯只对真正会禁用的
+  5 个类强制成对（其余靠同一条规则族继承）。
+- **lint 的 2 条 WARN 保留并记录**：1×`outlined-box`（抽屉里真表单字段的边，房子规则明写豁免）、
+  1×`em-dash`（20 处全在代码注释里，**零处进入用户可见文案**）。对照：本轮 4 个源文件重构前是
+  **3 FAIL / 3 WARN**，现在是 **0 FAIL / 2 WARN**；页面表的 `outlined-box` WARN 由 **5 → 0**。
+
+### 5.33 重试策略从官方页搬进「模型配置」页（2026-10-17）
+
+**动因。** 用户要求把重试卡从官方「设置 → 模型」页搬进本插件的「模型配置」页，保留全部功能、重做成精简 UI（删柱状图）。
+旧形态是 `RetryCard.tsx` + `retryStyles.ts`（`drc-` 域），注册进宿主座位 `settings.models.provider-card`（key `llm-pi-ai`）。
+两件事同时成立：座位按 key 派发，**一个座位只能点名一个适配器家族**，所以它能覆盖的只有 pi-ai 一家；
+而这个座位在**别人的页面**里——本插件的重试策略长在官方「模型」页的提供商卡片中间。
+（旧卡本来没有自己的小节：**本轮之前** DESIGN 全文只有一处 `drc-`，就是 §5.32 方法论第 3 条；它的实测记录在
+`docs/design-model-config-tab.md` §9.3。）
+
+**决定**
+
+| 项 | 决定 |
+|---|---|
+| 形态 | **行内展开**：`.dmc-edit` 控制行多一个去铬文本动作 `自动重试`（`.dmc-retry-action`），点击在**该行下方**展开 `.dmc-retry`——DOM 位置与展开的诊断行同级（`.dmc-edit` 之后），`grid-column: 2 / -1`，`aria-expanded` 与 `aria-controls="dmc-retry-<provider>"` 成对 |
+| 覆盖范围 | 由 **schema** 决定，不按 provider id 点名：`retryCapable(namespace, settingsPath)` 从 `schema.uid` 沿该 provider 自己的 `settingsPath` 走查（容器节点 dict / array 消费一步为键／索引、继续走值形状；object 节点消费一步为字段名），落到它的 profile 节点后问该节点有没有 `retryPolicy`。官方 `llm-deepseek` 因此一并覆盖（它的 `retryPolicy` 在命名空间根、`settingsPath` 为 `[]`，一步都不走），pi-ai 家族是 `['providers', <route>]` |
+| 写回 | 一律 `store.write(ns, ops, namespace.revision)`（它已含 conflict 重试与重读）：保存 = `set [...settingsPath, 'retryPolicy']`；**两个数字都没变则不写**（免得凭空 bump revision、造出这条栅栏本要拦的冲突）；恢复默认 = `unset`（仅 `declared` 时可用） |
+| 草稿 | 两个草稿都是「字符串或 null」（null = 用 store 的值）。页面每次写入都会重渲染，草稿留在组件本地，输入不被无关更新覆盖；摘要行跟着**草稿**走，所以打字时就能回答"这样会怎样" |
+| 样式域 | 并入 `dmc-`（`modelConfigStyles.ts`），`drc-` 前缀退役；复用 `.dmc-notice`（说明／状态行）与 `.dmc-key-action`（两个按钮），不新增重复规则 |
+| 柱状图 | **删除**：`.drc-chart` / `.drc-bars` / `.drc-bar-slot` / `.drc-bar` / `.drc-cap-mark` / `.drc-axis` 全部消失 |
+| 等待节奏 | 改由**一句话 + 两个数字**陈述：`每次等待翻倍，直到触达上限。` 加一行摘要（`tabular-nums`；数字全部由 `retryWaitCurve` / `waitRange` / `formatDuration` 算出。默认策略下算出来是 `5 次 · 首次等待 500ms · 最长合计 17.1s`：首个等待 = `min(initialDelayMs, 上限)`，最长合计 = 上界） |
+| 摘要口径 | 「最长合计」= `waitRange(waits, jitterRatio).high`，即**带 jitter 的上界**。旧卡在同一个标签下印的是名义总和——每次等待有 ±`jitterRatio` 的抖动，那个和是执行器从来不会真的花掉的数，标签在撒谎；本轮换成上界 |
+
+**为什么搬进 `dmc-` 域，而不是只把 `drc-` 改个前缀**
+
+`drc-` 从未被 `check-contrast.mjs` 量过——那张门只读 `styles.ts`——所以整张表的文字**一个像素都没进过门**
+（§5.32 方法论第 3 条记的就是这件事）。门一接上就量出已在案的缺陷：`.drc-btn-primary` 是 accent 实心填充 +
+`#fff`，**4.2349:1（浅）/ 2.3278:1（深）**，12px 文字两主题都不达 4.5:1；同一张表里 `.drc-cap-mark`（11px）与
+`.drc-state[data-declared='true']`（12px）还把 accent 当文字——而 §5.32 刚立下「accent 不得作文字」。
+搬进 `dmc-` 域后这三条**随设计一起消失**（保存／恢复按钮改用 `.dmc-key-action` 的墨色阶梯，摘要行与来源词只用
+primary / secondary），并且从此被门永久守住：`dmc-` 的每一处画字规则都要在 `STYLES` 里登记，登记项必须自陈
+ink 与 size，且只有 primary / secondary 可作文字。
+`docs/design-model-config-tab.md` §9.3 的表末行把这三条记为「本轮新增、不在任务 scope」的现存违反；按「不删别人的
+记录」，那条记录原样保留，**本节就是它的结果**：`drc-` 规则在仓库源文件里已归零，只剩注释与门自己的历史说明里还
+提到这个名字。
+
+**门的有意修订（本轮决策，不是放宽）**
+
+`selfcheck-static.mjs` 原本断言 page sheet **恰好一条** 1px 边，且必须是 `.dmc-protocol`。本轮改为
+**恰好两条，且分别只能是 `.dmc-protocol` 与 `.dmc-retry-input`**。
+
+理由：行内控件**仍然只有一条边**——没展开编辑器时，每行带边的控件还是协议 `<select>` 那一个；展开后的两个数字框是
+**真实表单控件**，去掉边会让数字读成静态文本（旧卡自己的历史记录过这次回归）。所以重试数字框与协议选择框属于
+**同一条豁免**（真表单字段必须有边才认得出是字段），不是新开一个口子。这条断言同时把"不许再长出第三个描边框"钉住，
+比原来的"恰好一条"更强。
+
+**有意不做的事**（写进报告，不是遗漏）
+
+1. **不搬进抽屉或弹层。** 重试策略是 per-provider 的一件事，而这页已有的排布语言就是「行上一个词 + 行下一块」
+   （模型目录也是这么开的）。多一层表面只是把一个字段藏得更深，还要多一套开合、焦点与 Esc 语义。
+2. **不补迷你图。** 柱状图删掉之后**不换成 sparkline 或曲线**。它本来要防的那个误读（"10 次 / 上限 60s"读起来像
+   十次一分钟）由那句话与两个数字承担：默认策略下算出的 `首次等待 500ms` 与 `最长合计 17.1s` 一起说出这条节奏的头和尾。
+3. **不加第二套按钮文案。** 保存／保存中复用 `config.apply` / `config.applying`，恢复默认用新键；按钮复用行内
+   去铬动作的类，不新造一个"保存"的视觉等级。
+
+**已知边界（如实记，不算已解决）**
+
+- **只读部署仍能展开查看，但不能写**：入口不因只读而消失（现值仍要读得到），编辑器内两个输入与两个按钮禁用，
+  并显示 `此部署已只读，无法修改重试设置。`。
+- **`retryCapable` 读不出 schema 就不显示入口**（失败关闭，与 `protocolChoices` 读不出返回 `[]` 同一纪律）。
+  代价是"适配器真声明了、但设置服务给不出 schema"的部署看不到入口——这比显示一个写不进去的入口诚实。
+- **`mode === 'always'` 时次数不影响它**：编辑器照常渲染该 provider 文档里的次数，另加一行说明
+  `此提供商设为无限重试，次数不影响它。`——字段不隐藏，因为它仍然是当前文档里的值，只是此刻不生效。
+- **等待节奏只剩文字陈述**：这是本轮主动接受的损失（柱状图是它唯一的图形载体）。若将来要恢复图形，必须同时恢复
+  图形门的登记与 §5.32 的「accent 只做图形」约束。
+- **320px 视口不是本轮能收的口**：该档宿主只给 `.dmc-page` **36px** 内容列，而页面**收起编辑器时自己就已经撑破 32px**
+  （`.dmc-catalog` 右沿越过内容列右沿），字段还在宿主的滚动遮罩之下——这是宿主「800px 面板 + 极窄视口」这个既有外部
+  约束的极端档（§5.32 已记录 390 档的 94–106px）。真机验收因此断言契约的两条（文档无横向滚动、编辑器不越出内容列，
+  320/390/768/1920 四档全过），把「编辑器内容装进自己的盒子」只放在页面自身未撑破的三档上断言，**320 档的
+  `pageContentOverflow=32` / `editorOverflow=12` 原样打进验收报告**，不隐藏也不假装解决。
+- **状态竖条不覆盖展开的重试编辑器**：`.dmc-rail` 的 `grid-row: 1 / -1` 按规范只解析到**显式**网格的最后一条线，
+  所以它跨的是「身份行 + 控件行」，不跨展开出来的隐式行。**这不是本轮引入的**：既有的展开诊断行（`.dmc-error-text`）
+  一直是同一个行为，而竖条陈述的是「这个提供商能不能服务我的请求」，归行的陈述与控件，不归它的展开区。
+  结论：保持现状（改动会同时改掉既有诊断行的观感）；若真机验收量到它读起来像断裂，再按显式跨行处理。
+
+### 5.34 限流文案恢复（2026-10-17）：让一条被误分类的失败重新走进重试链
+
+**动因。** 用户在真实会话里反复看到「本轮运行失败 + 请求过于频繁，请稍后重试」，而重试编辑器上的设置**一次都没生效**。
+全量会话日志（1359 个会话 / 1.03 GB 压缩）把这条路径查实了：
+
+- 该文案的 `turn/end` 失败共 **18 次、14 个会话**（2026-10-11 ~ 10-17），`reason.error.code` **全部是 `PI_AI_ERROR`**。
+- 同一语料里真正带 `429:` 前缀的 `RATE_LIMIT` 失败有 **75 次**，它们**重试正常**（如 tokbook 会话里 23 条 `llm/retry`、
+  单链跨度 304s、Σdelay 291.8s，已打满 `maxDelayMs=60000`）。
+- 这 18 次的事件序列是 `assistant/attempt → step/end → turn/end`，**中间零 `llm/retry`**，从失败到终止 **2~6ms**。
+- 全语料 16 组 provider+policy 的 `retryableCodes` 一律是
+  `[EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT]`，**没有任何一组包含 `PI_AI_ERROR`**。
+
+机制（可逐行核对）：`dsh-llm-pi-ai` 的 `classifyPiAiError()` 只认 `\b429\b|rate.?limit` 与**英文** quota 措辞，中文限流文案
+落进它的兜底 `PI_AI_ERROR`；而 `dsh-llm-retry` 在 `!policy.retryableCodes.includes(failure.code)` 时**直接 `next()` 放弃**，
+于是 `dsh-agent-loop` 抛出 `LlmError` 收尾。**等 5 分钟、等 5 秒都不会发生——它根本不进重试分支。**
+另有两条已核对的事实：该 failure 只有 `{message, code}`（**没有 `status`**，所以只能靠文本判定）；pi-ai 内层重试被
+`dsh-llm-pi-ai` 硬关（`maxRetries: 0`），`dsh-llm-retry` 是**唯一**退避层。
+
+**决定**
+
+| 项 | 决定 |
+|---|---|
+| 落点 | **本插件的 Host 侧**（`src/host/rateLimitRecovery.ts` + `src/index.ts`），挂在 `agent/request-error` 瀑布上。不改宿主安装目录（升级不丢），不改 `node_modules` |
+| 手段 | **不自己等、不自己计数、不自己写事件**：按 `RATE_LIMIT` 重新提交这条失败，**等待节奏、重试次数、每会话计数、界面上「等待重试模型请求 (n/N) · Xs」行全部仍由 `dsh-llm-retry` 出**，因而全部仍由重试编辑器上的两个数字决定 |
+| 注册序 | `ctx.on('agent/request-error', …, { prepend: true })`。瀑布是**最外层先跑、不调 `next()` 即否决其余链**；内建重试也在同一事件上，晚于它注册就会在决策之后才轮到，救不回来 |
+| 判定 | 五个条件**全部**成立才提升：① 该请求有已解析的 `retryPolicy`（没有时内建重试自己也不工作）；② 该策略的 `retryableCodes` **仍含 `RATE_LIMIT`**；③ 本次 `code` **不**在其中（否则归内建，预算不得被重复花）；④ 没有「确定的非限流」状态码（非 429/408/5xx 的数字状态）；⑤ 文案命中文案表 |
+| 文案表 | 收录**内建分类器认不出**的措辞（`请求过于频繁`、`当前并发已达上限`、`请求数限制`、`访问过于频繁`、`操作过于频繁`、`请求过于密集`、`速率限制`、`触发限流`、`too many requests`、`requests are too frequent`）。**内建已认的拼写（`rate limit` / `rate_limit` / `429` …）刻意不收**：它们不可能走到这里，收了只会读成覆盖面而实际断言不了任何东西 |
+| 如实记录 | **不重写这条失败**：提升返回的是**副本**，`dsh-agent-loop` 收尾时读的仍是原始对象，终态照样记 `PI_AI_ERROR`。提升只授权重试，不替提供商改口 |
+| 卡上开关 | 条件 ② 就是开关：在重试编辑器所在提供商的策略里去掉 `RATE_LIMIT`，这条路径整体关闭 |
+| 文案 | 重试编辑器在「每次等待翻倍」下方加一行 `中文限流文案（如「请求过于频繁」）也按这里设置重试。`（`config.retryPolicy.recovery`，双语） |
+
+**为什么是这个形状，而不是三个更简单的形状**
+
+1. **不改 `node_modules` 里的分类器**（那是最干净的根因修复）：插件的交付物不能依赖改宿主安装目录——升级即丢，
+   而这条错误的成因在别人的正则里，本插件无法通过自己的版本控制它。
+2. **不把 `PI_AI_ERROR` 加进 `retryableCodes`**（零代码方案）：那是兜底桶，除限流外还装 `pending` / `deferred` 等**终态**
+   失败，加了会把它们一起拖进 5 分钟×N 的重试。按**文案**判定只碰真正的限流措辞。
+3. **不在插件里自己起定时器**：那会成为"等多久"的**第二个答案**，与编辑器上的两个数字并立，且要自建计数、自建
+   会话事件（否则等待期界面上什么都没有）。交给内建执行器后，编辑器、计数、等待行三者天然一致。
+
+**有意不做的事**（写进报告，不是遗漏）
+
+1. **不做图形或开关**：文案表是代码里的常量，不进 UI。多一个开关就多一份"卡片说的和实际做的不一致"的机会，
+   而条件 ②（`RATE_LIMIT` 在不在策略里）已经是一个真实生效的开关。
+2. **不覆盖 `QUOTA` / `CONTEXT_WINDOW_EXCEEDED`**：额度耗尽与上下文超限是**确定性**失败，等 5 分钟不会变好，
+   重试它们只是在拖延一个必然的终止。文案表里也没有它们的措辞。
+3. **不动 `MAX_MAX_DELAY_MS`（60s 上限）**：用户明确要求沿用编辑器现有的等待方案，不要"固定等 5 分钟"。
+
+**门**
+
+- 新增 `scripts/test-rate-limit-recovery.mjs`（`npm run test:recovery`，进 `npm test` 链）：自包含、**不依赖宿主安装**
+  （CI 上没有宿主），逐条钉住五个条件、两向文案、副本语义、畸形载荷不抛异常，并**把文案表本身也当规则**断言
+  （每条必须能提升一次、每条都不许是内建已认的拼写）。**接线也在门里**：`src/index.ts` 被同一个 esbuild 打包后
+  用替身 context 驱动，断言"只有一个监听器 / 挂在 `agent/request-error` / 带 `prepend` / 命中时替换 `payload.failure` /
+  **永远调 `next()`** / 非本模块的失败按**同一引用**透传"。
+- **改坏验证**：`scripts/mutate-anchor-loss.mjs` 新增 7 条针对该规则的改动（5 条打判定：去掉卡上开关 / 去掉"已可重试
+  则不动" / 让文案压过状态码 / 命中一切 / 改写原对象而不是复制；2 条打接线：注册不带优先级 / 不替换载荷），
+  并把新门登记为第三个 gate。
+- **顺手修掉本文件自己的检测器缺陷**（§5.31 记的"改坏验证自己有八个月没跑对过"的同类）：`catch` 判据原本是
+  `output.includes('FAIL')`，而 `selfcheck-static.mjs` 有一条**绿灯**行写作 `ok taste-skill lint: no FAIL on the four
+  round surfaces`——于是**所有**动作都被报成"caught by selfcheck"，包括这 5 条（实测 selfcheck 对它 exit=0）。
+  判据改为 **exit≠0 或行首 `FAIL`**。改后 20/20 仍是 20/20，但归属变真实：9 条布线类归 selfcheck、6 条逻辑类归
+  `test:params`、5 条归新的 recovery 门。**这条修订是本节的一部分，不是顺带**：一个不会红的门不是门。
+
+**已知边界（如实记）**
+
+- **不改写终态码**：重试耗尽后界面与日志仍显示 `PI_AI_ERROR` + 原文案——这是刻意的（见上表"如实记录"）。
+- **门覆盖到本仓库的边界为止**：接线（注册形状、命中即替换、永远委派、非本模块的失败按引用透传）已被门驱动断言；
+  **宿主侧的两条属性**——`prepend` 的监听器真的先于 `@deepseek-ai/dsh-llm-retry` 跑、被替换的 `payload.failure` 真的到得了
+  它——本门看不到（插件是外部 bundle，CI 上没有宿主）。这两条已由**独立验证者**用真实 `cordis` + 真实 `dsh-scope` +
+  真实 `dsh-llm-retry` + 本仓库真实 `lib/index.js` 做了离线动态反证（10 组，含阴性对照：解除插件后 `action=undefined`
+  且无 `llm/retry`），两种注册顺序都试过，结论成立。真机第一次跑起来时应确认界面出现「等待重试模型请求」行。
+- **「提升成 `RATE_LIMIT`」不等于「一定重试」**：副本**原样保留** `providerRetryAfterMs`，而内建执行器在 `mode: normal`
+  且该值 `> maxDelayMs` 时**照样放弃**（独立验证者实测：`=2` vs `maxDelayMs: 1` → 无重试）。这是我们**有意不覆盖**的
+  执行器既有规则：提升改的是执行器**据以判断的码**，不是替它改判断。该字段在 pi-ai 路由上根本不出现（只有官方
+  `llm-deepseek` 适配器会从 `Retry-After` 头填它），所以对本功能要治的那条路径没有影响。
+- **生效需要重启**：运行中的 `dsh web` 进程若早于本次构建启动，它就还在跑旧的 `lib/index.js`；本插件目录不在 HMR
+  的 `root` 面内（profile 只监视 `dsh-connect-zcode` 与 `dsh-tokbook`），所以不会自动热加载。**改完要重启 `dsh web`**。
+- **等待期不跨进程重启**：定时器在 `dsh-llm-retry` 进程内；这是内建重试的既有性质，本插件不改变它。
+- **只对 pi-ai 家族的文本型分类缺口有效**：官方 `llm-deepseek` 路由的 code 来自 HTTP 状态映射，不靠文案，通常本就不受影响。
+
+
+### 5.35 整体 UI 语言迭代（2026-10-17）：「模型配置」页改成路由账本
+
+**动因。** 用户对设置里这个平行 tab 的判断是「相关 UI 很糟糕」。§5.32 那一轮的方向（quiet-instrument）没有错，
+错在**构图**：它把每行做成「陈述段 + 六轨控件段」，而真机上控件段的凭据格装不下自己的两个词。
+可复核的测量（真机，560px 内容列）：
+
+| 观察 | 数值 |
+|---|---|
+| 凭据格 | **108×60**：`替换 API 密钥` / `清除密钥` 竖成两行 |
+| 行高 / 文字基线 | **108px**；同一条行里有四条不同基线（名称、选择框垂直居中、`模型目录`、`删除`） |
+| 每行可点控件 | 5–6 个，其中 2–4 个各占一个固定轨道 |
+| 页面高 | **1248px**（宿主窗格可视 746px） |
+| 唯一的描边框 | 协议 `<select>`——6 行显示 `未选择` 却占最宽轨道 |
+| 破坏性动作 | `删除` 与 `模型目录` 同为 12px、相距 20px |
+
+**方向：沿用 quiet-instrument，把构图升级为「账本」。** 没有重跑 `draw.mjs`：这一轮的判断不是「换一种艺术方向」，
+而是「同一个方向落到了一个读不下去的构图上」；`docs/design-model-config-tab.md` 那段方向书仍然成立。
+语言写进了 `docs/ui-language.md`（诊断、令牌、组件语法、响应式、动效、扩展规则），本节只记实现契约与证据。
+
+**idea 句**（skill 第 4 步）：
+
+> 在这页上，**「一条路由现在能不能服务请求」——数据层逐行回答的那个问题——成为账本的一行**：
+> 行上只有三件事实（身份 / 自有模型数 / 一个答案词）与一个门；改它的一切收进行下的设置井。
+
+**live thing** 不变，仍是页顶那句就绪陈述（`.dmc-readout`）：它按同一份 `readingOf` 数行，改 key / 加 / 删后当场重算，
+零问题时说「全部可用」，一行都没有时说「尚未添加」，并且缩进到与名称同一条左脊（16px）。
+
+**构图（实现契约）**
+
+| 项 | 决定 |
+|---|---|
+| 扫描行 | 一条路由一行，静止态 **48px**；轨道 `4px 竖条 / minmax(120px,1fr) 身份 / max-content 模型格 / max-content 答案词 / 44px 门` |
+| 对齐 | 答案词与门 `justify-self: end`，右沿逐行重合（静态 fixture 实测 560 / 484 两档每行右沿 spread **0**） |
+| 模型格 | **事实即门**：`N 个模型` / `默认`（`title` 是长句）；点击打开模型抽屉，是行上除门外唯一可点处 |
+| 答案词 | 每行一个词；ready = secondary，`missing-key` / `unreachable` = primary；竖条仍是冗余通道 |
+| 门 | `管理`，`aria-expanded` + `aria-controls="dmc-well-<provider>"`；展开不改变行高以外的任何东西 |
+| 设置井 | `.dmc-well`：两列网格（**64px 标签列** + 值列），三行字段（凭据 / API 协议 / 自动重试）+ 末行生命周期；无填充/无边/无圆角 |
+| 凭据 | 四种形态各自说真话：会话行「由账号提供」；已配置「已配置 替换 清除」；缺密钥「未配置 填写密钥」；不接受密钥则整个字段不渲染 |
+| 诊断 | `data-error="true"` 仍在行上，但**不再有 `!` 入口**：句子是井的第一行（primary 12px），写失败发生在井里，就在井里读 |
+| 动效 | 只保留两个落定（readout / verdict，160ms transform）+ 控件反馈；`data-well` 行用 hover 底色标出「这一行正展开」 |
+| 窄分支 | `@container (max-width:520px)` 只收紧间隙（484 档行仍 48px）；`@container (max-width:360px)` 才是拇指档：四行堆叠、控件 40px、井单列 |
+
+**门的有意修订（不是放宽）**
+
+1. `DMC_NEW_CLASSES` 改为本轮冻结的契约名：`dmc-manage` / `dmc-well` / `dmc-field-label` / `dmc-field-value` / `dmc-catalog`；
+   `dmc-edit` 退役，新增退役名单 `dmc-edit` / `dmc-enable` / `dmc-error-toggle` / `dmc-error-text` / `dmc-catalog-count`。
+2. 原来那条「控制段是固定轨道网格」的断言（读 `.dmc-edit`）换成两条：**扫描行是 grid 且共享轨道**、
+   **井是两列表单且标签列固定**；另加一条「答案词与门都是 `justify-self:end`」。
+3. 「诊断入口是个词、无填充无边框」的断言（读 `.dmc-error-toggle`）换成「诊断句是**句子**、无填充无边框」（读 `.dmc-diagnostic`）。
+4. 禁用墨色成对表：去掉 `.dmc-catalog`（模型格在只读部署里仍可打开抽屉，不再有 disabled 态）与 `.dmc-error-toggle`，
+   加入 `.dmc-danger`；`.dmc-enable` 随之退役。
+5. 「行静止态无底色」的豁免名单加入 `[data-well]`（与 `[data-open]` 同性质：位置态，不是提供商状态）。
+   这是本轮**唯一**的语义扩充，写在断言旁边。
+6. `check-contrast.mjs`：注册表删四条旧类、加入 `dmc-manage` / `dmc-field-label` / `dmc-field-value` / `dmc-quiet` /
+   `dmc-diagnostic` / `dmc-danger`；父子链把 `.dmc-well` 挂到 `.dmc-row`、字段挂到 `.dmc-well`、`.dmc-retry` 挂到 `.dmc-well`。
+   实测最紧 `.dmc-route` / `.dmc-verdict` / `.dmc-field-label` / `.dmc-quiet` 浅色 **5.22:1**，两主题全过 AA。
+
+**证据（本轮可复现的部分）**
+
+- `npm test` 全绿：typecheck / build / test:fresh / selfcheck / contrast / 参数 / 重试 / 限流恢复 / model-config /
+  model-config-copy / mutations。
+- 静态 fixture（真实 sheet + 宿主真实 token 值）：`shots/page-preview-{light,dark}.png`。几何实测：
+  560 档 11 行页面 **778px**（含一个展开的井；旧版无井 1248px）；484 档含两个井 **960px**；
+  两档行高 **48px**、答案词右沿 spread **0**、页面 `scrollWidth-clientWidth = 0`；
+  106 档无横向溢出、井 94px 内 `scrollWidth == clientWidth`。
+- 生产 bundle 已重建（`lib/client.js`），宿主 `client-hmr` 会推送或刷新后生效。
+
+**本轮真机验收的缺口（如实记，不算已解决）**
+
+- **没有对用户的实例跑 live 验证。** 18:03 我曾用同一个 `DSH_HOME` 起第二个 `dsh web`（3081）跑
+  `verify-model-config-tab.cjs`，18:07 前后用户原本的 3080 实例退出；旧实例没有包装日志，exit code 不可得，
+  所以**无法证明因果**，但那次操作风险最高、时间最吻合。用户随后决定「最终效果自己检查」。
+  经过与规则已写进 **`docs/agent-safety.md`**（不要结束别人的进程；不要在同一 home 上起第二个实例；对真实 GUI 默认只读）。
+- **`scripts/verify-model-config-tab.cjs` 仍是 §5.32 的 DOM 断言**（`.dmc-key` / `.dmc-edit` / `.dmc-enable` / `R3` 左沿表等），
+  对本轮页面会整片失败；它的 R5 还会切主题（写路径）。**本轮不重写它**：在无法 live 执行的前提下改一份 2000 行脚本
+  只会得到一份没跑过的门，比诚实标注更糟。下一次有人能按 `docs/agent-safety.md` 只读执行时，再按新契约重写，
+  并把 §5.32 的 R 检查映射到「行 / 井 / 门 / 诊断」四个对象上。
+- **抽屉已在 §5.36 改成花名册**（一行一个模型 + 井）；本轮之前它还是「每个模型一组四输入框」，
+  与账本语言不一致。
+- **没有列头。** 11 行的列表里，「N 个模型」与答案词都是自解释的词，加一行列头反而多一层 chrome；
+  代价是「模型格可点」只能靠 hover 与 title 发现。
+- **106px 档仍是降级而非构图**（宿主 800px 面板 + 390 视口的外部约束，§5.32 已记录）。本轮保证的是无溢出、无单字孤行、目标 40px。
+- **`data-usable` 过渡别名仍在**（row 与 rail 两处），与 §5.32 的同一笔欠账；删它要同时改门与测试。
+
+**有意不做**
+
+1. 不加重试编辑器以外的第二层表面（井就是这一页的深度上限；再深一层只是把字段藏起来）；
+2. 不做行内动画编排（这是别人的设置面板里的一个分区）；
+3. 不按状态排序或分组——账本保持目录顺序，需要处理的由答案词与竖条标出；
+4. 不给扫描行加列头、图标、分隔线、斑马纹；安静来自 secondary 墨色与 48px 行距。
+
+### 5.36 抽屉改成花名册（2026-10-17，接 §5.35 的同一条语言）
+
+**动因。** §5.35 把页面的行做成了账本，抽屉却还是另一套排版：**每个模型都是四个常开输入框**，
+外加「模型选项 / 删除模型」两个按钮。实测一个 7 模型的自定义目录是 **28 个输入框 + 14 个按钮**，
+在 460px 面板里排成一堵墙——读者还没决定要改哪个模型，就已经被要求读完所有字段。
+
+**决定：模型是记录，不是表单。** 抽屉沿用页面同一条语法：**一行一个模型，编辑进井**。
+
+| 项 | 决定 |
+|---|---|
+| 花名册行 | 两行文字、**68px**：第一行 = 模型 id（13/600，超长省略 + `title` 保全文）+ 右端门 `编辑`；第二行 = 显示名与容量事实（12px secondary） |
+| 容量事实 | `上下文 {值}` / `输出 {值}`（新增短键）；两个都没填时写 `使用默认容量`——「没有覆盖」也是一条事实，不留空行 |
+| 井 | 2×2 字段（模型 ID / 显示名称 / 上下文窗口 / 最大输出 token 数）→ 推理档位 → 末行 `删除模型`；井是行的子元素，行有 `[data-well]` 底色 |
+| 推理档位 | **不再有「模型选项」按钮**：档位编辑直接进井；没有档位的模型只显示 `添加档位`，不画空表头与解释段 |
+| 添加模型 | 花名册末尾的一条账本行（`+ 添加模型`），不是工具条里的按钮 |
+| 草稿问题 | 走页面同一条通道：行左侧 4px 红竖条 + 井顶一句原话（`.dmc-model-error`） |
+| 模型发现 | **结构不变**（获取 → 勾选 → 添加所选），只跟随字阶与按钮语法 |
+| 页脚 | `保存` / `恢复默认模型` 不变（提交语义未动） |
+
+**门的修订（不是放宽）**
+
+1. `DMC_NEW_CLASSES` 增加 `dmc-model-ref` / `dmc-model-edit` / `dmc-model-well` / `dmc-model-danger`；
+   退役名单增加 `dmc-model-actions` / `dmc-model-options` / `dmc-model-options-panel` / `dmc-model-remove`。
+2. `check-contrast.mjs` 注册表增加五个画字类（ref / alias / fact / edit / danger），
+   父子链把字段与推理编辑器挂到 `.dmc-model-well` 上（原来挂 `.dmc-model-row`）。
+3. `.dmc-btn` 增加 `text-align: left`：原生按钮居中文字，把全宽的 `添加档位` 读成了一句居中的话；
+   这一条同时修好了页脚与关闭词的对齐。
+
+**证据（静态，可复现）**
+
+- `shots/_drawer-preview.html`（真实 `drawerStyles` + 宿主真实 token 值）：
+  面板 **460px**、花名册行 **68px**、展开的井 **298px**、面板 `scrollWidth-clientWidth = 0`；
+  同一份数据下旧排版是 28 个常开输入框，新排版是 **6 行 + 1 个展开的井**。
+- `shots/model-config-37-drawer-dark.png` / `-38-drawer-light.png` 是两套主题的面板图（README 引用）。
+
+**已知边界（如实记）**
+
+- **没有 live 验收**：与 §5.35 同一笔欠账（原因见 `docs/agent-safety.md`）。抽屉的滚动、
+  焦点陷阱（`Tab` 在面板内走通）与 Esc 语义都由 `ModelDrawer` 原有逻辑承担，本轮只改了渲染与样式，
+  但这两条只能在真机里确认。
+- **长模型 id 用省略号**：460px 面板里 `dots-studio/dots-3-note-preview` 这类 id 再加显示名放不下，
+  所以 id 单行省略、`title` 保全文；这是这一轮唯一的截断（旧版把四个字段塞进两列，id 输入框同样看不全）。
+- **`模型选项` 按钮退役**：推理档位现在总在井里。代价是打开井的模型会多出一块档位区；
+  收益是少一层开合、少一个只在某状态出现的控件。
+- **`config.model.advanced`（模型选项）** 这个键保留在文案表里但不再渲染（契约键不删；若下一个真机验收者
+  认为该词应退役，按 CONTEXT.md 的废弃叫法流程处理）。
+
+**有意不做**
+
+1. 不把发现清单也改成「行 + 井」：候选是一次性多选，checkbox 清单就是它该有的形状；
+2. 不给花名册加列头（行内第二行已经自带标签，列头只是重复）；
+3. 不在行上做推理档位的预览（档位是罕见配置，行只陈述容量）。
 
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 
@@ -2118,7 +2524,7 @@ Loader 用自己算出来的 `rev` 键给 client 模块，浏览器可以在同�
 DeepSeek V4.1 Flash，文字输入、图片输入、思考强度 High、上下文窗口 1M
 ```
 
-四枚徽章齐全——改造前这条路由只有强度徽章（模态与窗口整条不出现）。换成同族的
+四枚徽章齐全——改造前这条路由只有推理徽章（模态与窗口整条不出现）。换成同族的
 `GLM-5.3-Flash` 再跑一次：`文字输入、图片输入、思考强度 Max、上下文窗口 1M`。
 两次都是**不可寻址**的路由（状态行原文见下），所以这两行的事实只可能来自适配器目录：
 `models.dev` 对 `opencode-go` 的该模型写的是 `modalities.input = [text, image, video, pdf]`、
@@ -2376,3 +2782,60 @@ README 的 `row-badges-{dark,light}.png` 改为"打开时的默认范围（会�
 `provider-{dark,light}.png` 改为"切到别的提供商"；接受验收的
 `accept-rail-wide.png`（首次打开即 `opencode-go` 6 行）、`accept-rail-scoped.png`、
 `accept-rail-narrow.png`、`accept-rail-search-elsewhere.png` 同步重拍。
+
+## 8.13 §5.32 实测记录：重构后的「模型配置」页到底量出了什么（2026-10-16/17）
+
+**方法**：`scripts/verify-model-config-tab.cjs` 驱动真实 GUI（`http://127.0.0.1:3080`，Headless Chromium，
+1920×1080，**DPR = 1**），`lib/` 由 Lead 从冻结的 `src/` 重建。**27/27 PASS，exit 0**；
+`DMC_VERIFY_MUTATE=1` 的真机改坏验证 **16/16 变红**；静态门的改坏验证 **23/23 变红**（在整树临时拷贝上做，
+`src/` 一字未动）。参考部署有 **11 个已添加提供商**。
+
+**几何与对齐（这一轮的核心主张）**
+
+| 量 | 值 |
+|---|---|
+| `.dmc-page` clientWidth / DPR | **560** / **1** |
+| `.dmc-name` 最小宽 / 最大高 | **493px** / **22px** |
+| `.dmc-verdict` | **11/11 行**，右沿全 **1332.0**（spread **0**），全在视口内 |
+| 每行 1px 边控件 | **[1] × 11**（重构前 2–4） |
+| 行 rest 态底色 | **0 行** |
+| 同类控件左沿（前两位） | `.dmc-key [788,788]` / `.dmc-protocol [976,976]` / `.dmc-catalog [1160,1160]` / `.dmc-enable [1284,1284]` —— **每类 spread 0** |
+| 五档视口 1920/1440/1024/768/390 横向溢出 | **全 0** |
+| `@container` 三档 | 106 → tracks `4px 94px`（确实换挡）；484/560 → `4px 493px 39px` |
+
+**协议标签的文本适配（juror 报的截断，逐档收口）**
+
+| 容器 | select clientWidth | 最小 headroom | 结论 |
+|---|---|---|---|
+| 560 | 174 | **+28.01px** | 不截断（11/11） |
+| 484 | 470（**独占整行**） | **+324.01px** | 不截断（11/11） |
+| 106 | 92 | `OpenAI Chat Completions` **−53.99px** | **6/11 截断（允许）**，但 `scrollWidth − clientWidth = 0`、`overflowers = []`、`pageOverflow = 0` |
+
+判据写死为「560/484 必须不截断；106 允许截断但绝不允许溢出」，其中后一半由改坏 `M-R11b`
+（只给窄档加 `min-width: 300px`）证明——它只让 106 档溢出，证明的正是这半条。
+
+**证据图（`shots/model-config-31/32-redesign-*.png`）**
+两张都是 **560×928** 的元素图（深/浅各一，67111 / 67169 B）。**在 1920×1500 视口下拍**——
+1080 视口里宿主窗格只有 746px，页尾动作会落在画面之外（上一版正是如此，导致视觉 juror 报「页面的 accent 不可见」）。
+现在 R5 把 **`addPainted === true`** 写成断言（截图前要求 `.dmc-add` 在自己的中心点命中自己），
+**缺 accent 的证据图不可能再产出**。逐张读图确认：11 行全在画面内、页尾「添加模型提供商」可见、
+**左缘 4px 蓝条在两主题都清晰可见**、20px 就绪陈述在顶、`清除密钥` 与右端 `删除` 不再同名、
+protocol 完整显示 `OpenAI Chat Completions`、无竖条、无铺底。
+
+**视觉复核（三 juror × 二轮，`opencode-go/glm-5.3-flash`）**
+第一轮：页 7.07 / 抽屉 5.93 / 窄容器 6.64；第二轮：页 6.85 / 窄 6.45；
+终局证据图单判：**design 7.5 · usability 7.5 · creativity 7 · content 7.5 → 7.4**，**未触发任何 cap**。
+被读数推动的真修：协议标签截断、一行两个「删除」、编辑行 ragged（对照实测 x 集合）、
+段标题被读成 eyebrow、页尾 accent 被读成 thin rule、acc 证据图缺页尾。
+被真机数字**驳倒**因而没有照做的读数：内容宽「1090/1224px」（DPR=2 误读）、表头错位 40px（实测 0px）、
+控件 x 逐行跳动（抽屉遮住半页的观感，实测 spread 0）、右下「幽灵字符串」（宿主输入条透过半透明 scrim）、
+106px「断词」（以拉丁词标准判中文换行）。
+
+**残留（不美化）**
+- 宿主窗格裁剪：面板 800×800、滚动区 1080 视口下 `clientHeight 746 / scrollHeight 952`，页面高 928，
+  最后一行 top **998** → rest 时点不到，下滚 **206px** 可达（滚到底后换成第一行被推出）。R13 的 `offPane = 13/75` 即这批被宿主裁掉的点位；**本页 `pageOverflow = 0`**。
+- 本轮 11 行**全是 `ready`**：`missing-key` / `unreachable` 的真机实例为零，这两态的竖条与「无铺底」
+  由静态门 + 改坏验证保证；R1 的真机只走过「0 问题」形态，另两种形态由 `judgeR1` 的分支按构造保证。
+- R9 的禁用墨来自「隐藏克隆 + 过渡稳定后读色」，本轮无真机禁用实例。
+- 106px 仍是**降级**而非构图（协议标签必然截断）；根因是宿主面板宽度，不是本页。
+- 2 条 lint WARN 保留并每轮打印（真表单字段边 / 注释里的 em dash）。

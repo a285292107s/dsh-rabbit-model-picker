@@ -105,6 +105,14 @@ export interface SettingsNamespaceView {
   readonly value: unknown
   /** The profile patch (the layer this plugin's clear button empties). */
   readonly user?: unknown
+  /**
+   * The composition base layer, read only to tell "the user set this" from "the
+   * deployment set this": a profile whose ONLY layer is the base is not the
+   * user's to remove, which is exactly what `removable` reports.
+   */
+  readonly base?: unknown
+  /** The serialized schema envelope this page reads its protocol choices out of. */
+  readonly schema?: unknown
 }
 
 /** The whole settings surface: writability plus one view per namespace. */
@@ -112,6 +120,171 @@ export interface SettingsDescribe {
   readonly writable: boolean
   readonly namespaces: readonly SettingsNamespaceView[]
 }
+
+/**
+ * One provider route as `llm/listProviders` reports it.
+ *
+ * These are the routes whose adapter is CURRENTLY registered, which is the half
+ * of the directory that decides `active`. The configurable directory
+ * (`llm/listConfigurableProviders`) is the other half and is deliberately not
+ * the same list: it carries routes that exist in an adapter's catalog while
+ * being registered by nobody (the dormant half — see `CONTEXT.md`).
+ */
+export interface LlmProviderInfo {
+  readonly id: string
+  readonly name: string
+}
+
+/**
+ * One joined provider row: the directory entry plus whether its route is live.
+ *
+ * `active` is the only field here that cannot be read off the configurable
+ * directory alone, and it is what makes "this provider exists in the catalog"
+ * distinguishable from "this provider is registered right now".
+ */
+export interface ProviderDirectoryEntry {
+  readonly provider: string
+  readonly displayName: string
+  readonly settingsNs: string
+  readonly settingsPath: readonly string[]
+  readonly active: boolean
+  readonly declared?: boolean
+  readonly defaultBaseURL?: string
+  readonly baseURLEnv?: readonly string[]
+  readonly error?: string
+  /*
+   * DELIBERATELY ABSENT: `nativeAuth`.
+   *
+   * The official join carries it (`dsh-client-ui-settings-models/lib/client.js:1208`)
+   * and uses it for native-auth refs and hints (`:1379`, `:2004-2005`). This page
+   * reads no native-auth fact, and the rule for this boundary is to declare only
+   * what is consumed — carrying a field nothing reads is how `firstRun` became
+   * dead state that had to be deleted later. It is recorded here rather than
+   * silently omitted so the first surface that needs it knows the source is the
+   * directory entry (pi-ai fills it at `dsh-llm-pi-ai/lib/index.js:2841-2857`)
+   * and that adding it is a deliberate act, not a fix.
+   */
+}
+
+/**
+ * Source and writability facts for one credential reference.
+ *
+ * There is deliberately no field a value could ride in: the read half crosses
+ * the Remote wire, so a view that could carry the secret would leak it. That is
+ * why the page can offer "replace" but never "reveal".
+ */
+export interface CredentialInfo {
+  /** Whether resolving the reference would currently return a value. */
+  readonly configured: boolean
+  /** The layer supplying the value; absent while unconfigured. */
+  readonly source?: string
+  /** Whether the active provider can write this reference. */
+  readonly writable: boolean
+}
+
+/** One provider row the 模型配置 page renders. */
+export interface ModelConfigRow {
+  /** The joined directory entry (route id, display name, address, live state). */
+  readonly entry: ProviderDirectoryEntry
+  /** Whether any layer configures this provider (its profile resolves). */
+  readonly configured: boolean
+  /**
+   * Whether this provider has actually been ADDED, which is what the page lists.
+   *
+   * Deliberately not the same question as {@link configured}. The directory gives
+   * a row to EVERY provider an adapter could serve, so `configured: false` covers
+   * two very different things: a provider the user has not added yet (dormant),
+   * and one that is simply not registered. The page shows the providers the user
+   * has, and offers the rest through a single add entry — so a row with no
+   * settings address at all is "added" by virtue of being live (a route the
+   * adapter registers without any configuration, like the account route), while
+   * a catalog entry with an address and no profile is not.
+   */
+  readonly added: boolean
+  /** Whether the user layer ALONE carries the profile (removal restores the base). */
+  readonly removable: boolean
+  /** The credential reference the resolved profile names, when one does. */
+  readonly apiKeyEnv: string | undefined
+  /** Credential state for {@link apiKeyEnv}, once described. */
+  readonly credential: CredentialInfo | undefined
+  /**
+   * Credential state for the page's derived `<ROUTE>_API_KEY`, described only
+   * while the profile names no reference — which is what keeps a dormant or
+   * keyless row's badge consistent with the editor's own derivation rule.
+   */
+  readonly derivedCredential?: CredentialInfo
+  /**
+   * The account route's own usability, which is a session fact rather than a
+   * credential one: `deepseek-account` authenticates through the signed-in
+   * session, so no `apiKeyEnv` describes it and the page must ask the session
+   * instead. Undefined for every other route.
+   */
+  readonly accountAvailable?: boolean
+}
+
+/** Lifecycle of the read behind the 模型配置 page. */
+export type ModelConfigStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+/** The immutable snapshot the page renders from. */
+export interface ModelConfigSnapshot {
+  readonly status: ModelConfigStatus
+  /** Whole-load failure text; row-level write failures stay on the row. */
+  readonly error: string | null
+  /** Credential enrichment failure; the provider rows remain usable. */
+  readonly credentialError: string | null
+  /** Whether the settings document accepts writes at all. */
+  readonly writable: boolean
+  readonly rows: readonly ModelConfigRow[]
+  /** Namespace views by namespace id. */
+  readonly namespaces: ReadonlyMap<string, SettingsNamespaceView>
+}
+
+/** One path-addressed edit, as the wire takes it. Alias of {@link SettingsOp}. */
+export type SettingsPathOp = SettingsOp
+
+/**
+ * One model group in the session's own catalog.
+ *
+ * The account route authenticates through the signed-in session rather than a
+ * key, so its availability is a SESSION fact: this catalog listing is the only
+ * read that can answer it, and a credential describe cannot.
+ */
+export interface SessionCatalogGroup {
+  readonly id: string
+  readonly models: readonly unknown[]
+}
+
+/**
+ * The `remote.session` read this page needs.
+ *
+ * Declared as the single method actually consumed rather than the whole session
+ * face: an out-of-repo plugin re-declares only what it reads, and naming more
+ * would misrepresent how much of that contract a change here could break.
+ */
+export interface RemoteSessionFace {
+  modelCatalog(): Promise<RemoteResult<{ readonly groups: readonly SessionCatalogGroup[] }>>
+}
+
+/** The generated `ctx.remote.credentials` namespace. */
+export interface RemoteCredentialsFace {  /** Source and writability facts for these references; never their values. */
+  describe(refs: readonly string[]): Promise<RemoteResult<Record<string, CredentialInfo>>>
+  /** Store one credential literal under its reference. */
+  set(ref: string, value: string): Promise<RemoteResult<void>>
+  /** Remove one credential reference (idempotent). */
+  unset(ref: string): Promise<RemoteResult<void>>
+}
+
+/** One model as the page edits it in a provider's catalog. */
+export interface ModelCatalogEntry {
+  readonly id: string
+  readonly name?: string
+  readonly contextWindow?: number
+  readonly maxTokens?: number
+  readonly input?: readonly string[]
+}
+
+/** The models array one provider profile carries, as stored. */
+export type ModelCatalog = readonly ModelCatalogEntry[]
 
 /**
  * One provider route the Host can address in the settings document.
@@ -127,6 +300,72 @@ export interface ConfigurableProvider {
   readonly settingsPath: readonly string[]
   readonly declared?: boolean
   readonly error?: string
+  /**
+   * The endpoint the adapter would use while the profile names none.
+   *
+   * Read so the row can show what "leave it empty" actually resolves to, which is
+   * the difference between an empty base-URL field reading as "unconfigured" and
+   * reading as "uses the adapter default".
+   */
+  readonly defaultBaseURL?: string
+  /**
+   * The environment variables that may supply the endpoint, in precedence order.
+   *
+   * This is the half of the env-fallback story the credential channel cannot
+   * answer: a credential read says whether a KEY resolves, never which variable
+   * backs a URL, so the row needs this list to name the fallback honestly.
+   */
+  readonly baseURLEnv?: readonly string[]
+}
+
+/**
+ * How the executor spends a provider's retry budget.
+ *
+ * Copied from `@deepseek-ai/dsh-llm`'s `RetryPolicySchema` through the pi-ai
+ * adapter's Config schema, which is where these fields were confirmed to be
+ * declared (`providers: z.dict(profile).default({}).volatile()`, so every
+ * provider profile — and therefore every retry field — is live-editable).
+ * `normal` spends a finite `maxRetries` budget; `always` retries without limit
+ * and is READ here but never written: an unbounded budget is not something this
+ * card should offer by accident.
+ */
+export type RetryPolicyMode = 'normal' | 'always'
+
+/** The bounded exponential backoff the executor applies between retries. */
+export interface RetryBackoff {
+  /** The first wait; every later wait doubles it until the cap applies. */
+  readonly initialDelayMs: number
+  /** The cap on one wait. */
+  readonly maxDelayMs: number
+  /** Symmetric fraction each wait is randomly varied by. */
+  readonly jitterRatio: number
+}
+
+/**
+ * One provider's retry configuration as the card shows and edits it.
+ *
+ * `maxRetries` and `maxDelayMs` are the two EDITED numbers; the rest is carried
+ * so a write can state the whole `retryPolicy` object without resetting fields
+ * the card does not expose.
+ */
+export interface RetryPolicyView {
+  readonly mode: RetryPolicyMode
+  /** Whether the provider's own layer states a policy, or it inherits one. */
+  readonly declared: boolean
+  readonly maxRetries: number
+  readonly maxDelayMs: number
+  readonly initialDelayMs: number
+  readonly jitterRatio: number
+  /** The raw stored policy object, when the provider has one. */
+  readonly policy?: Record<string, unknown>
+}
+
+/** The `retryPolicy` document written back to one provider. */
+export interface RetryPolicyValue {
+  readonly mode: RetryPolicyMode
+  readonly maxRetries: number
+  readonly retryableCodes?: readonly string[]
+  readonly backoff: RetryBackoff
 }
 
 /** The generated `ctx.remote.settings` namespace this plugin reads and writes. */
@@ -166,6 +405,17 @@ export interface DiscoveredModel {
 
 /** The generated `ctx.remote.llm` namespace: the provider directory behind the panel. */
 export interface RemoteLlmFace {
+  /**
+   * The routes whose adapter is registered right now.
+   *
+   * A separate read from {@link listConfigurableProviders}, and the difference is
+   * the whole dormant/live distinction: this list decides `active`, while the
+   * configurable directory decides which rows exist at all. Optional for the same
+   * reason discovery is — a deployment can answer one and not the other, and this
+   * page treats a missing answer as "no routes registered" rather than refusing
+   * to render.
+   */
+  listProviders?(): Promise<RemoteResult<readonly LlmProviderInfo[]>>
   listConfigurableProviders(): Promise<RemoteResult<readonly ConfigurableProvider[]>>
   /**
    * Model discovery, present only where the deployment mounts it.
@@ -365,10 +615,34 @@ export interface SlotRegisterOptions {
   inject?: (sessionId: string) => Record<string, unknown>
 }
 
+/**
+ * The registration options a settings SECTION passes.
+ *
+ * A deliberately different shape from {@link SlotRegisterOptions}, which belongs
+ * to the composer seat. A section carries the NAV IDENTITY the shell projects
+ * (`id`, `order`, `label`), while the seat carries `priority` — its shadowing
+ * rank. Naming both instead of widening one loose type is what keeps a section
+ * registration from silently acquiring a `priority` and shadowing the shipped
+ * Models page, which ADR 0003 forbids.
+ */
+export interface SectionRegisterOptions {
+  name: string
+  /** Section key; the shell's `only` filter and the nav row's identity. */
+  id: string
+  /** Nav position; ascending. */
+  order: number
+  /** Registrant-localized display text, evaluated on every read. */
+  label: () => string
+  /** Puts the framework `t` seat on the component when the registrant declares its namespace. */
+  locale?: string
+  /** The registrant's own inject face, merged with the owner props. */
+  inject?: () => Record<string, unknown>
+}
+
 /** The slot registry face (`ctx.slots`). */
 export interface SlotsFace {
   inject(name: string, callback: () => unknown): void
-  register(options: SlotRegisterOptions, component: unknown): () => void
+  register(options: SlotRegisterOptions | SectionRegisterOptions, component: unknown): () => void
 }
 
 /** The minimal Cordis client context this plugin's apply reads. */
