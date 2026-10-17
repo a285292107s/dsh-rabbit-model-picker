@@ -12,7 +12,17 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
   （文字 / 图片 / 推理 / 上下文窗口）。
 - `/model` 与 Host 侧逻辑不动。
 
-设计依据与逐条契约见 [DESIGN.md](DESIGN.md)（本次改版：§5.26 + §8.12；两栏本身见 §5.25 + §8.11）。
+设计依据与逐条契约见 [DESIGN.md](DESIGN.md)（本轮：§5.38；两栏本身见 §5.25 + §8.11）。
+
+**设计语言（2026-10-17 起）**：表面是一张**墨与纸**——单色墨阶 + 宿主蓝作唯一强调，1px 细线承担
+全部结构，局部墨晕（`.zmd-wash`）与细微纸纹（`.zmd-grain`）让表面读作材质而不是色块；字体是
+内嵌的 ZMD Archivo（OFL）+ 宿主中文字体栈。规范（令牌与对比度、字阶、几何、逐表面构图、强调
+语法、动效、响应式、质量门映射）在 [docs/ink-design-language.md](docs/ink-design-language.md)；
+实现约定、状态钩子与类名清单在 [docs/ui-language.md](docs/ui-language.md)。本轮先做过一版
+「终末地 HUD」，因「我们不是游戏 HUD、软黄色背景与 DSH 默认色差异过大」被用户否决，相关构件
+（字段码、大号数字、切角、扫光、信号黄）已整体移除。主题是宿主的：暗色写在
+`<body data-ds-dark-theme>` 下，是主稿；亮色是同一构图的纸面反相版，两套共用一组 `--zmd-*`
+语义令牌。
 
 ## 特性
 
@@ -32,33 +42,50 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
 - **内置目录也照样陈述**：模型来自适配器内置目录、配置里没有声明条目时，模态与窗口从**适配器自己
   发布的目录**读（`llm/discoverModels` / 适配器自有 Remote），而不是留白或猜。**适配器还没挂载**与
   **适配器什么都没发布**是两件事：前者留着下次重试，所以开卡早于适配器挂载也读得到事实（DESIGN §5.27）。
-- **对比度达标**：模型卡文字全部过 WCAG AA，由 `npm run contrast` 逐样式量出（含提供商栏的每一行）。
-- **动效有一条声线**：模型卡入场（从锚点角 scale 落定）、悬停过渡、按压缩放、选中勾弹跳共用一条
-  减速曲线，只动 transform 与背景色；`prefers-reduced-motion` 下全部关掉，键盘滚动只在
-  no-preference 下平滑。透明度淡入被对比度门天然禁止——理由见 DESIGN.md §5.23。
+- **对比度达标**：三个表面的文字全部过 WCAG AA，由 `npm run contrast` 在**两套主题**下逐样式量出
+  （含提供商栏的每一行；墨晕两端各量一次，因为文字可能落在渐变任一端）；装饰细线守「可见但不抢眼」
+  的亮度区间。
+- **双主题、一份令牌**：暗色是主稿、亮色是纸面反相版；取值只写在 `designSystem.ts` 的 `--zmd-*`
+  令牌块（`:root` 亮色默认 + `body[data-ds-dark-theme]` 暗色覆盖），样式表里没有第二处颜色字面量；
+  强调/焦点/错误直接引宿主令牌，不引入第二套色板。
+- **内嵌字体、零网络请求**：拉丁/数字用 ZMD Archivo Variable（Archivo，SIL OFL 1.1；子集 woff2
+  46,728 字节以 data-URI 打进客户端包），中文回落宿主字体栈；OFL 正本随包提交
+  （`docs/fonts/Archivo-OFL.txt`）。
+- **材质是局部的**：墨晕与纸纹只出现在模型卡、参数面板、配置页页首带与目录区面板；井、行、
+  控件是实色，不铺纹理。纹理层在文字之下（内容 `z-index: 1`），所以它只是材质，不摸到可读性。
+- **强调色只有宿主蓝**：蓝只做图形——当前会话的 2px 左条、选中行/档位的 2px 左条与勾底、焦点环、
+  展开态动作词的 hover 下划线；**永不作文字**（亮色约 3.91:1）。错误红只做 4px 竖条与诊断左条，
+  「缺密钥 / 不可用」的答案词仍是墨色。
+- **装饰只有一个**：可数清单的两位数序号（10px 弱墨、`aria-hidden`，来自真实渲染顺序）。
+  没有字段码、大号显示数字、方括号计数、切角、扫光——静态门与预览脚本都断言这些构件不存在。
+- **动效有一条声线**：悬停底色 120ms、按下 `translateY(1px)` 80ms、选中勾 `scale(0.6→1)` 160ms、
+  数值落定 `translateY(2px)` 160ms，共用 `cubic-bezier(0.2, 0, 0, 1)`；无扫光、无揭幕、
+  `prefers-reduced-motion` 下全部关掉。透明度过渡被对比度门天然禁止——理由见 DESIGN.md §5.23。
 
 ## 效果
 
-| | 深色 | 浅色 |
-|---|---|---|
-| 模型卡：打开即落在当前会话的提供商 | ![模型卡（深色）](shots/row-badges-dark.png) | ![模型卡（浅色）](shots/row-badges-light.png) |
-| 模型卡：提供商栏切到别的提供商，模型列表只列它 | ![提供商栏收窄（深色）](shots/provider-dark.png) | ![提供商栏收窄（浅色）](shots/provider-light.png) |
-| 窄屏：提供商栏折成横向条 | ![窄屏两栏折叠（深色）](shots/rail-stacked-dark.png) | ![窄屏两栏折叠（浅色）](shots/rail-stacked-light.png) |
-| 参数面板 | ![参数面板（深色）](shots/panel-dark.png) | ![参数面板（浅色）](shots/panel-light.png) |
-| 参数面板：模型来自适配器内置目录（§5.19 实测） | ![内置目录模型](shots/accept-capabilities-panel.png) | — |
-
-| 座位行（触发器 · 齿轮） |
-|---|
-| ![座位行](shots/composer-with-gear.png) |
+> 下面全部是**静态预览**：真实 `src/` 样式表（`designSystem.ts` + `styles.ts` +
+> `modelConfigStyles.ts` + `catalogStyles.ts`）+ 宿主真实 token 值、真实 DOM 结构，
+> **不是真机截图**。墨晕与纸纹在静态页里也真实渲染（同一份 `.zmd-wash` / `.zmd-grain`），
+> 所以图能证明排版、几何、材质与两套主题；它不能证明宿主窗格里的滚动、焦点链与 Esc 分层——
+> 那几项必须在真机里由用户确认（运行纪律见 [docs/agent-safety.md](docs/agent-safety.md)）。
+> 被否决的 HUD 版图（`endfield-*`）已删除；更早的历史图（`row-badges-*`、`provider-*`、
+> `panel-*`、`model-config-3x/4x` 等）留在 `shots/` 里作历史证据，不再重生成。
 
 | | 深色 | 浅色 |
 |---|---|---|
-| 模型配置页：一行一条路由的账本（**静态预览**：宿主真实 token + 真实样式表，非真机截图） | ![模型配置（深色）](shots/model-config-35-ledger-dark.png) | ![模型配置（浅色）](shots/model-config-36-ledger-light.png) |
-| 模型目录区：账本行内展开的花名册，编辑收进该模型行的井（**静态预览**） | ![模型目录区（深色）](shots/model-config-40-catalog-inline-dark.png) | ![模型目录区（浅色）](shots/model-config-41-catalog-inline-light.png) |
-
-> 以上四张是**静态预览**（宿主真实 token 值 + 真实样式表），**不是真机截图**：live 验收由用户接手，
-> 运行纪律见 [docs/agent-safety.md](docs/agent-safety.md)。图是 560px 单栏：行 1 是收起的账本，
-> 行 2 是展开 openrouter 目录区的同一页；旧 460px 抽屉图（`model-config-37/38`）已降为历史证据（§5.37）。
+| 模型卡：打开即落在当前会话的提供商——rail 选中它（沉底填充 + inset 强线环），列表**只列它** | ![模型卡（深色）](shots/ink-card-dark.png) | ![模型卡（浅色）](shots/ink-card-light.png) |
+| 模型卡：范围切到「全部」——列表按 provider 分组；当前会话行仍带 2px 宿主蓝左条 | ![全部范围（深色）](shots/ink-card-all-dark.png) | ![全部范围（浅色）](shots/ink-card-all-light.png) |
+| 窄屏（≤536px）：提供商栏折成横向条，同一份 DOM | ![窄屏折叠（深色）](shots/ink-card-narrow-dark.png) | ![窄屏折叠（浅色）](shots/ink-card-narrow-light.png) |
+| 座位行：收起 / 模型卡打开 / 长模型名先省略号 | ![座位行（深色）](shots/ink-seat-dark.png) | ![座位行（浅色）](shots/ink-seat-light.png) |
+| 参数面板：模型名 + 恢复默认、三段中文标题、方形开关、选中档位 2px 蓝左条 + 蓝底勾 | ![参数面板（深色）](shots/ink-panel-dark.png) | ![参数面板（浅色）](shots/ink-panel-light.png) |
+| 模型配置页 560px：页首陈述 + 48px 账本 + 设置井（重试编辑器）+ 目录区（发现清单） | ![模型配置 560（深色）](shots/ink-settings-560-dark.png) | ![模型配置 560（浅色）](shots/ink-settings-560-light.png) |
+| 模型配置页 484px：井标签列 56px，行高仍 48px | ![模型配置 484（深色）](shots/ink-settings-484-dark.png) | ![模型配置 484（浅色）](shots/ink-settings-484-light.png) |
+| 模型配置页 106px：宿主真机最窄内容列，扫描行四行堆叠、无横向溢出 | ![模型配置 106（深色）](shots/ink-settings-106-dark.png) | ![模型配置 106（浅色）](shots/ink-settings-106-light.png) |
+| 空态：一句就绪陈述 + 添加入口 | ![空态（深色）](shots/ink-settings-empty-dark.png) | ![空态（浅色）](shots/ink-settings-empty-light.png) |
+| 设置井展开：沉底墨 + 1px 线，标签列单行中文，末行「删除」前一条分隔线 | ![设置井（深色）](shots/ink-well-dark.png) | ![设置井（浅色）](shots/ink-well-light.png) |
+| 目录区展开：`模型目录` + 状态 + 普通计数、行内花名册、发现清单三态勾选框 | ![目录区（深色）](shots/ink-catalog-dark.png) | ![目录区（浅色）](shots/ink-catalog-light.png) |
+| 重试编辑器：两个数字框、摘要行、五槽灰阶退避刻度条（2 实 3 空，真实等待） | ![重试编辑器（深色）](shots/ink-retry-dark.png) | ![重试编辑器（浅色）](shots/ink-retry-light.png) |
 
 ## 交互
 
@@ -85,12 +112,16 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
 
 ## 行内徽章
 
-每行右侧四个只读徽章，顺序固定。前三个自绘于宿主 16 单位网格，推理一列用宿主 24×24 大脑，
-两套网格线重均为 1.4px。
+每行右侧四个只读徽章，顺序固定。**四枚共用一套 16 单位网格**：11 单位方框 + 内部符号
+（文本两条横线 / 图片山形 / 推理三根升序短柱 / 窗口两侧比例括号），统一 `stroke-width: 1.6`，
+渲染 14px 即屏幕 **1.4px**，方头方角。**本轮不再有第二套 24×24 网格，也不再借用宿主的大脑图标**
+——四枚是同一只手画的同一套方框符号，颜色只用墨（`--zmd-ink-mute` / `--zmd-ink-secondary`）。
+宽度预算不变（见下）。
 
 **四列固定**：每行始终画出四条轨道（`文字 / 图片 / 推理 / 窗口`），模型没有的事实**在它自己的列里留空**，
-不画斜线、也不把邻居左移。所以四列逐行对齐、模型名那一列逐行等宽（实测 10 行全是 160px），
-眼睛可以上下比较同一件事。搜索行下面那行**表头**把四列各是什么说一次（11px、次级墨色、不滚动）。
+不画斜线、也不把邻居左移。所以四列逐行对齐、模型名那一列逐行等宽，眼睛可以上下比较同一件事。
+搜索行下面那行**表头**（四个中文列名 + 上下各 1px 结构线）把四列各是什么说一次；四个词是功能
+文案，不换英文码，右端也不再放计数。
 
 | 徽章 | 含义 | 值 |
 |---|---|---|
@@ -114,38 +145,43 @@ opencode-go 的 `modelInfo()` 同序），所以徽章和适配器实际用的�
 
 ## 模型配置页（设置里的平行 tab）
 
-宿主设置里新增的「模型配置」页（与官方「模型」页**并存**，ADR 0003）是一页**路由账本**。
-设计语言写在 [`docs/ui-language.md`](docs/ui-language.md)。2026-10-16 那轮用 `design-taste-frontend` 的
-`draw.mjs` 抽到 **`quiet-instrument`（seed 1258196331）**；2026-10-17 这一轮保留了方向、把**构图**升级成账本——
-上一版每行「身份 + 六轨控件行」在真机 560px 内容列里让凭据格装不下自己的两个词
-（凭据格 108×60、行高 108px、一行四条基线、整页 1248px）。
+宿主设置里新增的「模型配置」页（与官方「模型」页**并存**，ADR 0003）是这组表面的主场。
+规范在 [`docs/ink-design-language.md`](docs/ink-design-language.md)，实现约定与类名清单在
+[`docs/ui-language.md`](docs/ui-language.md)。2026-10-17 这一轮把它和输入条三表面一起重制成
+**墨色**语言：页首一条墨晕带上的就绪陈述、48px 账本行、沉底墨设置井、行内目录区、井内重试
+编辑器、单色 + 宿主蓝。**账本的结构决策沿用 2026-10-16 那一轮**：上一版每行「身份 + 六轨控件行」
+在真机 560px 内容列里装不下自己的两个词（凭据格 108×60、行高 108px、整页 1248px）的问题没有回来。
 
 **一句话**：一行一条路由，行上只陈述三件事实——**它是谁、它有多少模型、它现在能不能服务**——
 改它的一切收进这一行的**设置井**。井是表单，不是控件的再一次横排。
 
-| 决定的 | 代替了 |
+| 决定的 | 说明 |
 |---|---|
-| **一行一条路由**（48px，静止态没有表单控件）：身份 / 模型数 / 答案词 / `管理` | 每行两段、第二段 5–6 个小词挤在六个固定轨道里 |
-| **模型格是事实也是门**：`N 个模型`（无自有目录写`默认`）点开该行的模型目录区（行内展开，不是抽屉） | 一个 12px 的「模型目录」词，旁边悬着一个裸数字 |
-| **设置井是表单**：凭据 / API 协议 / 自动重试 三行「标签 + 值」，末行才是「删除该提供商」 | 破坏性动作与普通事实同为 12px、相距 20px |
-| **答案词 + 竖条两个通道**：`data-state` = `ready` / `missing-key` / `unreachable`，诊断另用 `data-error` 可叠加，句子在井顶 | 旧的 `data-usable` 布尔把「未添加」和「缺密钥」压成一个红底，筛选后恒为 true |
-| **一句就绪陈述**（`.dmc-readout`，20px，唯一大尺寸元素；存/清 key、增删后当场重算） | 原来那句信息量为零的通用说明 |
-| **`@container` 窄分支**（560 / 484 / 106 三档，问的是 `.dmc-page` 的可用宽度） | `@media (max-width: 900px)`——宿主面板宽 800px 与视口无关，它在 1920 视口下永不触发 |
-| **完整的门**：`dmc-` 的每一处文字都在 `check-contrast.mjs` 里逐条量过 | 「墨水白名单 + 静态禁令」，比逐条测量弱一档 |
+| **页首 `.dmc-head`**：`zmd-wash` + `zmd-grain` 的材质带上放一句就绪陈述（20px/500，live thing） | 无大序号、无字段码、无顶条；句子仍由 React key 重挂载做 160ms 落定，数字与列表由同一套读取算出 |
+| **一行一条路由**（48px）：两位序号 / 身份 + route id / 模型格 / 答案词 / `管理` 文字动作 | 静止态没有表单控件；行间 1px 结构线；展开行 = `--zmd-hover` 底，门词 hover 蓝下划线 |
+| **模型格是事实也是门**：`N 个模型`（无自有目录写 `默认`）点开该行的模型目录区（行内展开，不是抽屉） | 一个 12px 的「模型目录」词旁边悬着裸数字的旧形态已删除 |
+| **设置井 `.dmc-well`**：`--zmd-panel-deep` + 1px 边的表单；标签列单行中文（凭据 / API 协议 / 自动重试）；末行「删除」前一条分隔线 | 破坏性动作与普通事实分开；井是表单，不是控件的再一次横排 |
+| **答案词 + 竖条两个通道**：`data-state` = `ready` / `missing-key` / `unreachable`，诊断另用 `data-error` 可叠加、句子在井顶 | 旧的 `data-usable` 布尔把「未添加」和「缺密钥」压成一个红底，筛选后恒为 true |
+| **`@container` 窄分支**（560 / 484 / ≤360，问 `.dmc-page` 的可用宽度）：484 把井标签列收到 56px，≤360 扫描行拆成四条线、隐藏序号、可点目标 40px | `@media (max-width: 900px)` 问的是视口，宿主面板宽 800px 时它在 1920 视口下永不触发 |
+| **两套主题、一份令牌**：颜色只走 `--zmd-*`；蓝只做图形（2px 条 / 焦点环 / 选中勾底），墨色画字 | `check-contrast.mjs` 在亮/暗两个主题下逐条登记画字规则，墨晕两端各量一次 |
 
 **有意不做的事**（写进报告，不是遗漏）：**0 张照片**——此题材是软件，它的图片就是它自己的界面；
 **不做滚动入场编排**——这是别人的设置面板里的一个分区，在里面做首屏动画是错的；
 **不按状态排序或分组**——账本保持目录顺序，需要处理的由答案词与竖条标出；
-**不加列头**——`N 个模型` 与答案词都是自解释的词，列头只是多一层 chrome。
+**不在装饰里造假数据**——退避刻度条只用重试策略真实算出的等待。
 
 > 这一轮没有对运行中的 GUI 做 live 验收（原因、证据缺口与运行纪律见
-> [`docs/agent-safety.md`](docs/agent-safety.md)）；README 里的两张图是**静态预览**，
-> 用宿主真实 token 值与真实样式表渲染，能证明排版与两套主题，不能证明宿主窗格里的滚动与焦点链。
+> [`docs/agent-safety.md`](docs/agent-safety.md)）；README 里的图是**静态预览**，
+> 用真实样式表与宿主真实 token 值渲染，能证明排版、几何与两套主题，不能证明宿主窗格里的
+> 滚动、焦点链与 Esc 分层。
 
-**模型目录区（§5.37，取代 §5.36 的右侧抽屉）** 沿用同一套语法：一行一个模型（id + 打开编辑的门，
-第二行是显示名与容量事实），四个字段、推理档位与「删除模型」收进该模型行的井；`+ 添加模型` 是花名册末尾的一条账本行。
-一个七模型的自定义目录因此从「28 个常开输入框」变成「7 行 + 最多一个展开的井」。模型发现（三步）的结构不变。
-**它不再是弹层**：目录区是账本行自己的展开区，占满设置内容列（560 / 484 / 106），没有 fixed / scrim / `aria-modal` /
+**模型目录区（§5.37，取代 §5.36 的右侧抽屉）** 是账本行自己的行内展开区：`zmd-wash` 面板 +
+1px 边；头只写「模型目录」+ 自有状态 + 普通计数 + `收起`；一行一个模型（两位序号 / id /
+`编辑` 门，第二行显示名 + 容量事实），四个字段、推理档位与 `删除模型` 收进该模型行的井；
+`+ 添加模型` 是页尾文字动作（无装饰条）；发现清单用方形勾选框（未选 / 选中 / 已在目录三态，
+选中是宿主蓝底 + on-accent 勾，后者禁用并整行降为次级墨色）。一个七模型的自定义目录因此从
+「28 个常开输入框」变成「7 行 + 最多一个展开的井」。模型发现（获取 → 勾选 → 添加所选）的结构不变。
+**它不是弹层**：目录区占满设置内容列（560 / 484 / 106），没有 fixed / scrim / `aria-modal` /
 焦点陷阱；设置弹窗因此重新成为唯一一层 modal。草稿未保存时收起或切换提供商会先问一句
 「有未保存的模型修改。继续编辑 / 放弃修改」。Esc 一次只关一层：模型井 → 目录区 → 宿主设置面板。
 
@@ -158,8 +194,8 @@ opencode-go 的 `modelInfo()` 同序），所以徽章和适配器实际用的�
 | 决定的 | 说明 |
 |---|---|
 | **覆盖范围由 schema 决定**，不是按 provider id 点名 | 只要该提供商的 profile 节点声明了 `retryPolicy` 就有入口——**官方 `llm-deepseek` 也算**（它的 `retryPolicy` 在命名空间根、`settingsPath` 为 `[]`），pi-ai 家族是 `['providers', <route>]`。**读不出 schema / 路径走不通就不显示入口**（失败关闭，与协议选项读不出返回空同一纪律） |
-| **编辑器里有什么** | 来源词（`已单独设置` / `使用默认值`）→ 两个数字字段（重试次数 / 间隔上限秒）→ 一句 `每次等待翻倍，直到触达上限。` → 一行摘要（默认策略下算出来是 `5 次 · 首次等待 500ms · 最长合计 17.1s`）→ `保存` / `恢复默认` 与状态行（`已保存` / 失败原话） |
-| **柱状图已删除** | 等待节奏改由那句话 + 两个数字陈述。`最长合计` 现在是**带 jitter 的上界**（`waitRange(...).high`）——旧卡在同一标签下印的是"名义总和"，那是执行器从来不会真的花掉的数，标签在撒谎 |
+| **编辑器里有什么** | 来源词（`已单独设置` / `使用默认值`）→ 两个数字字段（重试次数 / 间隔上限秒）→ 一句 `每次等待翻倍，直到触达上限。` → 一行摘要（默认策略下算出来是 `5 次 · 首次等待 500ms · 最长合计 17.1s`）→ **5 槽退避刻度条** → `保存` / `恢复默认` 与状态行（`已保存` / 失败原话） |
+| **退避刻度条（不是柱状图）** | 等待节奏的插图仍不复存在；现行设计只画 5 个 8px 方块，每格高度按 `retryWaitCurve` 的**真实等待**取 4 档、格数 = 策略实际会花的等待数，空槽是 `--zmd-line` 里的基线而不是数据；配色是灰阶（实心 `--zmd-ink-mute`、空槽 `--zmd-line`），整条 `aria-hidden`（摘要句已经用文字说了同一件事），`prefers-reduced-motion` 下不动。`最长合计` 是**带 jitter 的上界**（`waitRange(...).high`）——旧卡在同一标签下印的是"名义总和"，那是执行器从来不会真的花掉的数，标签在撒谎 |
 | **写回走本页自己的 store** | `store.write(ns, ops, namespace.revision)`：保存写 `[...settingsPath, 'retryPolicy']`（两个数字都没变则不写，免得凭空造出 revision 冲突），恢复默认 `unset` 该路径。`settings/conflict` 重读重试、Host 拒绝原话照显，与官方页那条写入纪律同一份实现 |
 | **样式并入 `dmc-` 域** | `drc-` 前缀退役；复用既有的提示行 `.dmc-notice` 与去铬动作 `.dmc-key-action`，不新增重复规则。旧卡的 `.drc-btn-primary`（accent 实心填充 + 白字）是已记录的 **4.2349:1（浅）/ 2.3278:1（深）** AA 失败——搬进 `dmc-` 后这条缺陷随设计消失，并由对比度门永久守住 |
 | **中文限流文案也走这里**（§5.34） | 有一类失败到不了重试链：网关在流里回 `请求过于频繁，请稍后重试`（**不带 HTTP 状态**），宿主分类器只认 `429`/`rate limit` 与英文 quota 措辞，于是它落进不可重试的兜底码 `PI_AI_ERROR`，**重试编辑器上的设置一次都不会被咨询**（实测 18 次失败、0 次重试、2~6ms 即终止）。Host 侧因此在 `agent/request-error` 瀑布**最外层**把这类失败**按 `RATE_LIMIT` 重新提交**给内建执行器——等待节奏、重试次数、界面上的「等待重试模型请求」行**仍由上面这两个数字决定**，本插件不自己等、不自己计数。编辑器里那行 `中文限流文案（如「请求过于频繁」）也按这里设置重试。` 说的就是它。**去掉该策略里的 `RATE_LIMIT` 即整体关闭**；重试耗尽后终态仍如实记原始码与原话 |
@@ -203,20 +239,22 @@ plugin_manager { action: "install_bundle", target: "C:/Users/28529/Desktop/dsh-r
 ```bash
 npm install          # esbuild + typescript + @types/react
 npm run build        # esbuild → lib/index.js（宿主）+ lib/client.js（客户端）
+npm run font:build   # 重新子集化内嵌拉丁字体资产（需 Python/网络；产物 src/client/fontAsset.ts 已提交）
 npm run typecheck    # tsc --noEmit（含 noUnusedLocals/Parameters）
 npm run test:fresh   # 已提交的 lib/ 是否是已提交的 src/ 的忠实产物（产物漂移门）
-npm run selfcheck    # 静态禁令 + 座位契约 + 文案键 + 两栏/提供商栏/触发器契约
-npm run contrast     # 文字对比度门：两个主题下按真实字号判 WCAG AA
+npm run selfcheck    # 静态禁令 + 令牌层 + 材质原语 + 字体资产 + 座位契约 + 文案键 + 宽度预算
+npm run contrast     # 文字对比度门：解析 --zmd-* 两主题，逐条画字规则 + 墨晕两端 + 抑制蓝作文字
 npm run test:params  # 参数寻址/容量 + 行内事实推导 + 面板文案决策的单元门
-npm run test:retry   # 重试策略解析、等待曲线与写入文档的单元门
+npm run test:retry   # 重试策略解析、等待曲线（退避刻度条的数据源）与写入文档的单元门
 npm run test:recovery          # 限流文案恢复的判定门：五个条件、文案表、副本语义（§5.34）
 npm run test:model-config      # 「模型配置」页的纯逻辑层与 store 单元门
 npm run test:model-config-copy # 该页文案门：key 集、zh/en 同序、插值对称、概念覆盖
-npm run test:mutations # 改坏验证：22 条改坏必须条条变红，且要归对门（§5.31 / §5.34）
-npm test             # typecheck + build + test:fresh + selfcheck + contrast + test:params + test:retry + test:recovery + test:model-config + test:model-config-copy + test:mutations
+npm run test:mutations # 改坏验证：旧门（§5.31 / §5.34）的改坏必须逐条变红
+npm run test:mutations:ink # 墨色新增门的改坏证明
+npm test             # 上述全链（typecheck → build → test:fresh → selfcheck → contrast → 单元门 → 两套改坏验证）
 ```
 
-> 这九道门在 GitHub Actions 上随每次 push 跑一遍（`.github/workflows/test.yml`）：
+> 这些门在 GitHub Actions 上随每次 push 跑一遍（`.github/workflows/test.yml`）：
 > `lib/` 漂移会在 push 阶段被拦下，而不是等某次 git 安装装到旧行为。
 > `test:mutations` 是"门自己的门"：它把每条判断逐个改坏，确认有一条门真的会红；
 > 改坏要是打不上去了，它**算失败并点名**，而不是静默跳过（§5.31）。
@@ -260,6 +298,9 @@ playwright-cli -s=verify --raw run-code --filename=./scripts/_accept-anchor-loss
 src/index.ts               宿主半边：把限流文案恢复挂到 `agent/request-error` 瀑布的最外层（§5.34）
 src/host/rateLimitRecovery.ts 该判定的纯逻辑：五个条件 + 文案表 + 副本语义（不等待、不计数、不写事件）
 src/client/index.ts        入口：inject 声明 + slots.inject → register(priority:-10)
+src/client/designSystem.ts  墨色设计系统：内嵌 ZMD Archivo 的 @font-face + `--zmd-*` 令牌层（亮/暗两主题）
+                            + 材质原语 `.zmd-wash` / `.zmd-grain` / `.zmd-rule` / `.zmd-num`
+src/client/fontAsset.ts     生成产物：子集化 woff2 的 base64 data-URI + 字体来源/许可证元数据（勿手改）
 src/client/Picker.tsx      触发器（`提供商/模型名 · 推理等级`）+ 齿轮 + 两栏模型卡
 src/client/ProviderRail.tsx 提供商栏：范围列表（全部 + 各 provider + 失败行），listbox + roving focus
 src/client/BadgeIcons.tsx  四个徽章图标（只有"具备这个事实"一种形态；缺失的事实不画）
@@ -286,28 +327,40 @@ src/client/anchorLoss.ts    座位离开版面判据（纯逻辑）
 src/client/params.ts        参数寻址与读写（含 revision 冲突重试）
 src/client/retiredScope.ts  旧范围记录的键前缀 + 一次性清理（数据契约，不含行为）
 src/client/dictionary.ts    zh/en 文案 + 本地兜底
-src/client/styles.ts        注入样式表（全部走 --dsw-* 令牌）
+src/client/styles.ts        输入条三表面样式表（座位/模型卡/参数面板；`dmp-` 域，颜色只走 `--zmd-*`）
 src/client/contract.ts      外部结构类型 + `rowKey`（行身份 `${provider}/${model}`，
                             原住在已删除的 recent.ts，现在归这里）
 src/client/primitives.d.ts  唯一运行时基线依赖类型边界
 scripts/build-client.mjs    esbuild 构建 + 接线自检
-scripts/selfcheck-static.mjs 静态禁令 + 契约 + 徽章紧凑预算等
-scripts/check-contrast.mjs  文字对比度门
+scripts/build-font-asset.mjs 内嵌字体的获取/子集化/base64 生成（`npm run font:build`）
+scripts/selfcheck-static.mjs 静态禁令 + 令牌层 + 材质原语 + 字体资产 + 契约 + 宽度预算等
+scripts/check-contrast.mjs  文字对比度门（含墨晕两端与强调蓝禁作文字）
 scripts/test-params.mjs     参数寻址/事实推导/文案决策 + 旧范围键清理的单元门
 scripts/test-retry-policy.mjs 重试策略解析、等待曲线与写入文档的单元门
 scripts/test-rate-limit-recovery.mjs 限流文案恢复的判定门（自包含，不依赖宿主安装；§5.34）
 scripts/mutate-anchor-loss.mjs §5.18 改坏验证
+scripts/mutate-ink-gates.mjs 墨色新增门的改坏证明
 scripts/_accept-provider-rail.cjs §5.25/§5.26 浏览器验收（两栏、触发器身份、范围每次重来、越界搜索、窄屏折叠、键盘）
 scripts/_accept-anchor-loss.cjs §5.18 浏览器验收
 scripts/_accept-capabilities.cjs §5.19 浏览器验收（只读：内置目录的模型到底读到了什么）
 scripts/_verify-settings-layout.cjs 参数面板仍是"头在上、正文在下"的列（材质类共用的守卫，§5.25）
 scripts/_audit-shots.cjs      品质自查截图（两张主题 × 四类表面；当前宿主跟随系统深色，浅色走「设置 → 外观」）
-scripts/_page-preview.mjs     静态预览 fixture：真实 `modelConfigStyles` + `catalogStyles` + 宿主 token，560/484/106 三档，含展开的目录区（docs/ui-language.md §7）
-scripts/_shot-page.cjs        该 fixture 的浅/深两主题截图 + 行高/右沿/溢出几何测量
-scripts/_shot-readme.cjs      README 的 560px 单栏截图：收起的账本（35/36）+ 展开的目录区（40/41）
-docs/ui-language.md           「模型配置」页的 UI 语言：诊断、令牌、组件语法、响应式、动效、扩展规则（DESIGN §5.35）
+scripts/_fixture-css.mjs      静态预览的唯一 CSS 入口：宿主真实 token + designSystem.ts + 三张真实样式表
+scripts/_preview-ink.mjs      墨色静态预览 fixture 的 DOM 镜像（卡宽/卡窄/座位+面板/配置页四档）
+scripts/_page-preview.mjs     写配置页 fixture（转调 `_preview-ink.mjs`；旧入口保留）
+scripts/_render-row.cjs       写模型卡 fixture（同上）
+scripts/_render-trigger.cjs   写座位+参数面板 fixture（同上）
+scripts/_shoot-row.cjs        墨色卡截图 `ink-card-*.png` + 卡宽/窗格/名字/徽章条/行高/wash+grain 实测
+scripts/_shoot-trigger.cjs    墨色座位/面板截图 `ink-seat-*.png`/`ink-panel-*.png` + 触发器/面板实测
+scripts/_shot-page.cjs        墨色配置页截图 `ink-settings-*.png`/`ink-well/catalog/retry` + 行高/右沿/106 溢出/刻度/勾选框实测
+scripts/_dump-design-css.mjs  把 `designSystem.ts` 的整张表落到 `shots/_design-system.css`（被忽略的中间产物）
+scripts/_shot-readme.cjs      历史：README 的旧 560px 单栏截图（35/36、40/41），不再重生成
+scripts/_taste-readme-shots.cjs 历史：重拍 README 旧表面的脚本（深/浅两套），不再重生成
+docs/ink-design-language.md   墨色设计语言规范（本轮单一事实源：令牌/字体/几何/逐表面/动效/门映射）
+docs/ui-language.md           墨色实现约定：类名清单、状态钩子、材质层叠、响应式、动效、门映射
+docs/adr/0005-ink-language.md 这一轮方向取舍的 ADR（为什么从 HUD 改成墨色）
+docs/fonts/Archivo-OFL.txt   内嵌字体的 SIL OFL 1.1 正本（随包提交）
 docs/agent-safety.md          运行纪律与 2026-10-17 事故记录：不要结束别人的进程、不要在同一 DSH_HOME 上起第二个 dsh web
-scripts/_taste-readme-shots.cjs 重拍 README 用的表面，含窄屏折叠那张（深/浅两套，见 DESIGN §5.24/§5.25）
 scripts/_dump-tokens.cjs      按主题打印宿主令牌原值（设计改动前查 --dsw-* 用，只读）
 scripts/_anchor-loss-probe.cjs  复现锚点消失（开发用，只读）
 scripts/_squeeze-probe.cjs     窄输入条压测（开发用，只读）
@@ -332,13 +385,23 @@ scripts/_squeeze-probe.cjs     窄输入条压测（开发用，只读）
 | remote 命名空间一律是 `remote.<namespace>` 服务，且**异步挂载** | 读取时按需 `ctx.get`，才不会把插件激活顺序变成事实来源；**命名空间还没挂载时"读不到"**（不是"适配器什么都没发布"），这样开卡早于挂载也不会把唯一一次询问消耗掉 |
 | 宿主 `--dsh-composer-model-text-display` / `--…-icon-display` | 窄屏折成图标；不消费就挤爆工具行 |
 | 宿主 label 令牌对比度（caption 2.08:1 / dimmed 1.23:1） | 不能用来写面板说明文字；`npm run contrast` 即为此存在 |
-| `MenuSurface` 底色是半透明子元素 | 对比度取决于合成到哪一层；门按两种底层里较差的那层判 |
-| 宿主 `Tag` 原语（`tone: neutral/quiet`，渲染成 `span`） | 行内徽章用它，"只读"是结构性的 |
+| `MenuSurface` 底色是半透明子元素 | 对比度取决于合成到哪一层；门按两种底层里较差的那层判。墨色方向把该层改成透明、由 `.zmd-wash` 画材质，文字再被抬到 `z-index: 1` |
+| 宿主在 `<body>` 上切换 `data-ds-dark-theme` 布尔属性 | 双主题只靠这条属性：`designSystem.ts` 用 `body[data-ds-dark-theme]` 覆盖 `--zmd-*` 令牌（含 wash 两端），没有 JS 侦测 |
+| 宿主字体变量 `--dsh-font-family-text` / `-default` | 内嵌 ZMD Archivo 只覆盖拉丁与数字，中文仍走宿主字体栈 |
+| 宿主 `Tag` 原语（`tone: neutral`，渲染成 `span`） | 行内徽章用它，"只读"是结构性的 |
 | `deepseek-account` / `deepseek-official` 是 provider id | 提供商排序（账号/官方置顶）与 chip 本地化写死这两个 id；宿主改名只会静默退化，selfcheck §13 把它们钉住 |
 | composer 卡片元素带 `[data-composer-card]` | 失败 toast 以它为锚；找不到时 toast 仍显示但没有锚定位置 |
 | 基线模块表隐式外部化 | 不要写进 `dsh.client.external` |
 
 ## 已知边界
+
+- **材质是局部的、不承载信息**：墨晕（`.zmd-wash`）与纸纹（`.zmd-grain::after`）只出现在模型卡、
+  参数面板、配置页页首带与目录区面板；grain 是 data-URI SVG 噪点覆盖层（无 `opacity` 属性，
+  靠 SVG 自带约 5% alpha），文字被抬到它上面。`prefers-reduced-motion` 不关它（它不是动效）。
+  静态预览脚本会实测这两条计算样式存在、HUD 构件数量为 0。
+- **方向被否过一次**：2026-10-17 的第一版是「终末地 HUD」，因「不是游戏 HUD、软黄色与 DSH 默认色
+  差异过大」被用户否决并整体移除（字段码、信号黄、大序号、切角、扫光全删）；`docs/ui-language.md`
+  附录保留更早的「路由账本」历史文，仅作证据。
 
 - **参数面板三项都生效，但各走各的门**：
   - **输入类型 / 上下文窗口** → 写进适配器声明，通过 `settings/mutate` 落盘到 `cordis.patch.yml`（与「设置 → 模型」页同处）。前提是路由在配置里有声明；模型来自内置目录时面板改为**陈述适配器目录公布的事实**（只读），并说明没有可编辑的声明。

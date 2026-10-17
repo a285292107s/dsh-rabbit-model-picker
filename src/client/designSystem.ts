@@ -67,7 +67,6 @@ const TOKENS = `:root {
   /* the wash: two tonal ends of the same surface + grain tint */
   --zmd-wash-top: #fbfbfa;
   --zmd-wash-bottom: #f0f0ed;
-  --zmd-grain-tint: #808080;
 
   /* functional state colours that are NOT host aliases (graphics only) */
   --zmd-online: #2f7d4f;

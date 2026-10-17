@@ -183,7 +183,7 @@ const ARTIFACTS = [
 ]
 
 // --- the embedded design system and face, as COMMITTED ----------------------
-// §8 of docs/endfield-design-language.md puts the token layer and the embedded
+// §8 of docs/ink-design-language.md puts the token layer and the embedded
 // Latin face into the shipped artifact: `designSystem.ts` is imported by the
 // client entry and `fontAsset.ts` is a generated 46.7KB base64 payload inside it.
 // The generic equality above already notices a stale `lib/`, but it reports a

@@ -329,7 +329,7 @@ const STYLES = [
   { selector: '.dmc-discover-name', note: 'discovered model name' },
   { selector: '.dmc-discover-group', note: 'discovery list group heading (§13.5)' },
 
-  // --- the Endfield revision (docs/endfield-design-language.md §8) -----------
+  // --- the ink revision (docs/ink-design-language.md §8) -----------
   // Every rule that paints text in the two `dmc-` sheets and the design-system
   // primitives, registered by name. The sweep below proves this list is COMPLETE;
   // the list is what pins each style's intent so a change of its ink is
@@ -795,7 +795,7 @@ const CONTAINERS = {
   '.dmc-discover-name': '.dmc-discover-candidate',
   '.dmc-discover-group': '.dmc-discover-list',
   '.dmc-discover-search': '.dmc-discover-panel',
-  // --- the Endfield revision: the new classes' place in the tree -------------
+  // --- the ink revision: the new classes' place in the tree -------------
   '.dmc-head-index': '.dmc-head',
   '.dmc-index': '.dmc-name',
   '.dmc-field-code': '.dmc-field-label',

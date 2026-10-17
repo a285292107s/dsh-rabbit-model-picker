@@ -8,7 +8,7 @@
  * facts would put two drawing styles in one 113px strip. So all four are drawn
  * here in one hand.
  *
- * THE LANGUAGE (docs/endfield-design-language.md §4.5). One grammar for the
+ * THE LANGUAGE (docs/ink-design-language.md §4.5). One grammar for the
  * whole family: a 1px square FRAME with the fact drawn inside it, on one 16-unit
  * grid, at one stroke weight. The frame is the "instrument face" of the row: it
  * is what makes four different little marks read as four cells of one console

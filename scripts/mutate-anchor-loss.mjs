@@ -1,5 +1,5 @@
 /**
- * 改坏验证 for §5.18 … and, since the Endfield revision, the gate ON the gates:
+ * 改坏验证 for §5.18 … and, since the ink revision, the gate ON the gates:
  * each mutation breaks one decision a gate rests on; a gate has to notice every
  * one of them, and the source has to come back byte-identical afterwards.
  *
@@ -44,7 +44,7 @@ const WIRING = 'src/index.ts'
  * visible to the static gate, which is exactly why the rule needs a gate that
  * drives it.
  *
- * The contrast gate joins them for the Endfield mutations: the token layer's
+ * The contrast gate joins them for the ink-gate mutations: the token layer's
  * pairs, the line bands and the per-style AA floors live only there, so a
  * mutation that breaks one of those numbers would otherwise be "unprotected".
  */

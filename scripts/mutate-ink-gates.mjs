@@ -22,9 +22,9 @@
  * the BASELINE must be green first — a red baseline would satisfy the detector for
  * every mutation and certify nothing.
  *
- * Run: node scripts/mutate-endfield-gates.mjs
+ * Run: node scripts/mutate-ink-gates.mjs
  *
- * @module dsh-rabbit-model-picker/mutate-endfield-gates
+ * @module dsh-rabbit-model-picker/mutate-ink-gates
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'

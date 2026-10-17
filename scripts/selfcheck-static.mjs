@@ -107,7 +107,7 @@ const CLASS_NAME = /dmp-[a-z0-9]+(?:-[a-z0-9]+)*/g
 // rule or in a comment — cannot satisfy it.
 for (const file of [
   'src/client/styles.ts',
-  // docs/endfield-design-language.md §8: the design system owns the token layer
+  // docs/ink-design-language.md §8: the design system owns the token layer
   // and the shared primitives, and its CSS is a template literal too. It
   // interpolates `${FONT_FACE}` / `${TOKENS}` (never a backtick), so the same
   // end-of-line shape applies — a prose backtick in one of its comments is the
@@ -192,7 +192,7 @@ check(
 
 // --- 2. borders and radii --------------------------------------------------
 check('borders: no dashed/dotted', !/dashed|dotted/.test(stylesCode))
-// §3 of docs/endfield-design-language.md: ALL right angles, and the only circle
+// §3 of docs/ink-design-language.md: ALL right angles, and the only circle
 // is a state dot. The old rule accepted `var(--dsw-radius-*)`; that allowance is
 // DELETED rather than widened, because the host radius tokens are non-zero and
 // accepting them is exactly how a rounded corner comes back under a token name.
