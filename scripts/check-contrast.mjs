@@ -328,6 +328,47 @@ const STYLES = [
   { selector: '.dmc-discover-id', note: 'discovered model id' },
   { selector: '.dmc-discover-name', note: 'discovered model name' },
   { selector: '.dmc-discover-group', note: 'discovery list group heading (§13.5)' },
+
+  // --- the Endfield revision (docs/endfield-design-language.md §8) -----------
+  // Every rule that paints text in the two `dmc-` sheets and the design-system
+  // primitives, registered by name. The sweep below proves this list is COMPLETE;
+  // the list is what pins each style's intent so a change of its ink is
+  // re-measured instead of quietly disappearing.
+  { selector: '.dmc-page', note: 'the page root: the ink and size every child inherits' },
+  { selector: '.dmc-add', note: 'the page\'s one accent action (ink on the plain ground)' },
+  { selector: '.dmc-add:disabled', note: 'the unavailable add entry (secondary ink)' },
+  { selector: '.dmc-row', note: 'the ledger row: states the inherited row ink' },
+  { selector: '.dmc-index', note: 'the two-digit position mark, 10px muted ink' },
+  { selector: '.dmc-name', note: 'the provider name, the row\'s big identity' },
+  { selector: '.dmc-catalog:hover:not(:disabled)', note: 'the model cell under the pointer' },
+  { selector: '.dmc-catalog:disabled', note: 'the unavailable model cell' },
+  { selector: '.dmc-verdict[data-state=\'missing-key\']', note: 'the answer word when no key is configured' },
+  { selector: '.dmc-verdict[data-state=\'unreachable\']', note: 'the answer word when the provider cannot answer' },
+  { selector: '.dmc-manage:disabled', note: 'the door when the deployment cannot write' },
+  { selector: '.dmc-pending', note: 'the in-flight word under the scan line' },
+  { selector: '.dmc-key-action::placeholder', note: 'the credential field hint' },
+  { selector: '.dmc-key-action:hover:not(:disabled)', note: 'the credential action under the pointer' },
+  { selector: '.dmc-retry-tally', note: 'the backoff count as a display numeral' },
+  { selector: '.dmc-retry-tally-unit', note: 'the unit beside the backoff count' },
+  { selector: '.dmc-retry-detail', note: 'the schedule detail line' },
+  { selector: '.dmc-protocol:disabled', note: 'the protocol select when the page is read-only' },
+  { selector: '.dmc-danger:disabled', note: 'the lifecycle entry when it cannot act' },
+  { selector: '.dmc-model-row', note: 'one model row in the roster (inherits the panel ink)' },
+  { selector: '.dmc-model-index', note: 'the roster line\'s two-digit position mark' },
+  { selector: '.dmc-model-sub', note: 'the roster line\'s quiet fact line' },
+  { selector: '.dmc-model-label', note: 'the roster field label' },
+  { selector: '.dmc-model-add', note: 'the "+ 添加模型" row, signal-ink bar' },
+  { selector: '.dmc-reasoning-value', note: 'the reasoning-level value field' },
+  { selector: '.dmc-reasoning-value::placeholder', note: 'that field\'s placeholder' },
+  { selector: '.dmc-reasoning-level', note: 'the reasoning-level select' },
+  { selector: '.dmc-discover-search', note: 'the discovery search field' },
+  { selector: '.dmc-discover-search::placeholder', note: 'that field\'s placeholder' },
+  { selector: '.dmc-discover-candidate', note: 'one discovery candidate row' },
+  { selector: '.dmc-discover-candidate[data-present=\'true\']', note: 'an already-present candidate (quiet ink)' },
+  { selector: '.dmc-model-danger:disabled', note: 'the remove entry when it cannot act' },
+  { selector: '.dmc-btn:hover:not(:disabled)', note: 'a catalog control under the pointer' },
+  { selector: '.dmc-btn:disabled', note: 'an unavailable catalog control' },
+  // The design-system primitives: the two shared marks that paint text.
 ]
 /** Painted by a host primitive rather than by this sheet, so there is no size to derive. */
 const PRIMITIVE_SIZED = new Set(['.dmp-badge-value', '.dmp-settings-input input::placeholder'])
@@ -343,11 +384,43 @@ const PRIMITIVE_SIZE = { size: 11, weight: 400 }
 // a rule. Comments are stripped too — these sheets are heavily annotated and a
 // `/*…*/` between two rules would otherwise be read as part of the next
 // selector, which is exactly the kind of silent miss this gate exists to avoid.
+//
+// THE DESIGN SYSTEM JOINS THE LIST. It is where the `--zmd-*` tokens live and its
+// primitives (`.zmd-rule`, `.zmd-wash`, `.zmd-grain`) paint the material; the
+// token block is parsed separately below because it is the SOURCE of the colours
+// every other style resolves. The ink language keeps no painted text primitive
+// (the HUD's field-code / display numerals are retired), so this sheet is here for
+// completeness and for the closure's sake.
 const SHEETS = [
-  { file: 'src/client/styles.ts', owner: 'the composer seat (dmp-)', dmc: false },
-  { file: 'src/client/modelConfigStyles.ts', owner: 'the 模型配置 page (dmc-)', dmc: true },
-  { file: 'src/client/catalogStyles.ts', owner: 'the model catalog region (dmc-)', dmc: true },
+  { file: 'src/client/styles.ts', owner: 'the composer seat (dmp-)', dmc: false, zmd: false },
+  { file: 'src/client/modelConfigStyles.ts', owner: 'the 模型配置 page (dmc-)', dmc: true, zmd: false },
+  { file: 'src/client/catalogStyles.ts', owner: 'the model catalog region (dmc-)', dmc: true, zmd: false },
+  { file: 'src/client/designSystem.ts', owner: 'the design system (zmd-)', dmc: false, zmd: true },
 ]
+
+/** Neutralise `${…}` interpolations inside a TS template literal's raw source. */
+function neutraliseTemplateExpressions(source) {
+  let out = ''
+  let index = 0
+  while (index < source.length) {
+    const at = source.indexOf('${', index)
+    if (at < 0) { out += source.slice(index); break }
+    out += source.slice(index, at) + '__EXPR__'
+    let depth = 0
+    let cursor = at + 1
+    while (cursor < source.length) {
+      const char = source[cursor]
+      if (char === '{') depth += 1
+      else if (char === '}') {
+        depth -= 1
+        if (depth === 0) break
+      }
+      cursor += 1
+    }
+    index = cursor + 1
+  }
+  return out
+}
 
 /**
  * Pull one sheet's CSS template literal out of its module.
@@ -356,11 +429,32 @@ const SHEETS = [
  * `selfcheck-static.mjs` (for all four sheets) and a module-header comment in
  * `modelConfigStyles.ts` assert that no backtick ever appears inside the CSS text,
  * so the first close is the right one.
+ *
+ * `designSystem.ts` is the exception that needs one extra step: its literal
+ * interpolates `${FONT_FACE}` (the face) and `${TOKENS}` (the token layer), and the
+ * token layer itself interpolates `${JSON.stringify(FONT_FAMILY)}`. A naive scan
+ * would read the interpolation braces as CSS blocks — this gate measured an EMPTY
+ * light token bag before the neutralising step existed — so the expressions are
+ * replaced with a placeholder before the literal is sliced.
  * @param relative - the module path, relative to the repository root.
  * @returns the CSS text, or null when the literal is not there.
  */
 function cssOf(relative) {
   const source = readFileSync(resolve(root, relative), 'utf8')
+  if (relative.endsWith('/designSystem.ts')) {
+    // The primitives are their own literal (`const PRIMITIVES = \`…\``); the
+    // module's `const CSS` is just `${FONT_FACE}\n${TOKENS}\n${PRIMITIVES}` and
+    // carries no rule of its own.
+    const marker = 'const PRIMITIVES = `'
+    const open = source.indexOf(marker)
+    if (open < 0) return null
+    const body = neutraliseTemplateExpressions(source.slice(open + marker.length))
+    const close = body.indexOf('`')
+    // The interpolations stand alone between rules (`${FONT_FACE}` / `${TOKENS}`);
+    // dropping the placeholder leaves the primitive rules themselves untouched and
+    // keeps a placeholder from becoming a bogus selector for the next rule.
+    return close < 0 ? null : body.slice(0, close).replace(/__EXPR__/g, '')
+  }
   const open = source.indexOf('const CSS = `')
   if (open < 0) return null
   const from = open + 'const CSS = `'.length
@@ -368,6 +462,34 @@ function cssOf(relative) {
   if (close < 0) return null
   return source.slice(from, close)
 }
+
+/** The two `--zmd-*` token bags, parsed out of designSystem.ts's TOKENS literal. */
+function designSystemTokenBags() {
+  const source = readFileSync(resolve(root, 'src/client/designSystem.ts'), 'utf8')
+  const marker = 'const TOKENS = `'
+  const open = source.indexOf(marker)
+  const bags = { light: {}, dark: {} }
+  if (open < 0) return bags
+  const body = neutraliseTemplateExpressions(source.slice(open + marker.length))
+  const close = body.indexOf('`')
+  if (close < 0) return bags
+  const css = body.slice(0, close).replace(/\/\*[\s\S]*?\*\//g, '')
+  for (const block of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const target = block[1].includes('data-ds-dark-theme') ? bags.dark : bags.light
+    for (const declaration of block[2].split(';')) {
+      const colon = declaration.indexOf(':')
+      if (colon < 0) continue
+      const name = declaration.slice(0, colon).trim()
+      if (name.startsWith('--zmd-')) target[name] = declaration.slice(colon + 1).trim()
+    }
+  }
+  return bags
+}
+const zmd = designSystemTokenBags()
+// The dark block OVERRIDES :root; a token declared only in :root (on-accent,
+// grain-tint, the host-palette references) still applies in the dark theme, so
+// resolution runs against the merged bag.
+const zmdMerged = { light: { ...zmd.light }, dark: { ...zmd.light, ...zmd.dark } }
 
 const sheetCss = new Map()
 for (const sheet of SHEETS) {
@@ -433,6 +555,16 @@ function floorFor(selector) {
   const candidates = [selector]
   const stateRule = selector.replace(/\[[^\]]*\]|::?[a-z-]+(\([^)]*\))?/g, '')
   if (stateRule !== selector) candidates.push(stateRule)
+  // A state/descendant variant of a registered style still renders at the BASE
+  // style's size. `input.dmc-key-action` (the input form of a text action) and
+  // colour, so the size has to be found on the compound they end with and on the
+  // class-only spelling of a type-prefixed selector.
+  for (const candidate of [selector, stateRule]) {
+    const lastCompound = candidate.split(/\s+/).pop()
+    if (lastCompound !== candidate) candidates.push(lastCompound)
+    const classOnly = candidate.replace(/^[a-z]+(?=[.#[:])/i, '')
+    if (classOnly !== candidate) candidates.push(classOnly)
+  }
   const bare = stateRule.replace(/\s+/g, ' ').trim()
   for (let current = bare; current.includes(' ');) {
     current = current.slice(0, current.lastIndexOf(' ')).trim()
@@ -466,7 +598,7 @@ function floorFor(selector) {
 function inkOf(selector) {
   const value = declarationOf(selector, 'color')
   if (value === null) return null
-  return /^var\((--dsw-[a-z0-9-]+)\)$/.exec(value)?.[1] ?? null
+  return /^var\((--(?:dsw|zmd)-[a-z0-9-]+)\)$/.exec(value)?.[1] ?? null
 }
 
 /**
@@ -663,6 +795,26 @@ const CONTAINERS = {
   '.dmc-discover-name': '.dmc-discover-candidate',
   '.dmc-discover-group': '.dmc-discover-list',
   '.dmc-discover-search': '.dmc-discover-panel',
+  // --- the Endfield revision: the new classes' place in the tree -------------
+  '.dmc-head-index': '.dmc-head',
+  '.dmc-index': '.dmc-name',
+  '.dmc-field-code': '.dmc-field-label',
+  '.dmc-field-name': '.dmc-field-label',
+  '.dmc-catalog-code': '.dmc-catalog-heading',
+  '.dmc-roster-count': '.dmc-catalog-heading',
+  '.dmc-model-index': '.dmc-model-row',
+  '.dmc-model-facts': '.dmc-model-row',
+  '.dmc-model-add': '.dmc-catalog-body',
+  '.dmc-reasoning-value': '.dmc-reasoning-row',
+  '.dmc-reasoning-level': '.dmc-reasoning-row',
+  '.dmc-discover-search': '.dmc-discover-panel',
+  '.dmc-well-rule': '.dmc-well',
+  '.dmc-retry-head': '.dmc-retry',
+  '.dmc-retry-code': '.dmc-retry-head',
+  '.dmc-retry-rule': '.dmc-retry-head',
+  '.dmc-retry-tally': '.dmc-retry-summary',
+  '.dmc-retry-tally-unit': '.dmc-retry-summary',
+  '.dmc-retry-detail': '.dmc-retry',
 }
 
 /**
@@ -725,19 +877,35 @@ function rowFillTokens() {
 /**
  * Every opaque background one selector's text can actually sit on.
  *
- * The card backdrops are the two the seat's panel already uses (the translucency
- * of `--dsw-menu-surface-fill` resolved over the page base and over the composer
- * card). A `dmc-` style whose text lives inside a row additionally gets every fill
- * the row rules declare, composited over the page base, because those are real
- * backdrops a row can paint under its own copy — the live hover/focus fill today.
- * Nothing here is a guess about which of them is showing: the verdict is taken
- * against the WORST one, which is the same discipline the card backdrops follow.
+ * §8 of the design language changed what the card IS: the three surfaces now paint
+ * an OPAQUE `--zmd-panel`, and the row states paint `--zmd-hover` /
+ * `--zmd-panel-deep`. So for a `--zmd-*` ink the honest backdrops are the token
+ * layer's own grounds, read from designSystem.ts — not the host's translucent menu
+ * film. For a host (`--dsw-*`) ink the old card backdrops still apply (the seat
+ * keeps host label aliases in a few places) AND the zmd grounds are added, because
+ * the card under them is now opaque paper. A `dmc-` style inside a row still gets
+ * every fill its row rules declare, composited over the page base.
+ *
+ * The verdict is taken against the WORST backdrop, as before: the gate must not
+ * depend on which surface the panel happens to float over.
  * @param selector - the selector whose text is being judged.
- * @param bag - one theme's token values.
+ * @param which - `light` or `dark`.
+ * @param inkToken - the token that paints the text, so the ground set can match.
  * @returns the candidate opaque backgrounds.
  */
-function backdropsFor(selector, bag) {
-  const candidates = cardBackgrounds(bag)
+function backdropsFor(selector, which, inkToken) {
+  // `--zmd-on-accent` is defined ONLY as ink on the accent fill (§2.3): the blue
+  // square may be painted by the element's own `::before` rather than by the rule
+  // that states the colour, so the fill role — not the selector tree — decides
+  // the ground.
+  if (inkToken === '--zmd-on-accent') {
+    const accent = zmdColor(which, '--zmd-accent')
+    return accent === null ? [] : [accent]
+  }
+  const bag = bags[which]
+  const candidates = []
+  if (!inkToken.startsWith('--zmd-')) candidates.push(...cardBackgrounds(bag))
+  candidates.push(...zmdGrounds(which))
   if (!sitsInRow(selector)) return candidates
   const page = resolveToken(bag, '--dsw-alias-bg-base')
   if (page === null) return candidates
@@ -759,7 +927,7 @@ function backdropsFor(selector, bag) {
  */
 function effectiveInk(selector) {
   const declared = declarationOf(selector, 'color')
-  const direct = declared === null ? null : /var\((--dsw-[a-z0-9-]+)\)/.exec(declared)?.[1] ?? null
+  const direct = declared === null ? null : /var\((--(?:dsw|zmd)-[a-z0-9-]+)\)/.exec(declared)?.[1] ?? null
   if (direct !== null) return direct
   // A literal (non-token) color that is not `inherit` is a real paint we cannot
   // judge against the host palette; report it as unresolved rather than guessing.
@@ -786,6 +954,53 @@ const theme = themeFile()
 const bags = theme === null
   ? fixturePalettes()
   : palettes(readFileSync(theme, 'utf8'))
+
+/**
+ * Resolve one `--zmd-*` token. The value may be a literal, a reference to another
+ * `--zmd-*` token (on-accent → panel), or a reference to the HOST palette
+ * (`--zmd-accent` → `--dsw-alias-state-business-primary`): the ink language has
+ * one palette, and the accent/error roles borrow the host's own tokens. A naive
+ * one-hop resolver would report those three roles as "unresolved".
+ * @param which - `light` or `dark`.
+ * @param token - the `--zmd-*` name.
+ * @param depth - recursion guard.
+ * @returns the sRGB colour, or null.
+ */
+function zmdColor(which, token, depth = 0) {
+  if (depth > 12) return null
+  const value = zmdMerged[which]?.[token]
+  if (value === undefined) return null
+  const reference = /^var\((--[a-z0-9-]+)\)$/.exec(value.trim())
+  if (reference === null) return parseColor(value)
+  if (reference[1].startsWith('--dsw-')) return resolveToken(bags[which], reference[1])
+  return zmdColor(which, reference[1], depth + 1)
+}
+
+/**
+ * Resolve either ink layer: host `--dsw-*` through its `var()` chain, or the
+ * token layer's `--zmd-*` from designSystem.ts. One function so every measured
+ * style is judged by the same rule whatever layer owns its ink.
+ * @param which - `light` or `dark`.
+ * @param token - the CSS custom property name.
+ * @returns the sRGB colour, or null.
+ */
+function resolveInk(which, token) {
+  return token.startsWith('--zmd-') ? zmdColor(which, token) : resolveToken(bags[which], token)
+}
+
+/**
+ * The token layer's own opaque grounds: the card, the sunken well, the hover fill
+ * and BOTH ends of the local wash. Every painted word is judged against all of
+ * them (§2.2: the wash never carries text contrast on its own — the words must
+ * clear AA against the brightest AND the darkest end of the surface).
+ * @param which - `light` or `dark`.
+ * @returns the candidate ground colours.
+ */
+function zmdGrounds(which) {
+  return ['--zmd-panel', '--zmd-panel-deep', '--zmd-hover', '--zmd-wash-top', '--zmd-wash-bottom']
+    .map(token => zmdColor(which, token))
+    .filter(colour => colour !== null)
+}
 
 if (bags === null) {
   // Neither source exists: nothing was measured, so this must not read as a pass.
@@ -815,7 +1030,7 @@ if (bags === null) {
   for (const style of STYLES) {
     const token = effectiveInk(style.selector)
     if (token === null) {
-      check(`contrast: ${style.selector} paints a --dsw-* color`, false, { selector: style.selector })
+      check(`contrast: ${style.selector} paints an ink token`, false, { selector: style.selector })
       continue
     }
     const { floor, size, weight } = floorFor(style.selector)
@@ -830,15 +1045,15 @@ if (bags === null) {
       continue
     }
     for (const which of ['light', 'dark']) {
-      const bag = bags[which]
-      const ink = resolveToken(bag, token)
+      const ink = resolveInk(which, token)
       if (ink === null) {
         check(`contrast: ${token} resolves in the ${which} theme`, false, { token })
         continue
       }
       // Judged against the WORST backdrop the card can sit on, so the verdict
       // does not depend on which surface the panel happens to float over.
-      const ratios = backdropsFor(style.selector, bag).map(background => contrast(over(ink, background), background))
+      const ratios = backdropsFor(style.selector, which, token)
+        .map(background => contrast(over(ink, background), background))
       measured.push({ style, which, ratio: Math.min(...ratios), token, ...judged })
     }
   }
@@ -890,16 +1105,22 @@ if (bags === null) {
   // A rule the exemptions do not cover and that this gate cannot size is
   // REPORTED rather than passed over.
   const EXEMPT = (selector, token) => {
+    // The token-layer primitives are all structural in the ink language (no painted
+    // text primitive survives the HUD removal); nothing in that domain is exempt.
+    if (/^\.zmd-/.test(selector)) return false
     if (/^\.dmc-/.test(selector)) return /:disabled|\[aria-disabled/.test(selector)
     return (token === '--dsw-alias-label-dimmed' || /:disabled|\[aria-disabled/.test(selector))
       || /^\.dmp-[a-z-]*(?:icon|check|dot)(?:[\s:\[]|$)/.test(selector)
       || /^\.dmp-[a-z-]*\[[^\]]*\][^,]*\.dmp-[a-z-]*(?:icon|check|dot)/.test(selector)
       || /^\.dmp-(?:settings-button|chevron)(?:[\s:\[]|$)/.test(selector)
+      // The switch is a control with no copy of its own: it states `color` so its
+      // thumb can take `currentColor`, but there is no word to size or measure.
+      || /(?:^|\s)\.dmp-settings-switch(?:[\s:\[]|$)/.test(selector)
   }
   const sweep = []
   const unsized = []
   for (const rule of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    const token = /(?:^|;)\s*color\s*:\s*var\((--dsw-[a-z0-9-]+)\)/.exec(rule[2])?.[1] ?? null
+    const token = /(?:^|;)\s*color\s*:\s*var\((--(?:dsw|zmd)-[a-z0-9-]+)\)/.exec(rule[2])?.[1] ?? null
     for (const selector of rule[1].split(',').map(part => part.trim()).filter(part => part !== '')) {
       if (EXEMPT(selector, token)) continue
       const { floor, size, weight } = floorFor(selector)
@@ -923,10 +1144,10 @@ if (bags === null) {
         : { floor, size, weight }
       const ratios = {}
       for (const which of ['light', 'dark']) {
-        const color = resolveToken(bags[which], ink)
+        const color = resolveInk(which, ink)
         const onBackdrops = color === null
           ? [null]
-          : backdropsFor(selector, bags[which]).map(background => contrast(over(color, background), background))
+          : backdropsFor(selector, which, ink).map(background => contrast(over(color, background), background))
         ratios[which] = onBackdrops.some(ratio => ratio === null) ? null : Math.min(...onBackdrops)
       }
       sweep.push({ selector, token: ink, ...judged, ratios })
@@ -981,16 +1202,17 @@ if (bags === null) {
     silentRegistered.length === 0,
     { silentRegistered },
   )
-  const dmcSheetFiles = SHEETS.filter(sheet => sheet.dmc).map(sheet => sheet.file)
+  const dmcSheetFiles = SHEETS.filter(sheet => sheet.dmc || sheet.zmd).map(sheet => sheet.file)
   const measuredSelectors = new Set(sweep.map(entry => entry.selector))
   const unmeasured = []
   for (const file of dmcSheetFiles) {
     const css = (sheetCss.get(file) ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
+    const domain = file.endsWith('designSystem.ts') ? '.zmd-' : '.dmc-'
     for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const paintsText = /(?:^|;)\s*color\s*:/.test(rule[2]) || /(?:^|;)\s*font-size\s*:/.test(rule[2])
       if (!paintsText) continue
-      const token = /(?:^|;)\s*color\s*:\s*var\((--dsw-[a-z0-9-]+)\)/.exec(rule[2])?.[1] ?? null
-      for (const selector of rule[1].split(',').map(part => part.trim()).filter(part => part.startsWith('.dmc-'))) {
+      const token = /(?:^|;)\s*color\s*:\s*var\((--(?:dsw|zmd)-[a-z0-9-]+)\)/.exec(rule[2])?.[1] ?? null
+      for (const selector of rule[1].split(',').map(part => part.trim()).filter(part => part.startsWith(domain))) {
         if (measuredSelectors.has(selector)) continue
         if (EXEMPT(selector, token)) continue
         unmeasured.push(`${file}: ${selector}`)
@@ -998,32 +1220,191 @@ if (bags === null) {
     }
   }
   check(
-    'contrast: every dmc- rule that paints text is measured (no silent skip)',
+    'contrast: every dmc-/zmd- rule that paints text is measured (no silent skip)',
     unmeasured.length === 0,
     { unmeasured: [...new Set(unmeasured)] },
   )
 
-  // --- 6. the graphic-only tokens stay out of the dmc- text role ------------
-  // §2 gives `--dsw-alias-state-*` and the three label tiers
-  // (tertiary / caption / dimmed) one job: a rail, a bar, a focus ring, a field
-  // edge. They are not registered in STYLES above for exactly that reason, and a
-  // `color:` that names one is reported here as well as by the static selfcheck,
-  // so neither gate can be the single point of failure for the rule.
+  // --- 6. the graphic-only tokens stay out of the text role ------------------
+  // §2 of the ink language: neutrals are panel/line/fill roles, the accent is the
+  // host's information blue and is GRAPHIC ONLY (3.91:1 light), the error red is a
+  // 4px bar / diagnostic edge, and the online green is the one state colour that
+  // may also be a word. A `color:` that names a graphic token is reported here as
+  // well as by the static selfcheck, so neither gate is the single point of
+  // failure. Two narrow exemptions survive: a DISABLED control (WCAG-exempt, the
+  // host's dimmed token) and an ERROR ICON (a glyph carried by currentColor, not a
+  // word). The wash tops are grounds, never inks.
+  const ZMD_GRAPHIC_TOKENS = new Set([
+    '--zmd-panel', '--zmd-panel-deep', '--zmd-hover', '--zmd-line', '--zmd-line-strong',
+    '--zmd-line-control', '--zmd-wash-top', '--zmd-wash-bottom', '--zmd-grain-tint',
+    '--zmd-accent', '--zmd-focus', '--zmd-danger',
+  ])
+  const ZMD_TEXT_TOKENS = new Set([
+    '--zmd-ink', '--zmd-ink-secondary', '--zmd-ink-mute', '--zmd-online', '--zmd-on-accent',
+  ])
   const graphicOnlyText = []
-  for (const file of dmcSheetFiles) {
-    const css = (sheetCss.get(file) ?? '').replace(/\/\*[\s\S]*?\*\//g, '')
-    for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!/(?:^|;)\s*color\s*:\s*var\(--dsw-alias-(?:state-[a-z-]+|label-(?:tertiary|caption|dimmed))\)/.test(rule[2])) continue
-      for (const selector of rule[1].split(',').map(part => part.trim()).filter(part => part.startsWith('.dmc-'))) {
-        graphicOnlyText.push(`${file}: ${selector}`)
+  for (const [file, css] of sheetCss) {
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    for (const rule of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      for (const selector of rule[1].split(',').map(part => part.trim()).filter(Boolean)) {
+        const disabled = /:disabled|\[aria-disabled/.test(selector)
+        const glyph = /(?:-icon)(?:[\s:.[]|$)|(?:^|\s)svg(?:[\s:.[]|$)/.test(selector)
+        for (const match of rule[2].matchAll(/(?:^|;)\s*color\s*:\s*([^;}]+)/g)) {
+          const token = /var\((--(?:dsw|zmd)-[a-z0-9-]+)\)/.exec(match[1].trim())?.[1] ?? null
+          if (token === null) continue
+          if (token === '--zmd-danger' && glyph) continue
+          if (token === '--dsw-alias-label-dimmed' && disabled) continue
+          if (ZMD_GRAPHIC_TOKENS.has(token)) { graphicOnlyText.push(`${file}: ${selector}: ${token}`); continue }
+          if (/^--dsw-alias-(?:state-|label-(?:tertiary|caption|dimmed))/.test(token) && !disabled) {
+            graphicOnlyText.push(`${file}: ${selector}: ${token}`)
+          }
+        }
       }
     }
   }
   check(
-    'contrast: the dmc- sheets paint text with primary/secondary ink only',
+    'contrast: the sheets paint text with a readable role token only',
     graphicOnlyText.length === 0,
     { graphicOnlyText: [...new Set(graphicOnlyText)] },
   )
+
+  // --- 7. THE TOKEN LAYER'S OWN CONTRACT: the bands, the wash ends, the accent -
+  // These are assertions on the TOKENS THEMSELVES (both themes), so they cannot be
+  // satisfied by a nice-looking selector: they are the numbers the design language
+  // quotes, re-measured from the source. The accent / focus / error roles are
+  // references into the HOST palette, so `zmdColor` resolves them through the host
+  // bag — the ink language deliberately owns no second palette.
+  /** One token-to-token ratio in both themes. */
+  const tokenRatio = (which, fg, bg) => {
+    const foreground = zmdColor(which, fg)
+    const background = zmdColor(which, bg)
+    return foreground === null || background === null ? null : contrast(foreground, background)
+  }
+  check('contrast: the ink token layer parsed in both themes',
+    Object.keys(zmd.light).length >= 15 && Object.keys(zmd.dark).length >= 5,
+    { light: Object.keys(zmd.light).length, dark: Object.keys(zmd.dark).length })
+
+  // (a) THE LINES: visible but not competing with text (§2.1 / the design record's
+  // measured 1.26–2.51). Structural lines may step a little higher but never reach
+  // the text floor. Judged against every ground a line can be drawn on, including
+  // both ends of the wash.
+  const LINE_BANDS = [
+    { token: '--zmd-line', min: 1.05, max: 2.7, label: 'decorative line' },
+    { token: '--zmd-line-strong', min: 1.7, max: 3.0, label: 'structural line' },
+  ]
+  const lineBandIssues = []
+  for (const band of LINE_BANDS) {
+    for (const which of ['light', 'dark']) {
+      for (const ground of ['--zmd-panel', '--zmd-panel-deep', '--zmd-wash-top', '--zmd-wash-bottom']) {
+        const ratio = tokenRatio(which, band.token, ground)
+        if (ratio === null) lineBandIssues.push(`${band.token} does not resolve in ${which}`)
+        else if (ratio < band.min || ratio > band.max) {
+          lineBandIssues.push(`${band.label} ${band.token} on ${ground} (${which}) = ${ratio.toFixed(2)}:1, outside ${band.min}–${band.max}`)
+        }
+      }
+    }
+  }
+  check('contrast: the decorative/structural lines sit in their measured visibility bands',
+    lineBandIssues.length === 0, { lineBandIssues })
+
+  // (b) THE FORM-CONTROL EDGE is a real 3:1 boundary on every ground a field sits
+  // on (the page, the sunken well, the wash end).
+  const controlEdgeIssues = []
+  for (const which of ['light', 'dark']) {
+    for (const ground of ['--zmd-panel', '--zmd-panel-deep', '--zmd-wash-top']) {
+      const ratio = tokenRatio(which, '--zmd-line-control', ground)
+      if (ratio === null || ratio < AA_LARGE) {
+        controlEdgeIssues.push(`--zmd-line-control on ${ground} (${which}) = ${ratio === null ? 'unresolved' : `${ratio.toFixed(2)}:1`}`)
+      }
+    }
+  }
+  check('contrast: the form-control edge clears the 3:1 graphical floor on every ground',
+    controlEdgeIssues.length === 0, { controlEdgeIssues })
+
+  // (c) THE ACCENT AND THE FOCUS RING are graphical marks: the host blue must clear
+  // 3:1 against the paper/ink grounds it is drawn on (2px bar, filled square, ring).
+  // It is NEVER text — the point of the pair checks below is that the only thing
+  // that sits ON the blue is `--zmd-on-accent`.
+  const accentGraphicIssues = []
+  for (const which of ['light', 'dark']) {
+    for (const ground of ['--zmd-panel', '--zmd-panel-deep', '--zmd-hover', '--zmd-wash-top', '--zmd-wash-bottom']) {
+      const ratio = tokenRatio(which, '--zmd-accent', ground)
+      if (ratio === null || ratio < AA_LARGE) {
+        accentGraphicIssues.push(`--zmd-accent on ${ground} (${which}) = ${ratio === null ? 'unresolved' : ratio.toFixed(2)}`)
+      }
+      const focusRatio = tokenRatio(which, '--zmd-focus', ground)
+      if (focusRatio === null || focusRatio < AA_LARGE) {
+        accentGraphicIssues.push(`--zmd-focus on ${ground} (${which}) = ${focusRatio === null ? 'unresolved' : focusRatio.toFixed(2)}`)
+      }
+      const dangerRatio = tokenRatio(which, '--zmd-danger', ground)
+      if (dangerRatio === null || dangerRatio < AA_LARGE) {
+        accentGraphicIssues.push(`--zmd-danger on ${ground} (${which}) = ${dangerRatio === null ? 'unresolved' : dangerRatio.toFixed(2)}`)
+      }
+    }
+  }
+  check('contrast: the accent, the focus ring and the error mark clear 3:1 as graphics',
+    accentGraphicIssues.length === 0, { accentGraphicIssues })
+  const onAccentIssues = []
+  for (const which of ['light', 'dark']) {
+    const ratio = tokenRatio(which, '--zmd-on-accent', '--zmd-accent')
+    if (ratio === null || ratio < AA_LARGE) {
+      onAccentIssues.push(`--zmd-on-accent on --zmd-accent (${which}) = ${ratio === null ? 'unresolved' : ratio.toFixed(2)}`)
+    }
+  }
+  check('contrast: --zmd-on-accent clears the graphical floor on the blue fill (it inks a glyph, not a word)',
+    onAccentIssues.length === 0, { onAccentIssues })
+
+  // (d) THE PAIRING IS ASSERTED IN THE SHEETS TOO, both ways: a blue fill states
+  // its on-accent ink; a rule that states the on-accent ink is a blue carrier (fill
+  // or 2px bar in the same rule). Ink of another role on the blue is the 3.91:1
+  // failure this pair exists to prevent.
+  const accentPairRules = []
+  // The framed checkbox states the blue fill on the control and its tick on the
+  // control's `::after`; the fill role and the ink role may live in two rules of
+  // ONE object, so a sibling pseudo/state rule counts as the pair. The lookup key
+  // is the selector with state pseudo-classes and pseudo-elements stripped.
+  const baseOf = value => value
+    .replace(/::?(?:before|after)/g, '')
+    .replace(/:(?:checked|hover|focus-visible|focus-within|active|disabled|not\([^)]*\))/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+  const accentCarrierSelectors = new Set()
+  for (const [file, css] of sheetCss) {
+    for (const rule of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = rule[1].trim()
+      if (!/var\(--zmd-on-accent\)/.test(rule[2])) continue
+      accentCarrierSelectors.add(`${file}::${baseOf(selector)}`)
+    }
+  }
+  for (const [file, css] of sheetCss) {
+    for (const rule of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = rule[1].trim()
+      const fill = /(?:^|;)\s*background(?:-color)?\s*:\s*var\(--zmd-accent\)/.test(rule[2])
+      const ownInk = /(?:^|;)\s*color\s*:\s*([^;}]+)/.exec(rule[2])?.[1]?.trim() ?? null
+      if (fill && ownInk !== null && !/var\(--zmd-on-accent\)/.test(ownInk)) {
+        accentPairRules.push(`${file}: ${selector} paints ${ownInk} on the blue fill`)
+      }
+      if (fill && ownInk === null && !accentCarrierSelectors.has(`${file}::${baseOf(selector)}`)) {
+        accentPairRules.push(`${file}: ${selector} fills blue but states no on-accent ink`)
+      }
+      if (ownInk !== null && /var\(--zmd-on-accent\)/.test(ownInk)
+        && !/(?:background|border-left)[^;}]*var\(--zmd-accent\)/.test(rule[2])) {
+        accentPairRules.push(`${file}: ${selector} states on-accent ink without a blue carrier`)
+      }
+    }
+  }
+  check('contrast: the blue fill and --zmd-on-accent are always stated as a pair',
+    accentPairRules.length === 0, { accentPairRules })
+
+  // (e) NO HUD COLOUR SURVIVES. The signal tokens are gone from the token layer; a
+  // sheet that still names one would resolve to nothing (and paint nothing), which
+  // the undeclared-token check in the static gate catches. Here the CONTRAST
+  // contract is stated: every measured style must be an ink role or a carrier.
+  const undecodableInk = measured
+    .filter(entry => entry.token.startsWith('--zmd-')
+      && !ZMD_TEXT_TOKENS.has(entry.token) && entry.token !== '--zmd-on-accent')
+    .map(entry => `${entry.style.selector}: ${entry.token}`)
+  check('contrast: every zmd ink that is measured is a text role',
+    undecodableInk.length === 0, { undecodableInk: [...new Set(undecodableInk)] })
 }
 
 console.log(failures === 0 ? 'contrast check: all good' : `contrast check: ${failures} failure(s)`)

@@ -30,6 +30,7 @@ import { ModelConfigStore, type ModelConfigFaces } from './modelConfigStore.ts'
 import { ParamsStore } from './params.ts'
 import { Picker } from './Picker.tsx'
 import { retireStoredScope } from './retiredScope.ts'
+import { injectDesignSystem } from './designSystem.ts'
 import { injectStyles } from './styles.ts'
 
 /**
@@ -165,6 +166,10 @@ export function apply(ctx: ClientContext): void {
   if (locale !== undefined) {
     ctx.effect(() => locale.register(NS, allDictionaries), 'dsh-rabbit-model-picker: dictionaries')
   }
+  // The design language's token layer and embedded Latin face go first: every
+  // sheet below reads `var(--zmd-*)`, and the face must be registered before the
+  // first paint of a seat (a late @font-face would flash the host font).
+  ctx.effect(() => injectDesignSystem(), 'dsh-rabbit-model-picker: design system')
   ctx.effect(() => injectStyles(), 'dsh-rabbit-model-picker: styles')
   // The retry policy used to be a card registered into the shipped Models
   // section's `settings.models.provider-card` seat. It moved INTO this plugin's

@@ -9,6 +9,10 @@ lib/*.map
 # Dev-only toolchain.
 node_modules/
 
+# Font-subsetting cache (the generated asset src/client/fontAsset.ts IS
+# committed: ordinary builds must not need Python/network).
+.cache/
+
 # Local browser-automation scratch from manual verification.
 .playwright-cli/
 

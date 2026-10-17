@@ -182,6 +182,73 @@ const ARTIFACTS = [
   ['lib/client.js (browser)', 'client', 'lib/client.js'],
 ]
 
+// --- the embedded design system and face, as COMMITTED ----------------------
+// §8 of docs/endfield-design-language.md puts the token layer and the embedded
+// Latin face into the shipped artifact: `designSystem.ts` is imported by the
+// client entry and `fontAsset.ts` is a generated 46.7KB base64 payload inside it.
+// The generic equality above already notices a stale `lib/`, but it reports a
+// 110-line bundle diff, not "the face is not in the build". These assertions name
+// the two modules and their three independent byte counts, and prove the
+// committed artifact actually carries them.
+const FONT_ASSET = 'src/client/fontAsset.ts'
+const DESIGN_SYSTEM = 'src/client/designSystem.ts'
+const OFL_LICENSE = 'docs/fonts/Archivo-OFL.txt'
+
+/**
+ * The reviewable facts of the generated font asset.
+ * @param source - fontAsset.ts's text.
+ * @returns family, base64, the three byte counts and the provenance.
+ */
+function fontFactsOf(source) {
+  const base64 = /export const FONT_WOFF2_BASE64 = "([A-Za-z0-9+/=]+)"/.exec(source)?.[1] ?? null
+  const decoded = base64 === null ? null : Buffer.from(base64, 'base64')
+  return {
+    family: /export const FONT_FAMILY = "([^"]+)"/.exec(source)?.[1] ?? null,
+    base64,
+    decoded,
+    bytes: decoded === null ? NaN : decoded.length,
+    headerBytes: Number.parseInt(/Raw woff2: (\d+) bytes/.exec(source)?.[1] ?? 'NaN', 10),
+    provenanceBytes: Number.parseInt(/"bytes": (\d+)/.exec(source)?.[1] ?? 'NaN', 10),
+    license: /"license": "([^"]+)"/.exec(source)?.[1] ?? null,
+    source: /"source": "([^"]+)"/.exec(source)?.[1] ?? null,
+    magic: decoded === null ? '' : decoded.slice(0, 4).toString('latin1'),
+  }
+}
+
+/**
+ * The font contract, on whichever text pair is available.
+ * @param fontSource - fontAsset.ts's text.
+ * @param licenseText - the OFL notice's text (or '' when missing).
+ * @returns one problem per violated fact.
+ */
+function fontProblems(fontSource, licenseText) {
+  const facts = fontFactsOf(fontSource)
+  const problems = []
+  if (facts.family !== 'ZMD Archivo') problems.push(`FONT_FAMILY is ${facts.family}`)
+  if (facts.base64 === null) problems.push('FONT_WOFF2_BASE64 is missing')
+  else if (facts.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(facts.base64)) {
+    problems.push('FONT_WOFF2_BASE64 is not valid base64')
+  }
+  if (!(facts.bytes <= 64 * 1024)) problems.push(`the woff2 is ${facts.bytes} bytes (budget 64KB)`)
+  if (facts.magic !== 'wOF2') problems.push('the payload does not start with the wOF2 magic')
+  if (facts.headerBytes !== facts.bytes) problems.push(`header says ${facts.headerBytes} bytes, decoded ${facts.bytes}`)
+  if (facts.provenanceBytes !== facts.bytes) problems.push(`provenance says ${facts.provenanceBytes} bytes, decoded ${facts.bytes}`)
+  if (facts.license !== 'SIL Open Font License 1.1') problems.push(`license is ${facts.license}`)
+  if (facts.source === null || !/^https:\/\/raw\.githubusercontent\.com\/google\/fonts\//.test(facts.source)) {
+    problems.push(`source is ${facts.source}`)
+  }
+  if (!licenseText.includes('SIL OPEN FONT LICENSE')) problems.push('the OFL notice is missing its header')
+  if (!/Copyright/.test(licenseText)) problems.push('the OFL notice is missing the copyright line')
+  return { facts, problems }
+}
+
+/** The markers a built client must carry for the ink design system to be installed. */
+const DESIGN_MARKERS = [
+  'injectDesignSystem', '@font-face', '--zmd-panel', '--zmd-hover', '--zmd-line-control',
+  '--zmd-wash-top', '--zmd-wash-bottom', '--zmd-accent', '--zmd-on-accent',
+  '.zmd-wash', '.zmd-grain',
+]
+
 // What a git install receives: HEAD's sources built, compared to HEAD's files.
 const committedSrc = extractCommittedSource()
 if (committedSrc === null) {
@@ -193,6 +260,11 @@ if (committedSrc === null) {
     check(`${artifact} matches src/`, readFileSync(resolve(root, path), 'utf8') === rendered[key],
       'stale: run `npm run build` and commit lib/ with the src/ change')
   }
+  const workingFont = readFileSync(resolve(root, FONT_ASSET), 'utf8')
+  const workingLicense = readFileSync(resolve(root, OFL_LICENSE), 'utf8')
+  const working = fontProblems(workingFont, workingLicense)
+  check('font: the working-tree face passes its byte-count/OFL contract', working.problems.length === 0,
+    working.problems.join('; '))
 } else {
   try {
     const rendered = await renderBuild(committedSrc)
@@ -212,6 +284,52 @@ if (committedSrc === null) {
         'stale: the committed lib/ was not rebuilt from the committed src/ — run `npm run build`, '
         + 'then `git add lib` and commit it together with the src/ change',
       )
+    }
+
+    // --- the committed design system and face -------------------------------
+    const committedFont = readCommittedArtifact(FONT_ASSET)
+    const committedDesign = readCommittedArtifact(DESIGN_SYSTEM)
+    const committedLicense = readCommittedArtifact(OFL_LICENSE)
+    const committedEntry = readCommittedArtifact('src/client/index.ts')
+    const committedClient = readCommittedArtifact('lib/client.js')
+    for (const [label, value] of [
+      [FONT_ASSET, committedFont],
+      [DESIGN_SYSTEM, committedDesign],
+      [OFL_LICENSE, committedLicense],
+    ]) {
+      check(`${label} is committed`, value !== null && isCommitted(label))
+    }
+    if (committedFont !== null && committedLicense !== null) {
+      const font = fontProblems(committedFont, committedLicense)
+      check('font: the committed face passes its byte-count/OFL contract', font.problems.length === 0,
+        font.problems.join('; '))
+      // …and the committed client really carries it. This is the half the byte
+      // counts cannot prove: a correct asset on disk that the bundle never
+      // included ships as nothing.
+      if (committedClient !== null && font.facts.base64 !== null) {
+        check('build: the committed client carries the committed font payload',
+          committedClient.includes(font.facts.base64),
+          'the committed lib/client.js does not embed the committed fontAsset base64 — rebuild and commit lib/')
+      }
+      if (committedDesign !== null) {
+        check('design system: the committed token block is the ink-language revision',
+          /const TOKENS = `/.test(committedDesign)
+          && /--zmd-wash-top:/.test(committedDesign)
+          && /--zmd-wash-bottom:/.test(committedDesign)
+          && /--zmd-accent: var\(--dsw-alias-state-business-primary\)/.test(committedDesign)
+          && !/--zmd-signal/.test(committedDesign),
+          'the committed designSystem.ts is not the ink-language token block (wash + host-blue accent, no signal tokens)')
+      }
+      if (committedClient !== null) {
+        const missing = DESIGN_MARKERS.filter(marker => !committedClient.includes(marker))
+        check('build: the committed client carries the design system markers',
+          missing.length === 0, { missing })
+      }
+      if (committedEntry !== null) {
+        check('design system: the committed client entry injects the token layer',
+          committedEntry.includes('injectDesignSystem'),
+          'src/client/index.ts does not install designSystem.ts — the tokens and face would never load')
+      }
     }
   } finally {
     rmSync(committedSrc, { recursive: true, force: true })

@@ -107,6 +107,12 @@ const CLASS_NAME = /dmp-[a-z0-9]+(?:-[a-z0-9]+)*/g
 // rule or in a comment — cannot satisfy it.
 for (const file of [
   'src/client/styles.ts',
+  // docs/endfield-design-language.md §8: the design system owns the token layer
+  // and the shared primitives, and its CSS is a template literal too. It
+  // interpolates `${FONT_FACE}` / `${TOKENS}` (never a backtick), so the same
+  // end-of-line shape applies — a prose backtick in one of its comments is the
+  // same build-breaking accident this check exists for.
+  'src/client/designSystem.ts',
   // `src/client/retryStyles.ts` was the retry card's own sheet on the shipped
   // Models page. The card moved INTO the 模型配置 page and its rules now live in
   // `modelConfigStyles.ts` with the page's other `dmc-` rules, so the sheet (and
@@ -186,10 +192,23 @@ check(
 
 // --- 2. borders and radii --------------------------------------------------
 check('borders: no dashed/dotted', !/dashed|dotted/.test(stylesCode))
-const badRadius = [...stylesCode.matchAll(/border-radius:\s*([^;]+);/g)]
-  .map(m => m[1].trim())
-  .filter(value => !(value === '0' || value === '0px' || value === '50%' || value.startsWith('var(')))
-check('border-radius: only 0 / 50% / var(...)', badRadius.length === 0, { badRadius })
+// §3 of docs/endfield-design-language.md: ALL right angles, and the only circle
+// is a state dot. The old rule accepted `var(--dsw-radius-*)`; that allowance is
+// DELETED rather than widened, because the host radius tokens are non-zero and
+// accepting them is exactly how a rounded corner comes back under a token name.
+// 50% stays, but only on a `-dot` selector.
+const radiusEntries = [...stylesCode.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => rule[1].split(',').map(part => part.trim()).filter(part => part !== '')
+    .flatMap(selector => [...rule[2].matchAll(/border-radius:\s*([^;]+);/g)]
+      .map(match => ({ selector, value: match[1].trim() }))))
+const badRadius = radiusEntries
+  .filter(entry => !(entry.value === '0' || entry.value === '0px' || entry.value === '50%'))
+  .map(entry => `${entry.selector}: ${entry.value}`)
+const badDotRadius = radiusEntries
+  .filter(entry => entry.value === '50%' && !/-dot(?:[\s:.[]|$)/.test(entry.selector))
+  .map(entry => entry.selector)
+check('border-radius: only 0 / 50% (no host radius token)', badRadius.length === 0, { badRadius })
+check('border-radius: a 50% circle is only a state dot', badDotRadius.length === 0, { badDotRadius })
 
 // --- 2a. the sheet is a TEMPLATE LITERAL, so it may not contain one ---------
 // A backtick anywhere inside the sheet ends the literal early and the CSS that
@@ -248,7 +267,7 @@ check('contrast: every inline style is the placement object, and nothing else',
 // under `drc-` and draws a chart whose bars are decoration beside its own
 // accessible name. Only the seat's classes are in scope here, matching the
 // assertion's name.
-const HIDDEN_COPY_ALLOWED = new Set(['dmp-badges', 'dmp-provider-failed-dot'])
+const HIDDEN_COPY_ALLOWED = new Set(['dmp-badges', 'dmp-provider-failed-dot', 'dmp-rail-index'])
 const hiddenCopy = []
 for (const element of tsxSource.matchAll(/<(?:span|div|p|li|button)\b[^>]*>/g)) {
   const tag = element[0]
@@ -717,14 +736,27 @@ const modelConfigHardcoded = [
 check('model config: no hardcoded colour values', modelConfigHardcoded.length === 0, { modelConfigHardcoded })
 const modelConfigBadRadius = [...modelConfigSheet.matchAll(/border-radius:\s*([^;]+);/g)]
   .map(m => m[1].trim())
-  .filter(value => !(value === '0' || value === '0px' || value === '50%' || value.startsWith('var(')))
-check('model config: border-radius is only 0 / 50% / var(...)', modelConfigBadRadius.length === 0, { modelConfigBadRadius })
+  .filter(value => !(value === '0' || value === '0px' || value === '50%'))
+check('model config: border-radius is only 0 / 50% (no host radius token)', modelConfigBadRadius.length === 0, { modelConfigBadRadius })
 check('model config: no dashed/dotted borders', !/dashed|dotted/.test(modelConfigSheet))
 const modelConfigDimming = [
   ...modelConfigSheet.matchAll(/(?:^|[{;])\s*(opacity|filter|text-shadow|mix-blend-mode)\s*:\s*([^;}]+)/g),
 ].map(m => `${m[1]}: ${m[2].trim()}`)
 check('model config: no rule fades or blends its own text', modelConfigDimming.length === 0, { modelConfigDimming })
-check('model config: the sheets use host --dsw-* tokens', (modelConfigSheet.match(/--dsw-/g) ?? []).length >= 10)
+// §8 of the design language: the sheets read `var(--zmd-*)` from the token layer
+// and host `var(--dsw-*)` where a semantic role exists. The old assertion demanded
+// ten `--dsw-*` uses; that number is no longer the design (the token layer now
+// owns paper/ink/signal), but the INTENT — the sheet must be fed by the theme, not
+// by itself — is kept as "it names the token layer at all, and still names ≥10
+// semantic tokens in total". A sheet that spells its own `--zmd-*` values is
+// caught separately (the token-definition assertion in the design-system block).
+check('model config: the sheets read the token layer (--zmd-*/--dsw-*)',
+  (modelConfigSheet.match(/--zmd-/g) ?? []).length > 0
+  && (modelConfigSheet.match(/--(?:zmd|dsw)-/g) ?? []).length >= 10,
+  {
+    zmd: (modelConfigSheet.match(/--zmd-/g) ?? []).length,
+    dsw: (modelConfigSheet.match(/--dsw-/g) ?? []).length,
+  })
 check('model config: :focus-visible branch exists', modelConfigSheet.includes(':focus-visible'))
 check('model config: prefers-reduced-motion branch exists', modelConfigSheet.includes('prefers-reduced-motion'))
 
@@ -884,7 +916,14 @@ check('model config: a row has no rest-state fill (the state travels on rail + w
 check('model config: no data-state paints a row, unreachable included',
   stateFills.length === 0, { stateFills })
 check('model config: the live fill survives for :hover / :focus-within / [data-catalog]',
-  liveFills.length > 0 && liveFills.every(entry => /^var\(--dsw-/.test(entry.value)), { liveFills })
+  liveFills.length > 0 && liveFills.every(entry => /^var\(--(?:dsw|zmd)-/.test(entry.value)), { liveFills })
+// …and since §4.23 of the design language the live fill is the token layer's
+// `--zmd-hover` (the tone that keeps every ink legible in both themes), not a
+// local tone rung. A row that hovers in `--zmd-line` measured 3.54–3.70:1 for the
+// muted inks; the hover token is the fix, so it is pinned by name here.
+check('model config: the live row fill is --zmd-hover',
+  liveFills.length > 0 && liveFills.every(entry => entry.value === 'var(--zmd-hover)'),
+  { liveFills })
 
 // §14 R2 — the rail is the "can this serve me" channel and ONLY that: it branches
 // on `data-state`, never on the diagnostic, and it is empty at rest.
@@ -946,6 +985,15 @@ function colourOfSelector(css, selector) {
 }
 const disabledInkIssues = []
 const disabledInkPairs = []
+// §8 of the design language: the ink ladder is the token layer's now. The INTENT
+// of §15.3 is unchanged (a resting action speaks in the primary ink, an
+// unavailable one drops a step) and the assertion still pins the PAIR; only the
+// token names moved from the host's label aliases to the `--zmd-*` roles. Both
+// spellings are accepted so the sentence keeps its meaning whichever layer owns
+// the role on a given surface.
+const PRIMARY_INKS = ['--zmd-ink', '--dsw-alias-label-primary']
+const SECONDARY_INKS = ['--zmd-ink-secondary', '--dsw-alias-label-secondary']
+const inkTokenOf = value => /var\((--[a-z0-9-]+)\)/.exec(value)?.[1] ?? null
 for (const entry of [...disabledInkRequired, ...disabledInkOptional]) {
   const css = entry.sheet === 'page' ? modelConfigPageSheet : modelConfigCatalogSheet
   const rest = colourOfSelector(css, entry.name)
@@ -957,8 +1005,8 @@ for (const entry of [...disabledInkRequired, ...disabledInkOptional]) {
     continue
   }
   disabledInkPairs.push({ name: entry.name, rest, disabled })
-  if (!/--dsw-alias-label-primary/.test(rest)) disabledInkIssues.push(`${entry.name}: rest is not the primary ink (${rest})`)
-  if (!/--dsw-alias-label-secondary/.test(disabled)) disabledInkIssues.push(`${entry.name}: disabled is not the secondary ink (${disabled})`)
+  if (!PRIMARY_INKS.includes(inkTokenOf(rest))) disabledInkIssues.push(`${entry.name}: rest is not the primary ink (${rest})`)
+  if (!SECONDARY_INKS.includes(inkTokenOf(disabled))) disabledInkIssues.push(`${entry.name}: disabled is not the secondary ink (${disabled})`)
   if (rest === disabled) disabledInkIssues.push(`${entry.name}: rest and disabled are the same ink`)
 }
 check('model config: an unavailable text action is dimmer than a resting one (primary rest -> secondary disabled)',
@@ -970,6 +1018,14 @@ check('model config: an unavailable text action is dimmer than a resting one (pr
 // controls that can change it. It carries no fill and no edge — it is a sentence —
 // and the sheet paints it in the primary ink, because the state colour is under the
 // 4.5:1 body bar and may never paint text.
+// §5.35 — THE DIAGNOSTIC IS A SENTENCE IN THE WELL. It carries no fill: the state
+// is carried by a 4px danger bar at its leading edge (a graphic, where the state
+// colour clears 3:1) and by the words themselves, which are painted in the primary
+// ink — the state colour is under the 4.5:1 body bar and may never paint text.
+// The old assertion demanded "no fill and no edge"; §4.4 of the design language
+// explicitly ADDS the red left bar, so the assertion is revised rather than
+// dropped: the fill stays forbidden, the sentence's bar becomes required, and a
+// full frame around the sentence is still a failure (it would read as a card).
 const dmcDiagnosticRules = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .flatMap(rule => rule[1].split(',').map(part => part.trim())
     .filter(selector => /^\.dmc-diagnostic(?![a-z0-9-])/.test(selector))
@@ -977,70 +1033,177 @@ const dmcDiagnosticRules = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)
 const diagnosticChrome = dmcDiagnosticRules.filter(entry => {
   const border = /(?:^|;)\s*border\s*:\s*([^;}]+)/.exec(entry.declarations)?.[1]?.trim()
   const background = /(?:^|;)\s*background\s*:\s*([^;}]+)/.exec(entry.declarations)?.[1]?.trim()
+  const sideBorders = [...entry.declarations.matchAll(/(?:^|;)\s*border-(top|right|bottom|left)\s*:\s*([^;}]+)/g)]
+    .filter(([, side, value]) => !/^(?:none|0|0px)/.test(value.trim())
+      && !(side === 'left' && /^4px solid var\(--zmd-danger\)$/.test(value.trim())))
   return (border !== undefined && !/^(?:none|0|0px)(?:\s|$)/.test(border))
     || (background !== undefined && !/^(?:transparent|none)$/i.test(background))
+    || sideBorders.length > 0
 })
-check('model config: the diagnostic is a sentence — no fill, no edge',
-  dmcDiagnosticRules.length > 0 && diagnosticChrome.length === 0,
-  { diagnosticChrome, selectors: dmcDiagnosticRules.map(entry => entry.selector) })
+const diagnosticHasBar = dmcDiagnosticRules.some(entry =>
+  /(?:^|;)\s*border-left\s*:\s*4px solid var\(--zmd-danger\)/.test(entry.declarations))
+check('model config: the diagnostic is a sentence — the danger bar, no fill, no frame',
+  dmcDiagnosticRules.length > 0 && diagnosticChrome.length === 0 && diagnosticHasBar,
+  { diagnosticChrome, diagnosticHasBar, selectors: dmcDiagnosticRules.map(entry => entry.selector) })
 
-// The refactor's headline number, in static form, REVISED ONCE ON PURPOSE.
+// THE 1px BUDGET, SPLIT INTO ITS THREE ROLES (§10 of docs/ink-design-language.md).
 //
-// §16 kept the page sheet to exactly ONE 1px edge — the protocol select — and
-// five outlined boxes per row became one. §5.33 (the retry move) makes it TWO,
-// and the reason is that the second one is the SAME KIND of thing: the inline
-// retry editor's numeric fields are real form controls, and the retired card's
-// own history recorded what removing that edge did — the number stopped reading
-// as something you can type into and read as a static label instead. A form
-// field is told apart from a label by its edge; that is the house rules' own
-// stated exemption, and it is the reason this is a revision of the assertion
-// rather than a relaxation of it. The budget is still a BUDGET: the closed page
-// keeps exactly one edge (the fields live inside a collapsed editor), the ground
-// under them is unchanged, and no third selector may join this list — a new 1px
-// edge anywhere else is still a failure, by name.
+// The HUD revision split the same budget into structure / control / SIGNAL bar.
+// The ink language keeps the split but changes the third role: the only bar is
+// the HOST-BLUE 2px accent (`--zmd-accent`, graphic, ≥3:1) and the ERROR 4px bar
+// (`--zmd-danger`, graphic). There is no signal colour any more — the yellow
+// tokens, the yellow carrier pair and the 2–4px signal whitelist are RETIRED, not
+// relaxed. The scarcity is still the same: a 1px edge is structure or a real form
+// control; a bar is exactly the accent's 2px or the error's 4px, on the left, and
+// nothing else may masquerade as either.
 //
-// The two are pinned as a SET rather than by position, because the cascade does
-// not promise the sheet writes them in this order; what is pinned is that these
-// two and no others carry an edge.
-const PAGE_1PX_EDGES = ['.dmc-protocol', '.dmc-retry-input'].sort()
-const pageBorderRules = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-  .filter(rule => /(?:^|;)\s*border\s*:\s*1px/.test(rule[2]))
-  .map(rule => rule[1].trim())
-  .sort()
-check('model config: the page sheet keeps exactly two 1px edges — the protocol select and the retry field',
-  pageBorderRules.length === PAGE_1PX_EDGES.length
-  && pageBorderRules.every((selector, index) => selector === PAGE_1PX_EDGES[index]),
-  { pageBorderRules, expected: PAGE_1PX_EDGES })
+//   structure — `--zmd-line` / `--zmd-line-strong`, exactly 1px, any count;
+//   control   — `--zmd-line-control` ONLY, exactly 1px, on the frozen form controls;
+//   accent    — `--zmd-accent`, exactly 2px, LEFT edge only (current / selected);
+//   danger    — `--zmd-danger`, exactly 4px, LEFT edge only (status rail / diagnostic).
+const PAGE_CONTROL_EDGES = new Set(['input.dmc-key-action', '.dmc-protocol', '.dmc-retry-input'])
+// The `+` instrument square from the HUD revision is gone (the add entry is a
+// plain word action again, §6.4), so no mark edge exists. The set stays as the
+// named extension point for a future real form field.
+const PAGE_MARK_EDGES = new Set()
+const STRUCTURE_LINE_TOKENS = new Set(['--zmd-line', '--zmd-line-strong'])
+const CONTROL_LINE_TOKEN = '--zmd-line-control'
+/** The only two bars in the language: token -> exact width in px. */
+const BAR_WIDTHS = new Map([['--zmd-accent', 2], ['--zmd-danger', 4]])
+const borderWidthOf = value => {
+  const width = /(?:^|\s)(\d*\.?\d+)px/.exec(value)
+  return width === null ? null : Number.parseFloat(width[1])
+}
+const borderTokenOf = value => /var\((--[a-z0-9-]+)\)/.exec(value)?.[1] ?? null
+/** Every `border` / `border-<side>` declaration with a width, per selector. */
+function edgeDeclarations(css) {
+  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(rule => {
+    const selectors = rule[1].split(',').map(part => part.trim()).filter(part => part !== '')
+    const declarations = [...rule[2].matchAll(/(?:^|;)\s*(border(?:-(?:top|right|bottom|left))?)\s*:\s*([^;}]+)/g)]
+      .map(match => ({ property: match[1], value: match[2].trim() }))
+      .filter(declaration => !/^(?:none|0|0px)$/.test(declaration.value))
+    return selectors.flatMap(selector => declarations.map(declaration => ({ selector, ...declaration })))
+  })
+}
+const pageEdges = edgeDeclarations(modelConfigPageSheet)
+  .map(entry => ({ ...entry, width: borderWidthOf(entry.value), token: borderTokenOf(entry.value) }))
+  .filter(entry => entry.width !== null)
+const pageBars = pageEdges.filter(entry => BAR_WIDTHS.has(entry.token ?? ''))
+const pageStructure = pageEdges.filter(entry => STRUCTURE_LINE_TOKENS.has(entry.token ?? ''))
+const pageControls = pageEdges.filter(entry => entry.token === CONTROL_LINE_TOKEN)
+const pageControlSelectors = [...new Set(pageControls.map(entry => entry.selector))].sort()
+const pageEdgeRoleIssues = [
+  // Every non-bar edge must name one of the three line roles; a host border alias
+  // or a literal colour on an edge is not part of this language.
+  ...pageEdges.filter(entry => !BAR_WIDTHS.has(entry.token ?? '')
+    && !STRUCTURE_LINE_TOKENS.has(entry.token ?? '') && entry.token !== CONTROL_LINE_TOKEN)
+    .map(entry => `${entry.selector}: ${entry.property}: ${entry.value}`),
+  // A bar is the accent's 2px or the danger's 4px, on the LEFT edge only.
+  ...pageBars.filter(entry => entry.property !== 'border-left'
+    || entry.width !== BAR_WIDTHS.get(entry.token))
+    .map(entry => `bar width/side: ${entry.selector}: ${entry.property}: ${entry.value}`),
+  // A control edge is 1px and the control token; the registry check below says
+  // which selectors may carry it.
+  ...pageControls.filter(entry => entry.width !== 1)
+    .map(entry => `control width: ${entry.selector}: ${entry.value}`),
+  ...pageControlSelectors.filter(selector => !PAGE_CONTROL_EDGES.has(selector) && !PAGE_MARK_EDGES.has(selector))
+    .map(selector => `unregistered control edge: ${selector}`),
+  // A structure line is exactly 1px; 0.5px / 2px structural lines are a different
+  // object (a hairline or a bar) wearing the structure token.
+  ...pageStructure.filter(entry => entry.width !== 1)
+    .map(entry => `structure width: ${entry.selector}: ${entry.value}`),
+]
+check('model config: the 1px budget is split — structure lines, registered control edges, accent/error bars',
+  pageEdgeRoleIssues.length === 0
+  && pageControlSelectors.length === PAGE_CONTROL_EDGES.size + PAGE_MARK_EDGES.size
+  && pageStructure.length > 0,
+  {
+    pageEdgeRoleIssues,
+    controlSelectors: pageControlSelectors,
+    expectedControls: [...PAGE_CONTROL_EDGES],
+    marks: [...PAGE_MARK_EDGES],
+    structureLines: pageStructure.map(entry => `${entry.selector}: ${entry.value}`),
+    bars: pageBars.map(entry => `${entry.selector}: ${entry.value}`),
+  })
+check('model config: every registered form control keeps exactly one 1px control edge',
+  [...PAGE_CONTROL_EDGES].every(selector =>
+    pageControls.filter(entry => entry.selector === selector).length === 1
+    && pageControls.some(entry => entry.selector === selector && entry.width === 1 && entry.token === CONTROL_LINE_TOKEN)),
+  { pageControls: pageControls.map(entry => `${entry.selector}: ${entry.value}`), expected: [...PAGE_CONTROL_EDGES] })
+check('model config: a bar is exactly the 2px accent or the 4px error, on the left',
+  pageBars.length > 0 && pageBars.every(entry =>
+    entry.property === 'border-left' && entry.width === BAR_WIDTHS.get(entry.token)),
+  { bars: pageBars.map(entry => `${entry.selector}: ${entry.value}`) })
 
-// §16/V2 — THE ACCENT IS A SOLID BAR, NOT A HAIRLINE. It used to be a 2px
-// `border-bottom` under the add action, and the house rules forbid thin rules
-// outright (the juror capped the overall score on exactly that reading during the
-// narrow-container round). So on this sheet the accent may appear as
-//   - a FILL (`background`), which the separate "no text on the accent fill" check
-//     keeps away from copy, or
-//   - the focus RING (`outline`), or
-//   - a LEFT edge of at least 4px — a solid bar, which is a shape rather than a rule.
-// A 1px/2px accent edge, or one on any other side, is a failure.
-const ACCENT_TOKEN = '--dsw-alias-state-business-primary'
-const accentDeclarations = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-  .flatMap(rule => [...rule[2].matchAll(/(?:^|;)\s*(border[a-z-]*|background[a-z-]*|outline[a-z-]*)\s*:\s*([^;}]+)/g)]
-    .filter(declaration => declaration[2].includes(ACCENT_TOKEN))
-    .map(declaration => ({ selector: rule[1].trim(), property: declaration[1], value: declaration[2].trim() })))
-const accentWidth = value => Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(value)?.[1] ?? 'NaN')
-const badAccentEdges = accentDeclarations.filter(declaration => {
-  if (declaration.property.startsWith('background') || declaration.property.startsWith('outline')) return false
-  if (!declaration.property.startsWith('border')) return false
-  // A colour longhand only re-points a bar whose width is stated elsewhere.
-  if (/-color$/.test(declaration.property)) return !/^border-(?:left|inline-start)-color$/.test(declaration.property)
-  const leftBar = declaration.property === 'border-left' || declaration.property === 'border-inline-start'
-  return !(leftBar && accentWidth(declaration.value) >= 4)
-})
-const solidAccentBar = accentDeclarations.some(declaration =>
-  /^border-(?:left|inline-start)$/.test(declaration.property) && accentWidth(declaration.value) >= 4)
-check('model config: the accent is a >=4px solid left bar (or a fill / focus ring), never a thin edge',
-  badAccentEdges.length === 0 && solidAccentBar,
-  { badAccentEdges, solidAccentBar, accentDeclarations })
-
+// THE ACCENT GRAMMAR (§5 of the ink language). The HUD revision's signal-ink bar
+// is gone; the accent is the host's own information blue, used as a GRAPHIC only:
+// a 2px left bar (current / selected), a filled square behind an on-accent glyph,
+// or the focus ring. It is never ink (3.91:1 in the light theme), and a blue fill
+// carries `--zmd-on-accent` and nothing else. The error red has the same shape of
+// restriction at 4px: graphics only, never a word.
+const ACCENT_TOKEN = '--zmd-accent'
+const ON_ACCENT_TOKEN = '--zmd-on-accent'
+const DANGER_TOKEN = '--zmd-danger'
+const barDeclarations = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => rule[1].split(',').map(part => part.trim()).filter(part => part !== '')
+    .flatMap(selector => [...rule[2].matchAll(/(?:^|;)\s*(border[a-z-]*|background[a-z-]*|color|text-decoration-color|outline[a-z-]*)\s*:\s*([^;}]+)/g)]
+      .map(match => ({ selector, property: match[1], value: match[2].trim() }))))
+const accentAsInk = barDeclarations
+  // Only `color:` is forbidden: §5.1 explicitly allows the host blue as the HOVER
+  // UNDERLINE (a text-decoration line is a graphic, not the glyphs) and §5 gives it
+  // the focus ring. The word itself is what must stay ink.
+  .filter(entry => entry.property === 'color'
+    && entry.value.includes(`var(${ACCENT_TOKEN})`))
+  .map(entry => `${entry.selector}: ${entry.property}: ${entry.value}`)
+check('model config: the accent blue never paints text (3.91:1, graphic only)',
+  accentAsInk.length === 0, { accentAsInk })
+const dangerAsInk = barDeclarations
+  .filter(entry => /^(?:color|text-decoration-color)$/.test(entry.property)
+    && entry.value.includes(`var(${DANGER_TOKEN})`))
+  .map(entry => `${entry.selector}: ${entry.property}: ${entry.value}`)
+check('model config: the error red is a 4px bar, never a word',
+  dangerAsInk.length === 0, { dangerAsInk })
+// A blue fill states the ink it carries. The check is the PAIR: a rule that fills
+// with the accent and states a `color` must state `--zmd-on-accent`; a rule that
+// colours with on-accent must be the accent's carrier (fill or 2px bar in the same
+// rule). This is what keeps a blue box from growing arbitrary text.
+const accentFillRules = barDeclarations
+  .filter(entry => /^background(?:-color)?$/.test(entry.property) && entry.value.includes(`var(${ACCENT_TOKEN})`))
+  .map(entry => entry.selector)
+/**
+ * Whether a rule's blue FILL carries its on-accent ink on a child pseudo-element
+ * (the framed checkbox draws its tick as `::after` borders), which is a legitimate
+ * carrier: the fill role and the ink role are stated by two rules of one object.
+ * @param selector - the rule declaring the fill.
+ * @returns whether a paired pseudo rule states the on-accent ink.
+ */
+function pageHasAccentGlyph(selector) {
+  return [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)].some(other =>
+    other[1].trim().startsWith(`${selector}::`) && /var\(--zmd-on-accent\)/.test(other[2]))
+}
+const accentPairIssues = []
+for (const rule of [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]) {
+  const body = rule[2]
+  const fills = /(?:^|;)\s*background(?:-color)?\s*:\s*[^;}]*var\(--zmd-accent\)/.test(body)
+  if (!fills) continue
+  const selector = rule[1].trim()
+  const ownInk = /(?:^|;)\s*color\s*:\s*([^;}]+)/.exec(body)?.[1]?.trim() ?? null
+  if (ownInk !== null && !ownInk.includes(`var(${ON_ACCENT_TOKEN})`)) {
+    accentPairIssues.push(`${selector}: ${ownInk} on the accent fill`)
+  }
+  if (ownInk === null && !pageHasAccentGlyph(selector)) {
+    accentPairIssues.push(`${selector}: blue fill states no on-accent ink`)
+  }
+}
+check('model config: a blue fill carries --zmd-on-accent ink only',
+  accentPairIssues.length === 0,
+  { accentPairIssues, accentFillRules })
+// The page's structural/status bars must exist (the rail and the diagnostic carry
+// the 4px error bar) and the add entry is a word action again (no left bar).
+check('model config: the error bar survives on the rail and the diagnostic, and no yellow bar remains',
+  pageBars.some(entry => entry.token === DANGER_TOKEN && entry.width === 4)
+  && !/--zmd-signal/.test(modelConfigPageSheet),
+  { bars: pageBars.map(entry => `${entry.selector}: ${entry.value}`) })
 // §16/V2 — ONE ROW, TWO ENTRIES, TWO NAMES. The credential-clear entry and the
 // lifecycle entry used to both read 删除, so the juror read a single row as
 // offering the same destructive action twice. The credential entry now carries its
@@ -1388,32 +1551,32 @@ check(
   { legendRule: /\.dmp-legend\s*\{/.test(stylesCode), legendOrder: /badge\.key\.text/.test(picker) },
 )
 
-// The glyphs live on two different grids (16 units for the three drawn here, 24
-// for the host's brain), so the stroke width is per-grid and only comparable
-// after the render scale. Reading both constants and checking their on-screen
-// result is the only way this stays true: a brain ships thinner than its
-// neighbours exactly when someone edits one constant and forgets the other.
+// THE ICON FAMILY IS NOW ONE DRAWING HAND ON ONE GRID (§4.5 of the design
+// language). The old assertion compared a 16-unit grid against the host's
+// 24-unit brain glyph — it existed because the family mixed the two. §4.5 redraws
+// all four facts as square technical glyphs on ONE 16-unit grid, so the honest
+// assertion changed with the artwork: one stroke constant, one viewBox, one render
+// size, and the on-screen weight still 1.4px (1.6 × 14/16). The intent — a later
+// edit must not make one glyph thinner than its neighbours — is unchanged; the
+// second grid it compared against no longer exists, so the comparison became a
+// single-grid identity. The no-brain branch is asserted separately so a host glyph
+// cannot quietly rejoin the family.
 const icons = stripComments(read('src/client/BadgeIcons.tsx'))
 const gridStroke = /BADGE_STROKE\s*=\s*([\d.]+)/.exec(icons)
-const brainStroke = /BRAIN_STROKE\s*=\s*([\d.]+)/.exec(icons)
-const brainView = /viewBox=\{brain \? '([^']+)'/.exec(icons)
+const gridViewBox = /viewBox="0 0 16 16"/.test(icons)
+const brainRejoined = /BRAIN_STROKE|viewBox=\{brain\s*\?|const BRAIN/.test(icons)
 check(
-  'badges: each grid declares its own stroke and the render size',
-  gridStroke !== null && brainStroke !== null && brainView !== null && iconSize !== undefined,
-  {
-    gridStroke: gridStroke?.[1], brainStroke: brainStroke?.[1],
-    brainViewBox: brainView?.[1], renderSize: iconSize,
-  },
+  'badges: one 16-unit grid, one stroke constant, one render size',
+  gridStroke !== null && gridViewBox && iconSize !== undefined && !brainRejoined,
+  { gridStroke: gridStroke?.[1], gridViewBox, renderSize: iconSize, brainRejoined },
 )
-if (gridStroke !== null && brainStroke !== null && brainView !== null && iconSize !== undefined) {
+if (gridStroke !== null && iconSize !== undefined) {
   const size = Number(iconSize)
-  const brainUnits = Number(brainView[1].split(/\s+/).pop())
-  const drawn16 = Number(gridStroke[1]) * (size / 16)
-  const drawn24 = Number(brainStroke[1]) * (size / brainUnits)
+  const onScreen = Number(gridStroke[1]) * (size / 16)
   check(
-    'badges: all four glyphs draw the same weight on screen',
-    Math.abs(drawn16 - drawn24) < 0.05,
-    { drawn16: drawn16.toFixed(3), drawn24: drawn24.toFixed(3), size, brainUnits },
+    'badges: the glyphs draw 1.4px on screen (the language\'s line weight)',
+    Math.abs(onScreen - 1.4) < 0.06,
+    { stroke: gridStroke[1], size, onScreen: onScreen.toFixed(3) },
   )
 }
 // The icon family has exactly ONE state per fact: "the model has it". The
@@ -2117,6 +2280,710 @@ check(
   /observer\.disconnect\(\)/.test(anchorLoss) && /clearTimeout/.test(anchorLoss),
   null,
 )
+
+// ==========================================================================
+// --- 17. THE INK DESIGN SYSTEM (docs/ink-design-language.md §10) -----------
+// The final direction of this round is monochrome ink + the host's own blue, with
+// a local wash and a fine grain. The HUD revision that came before it was REJECTED
+// by the user, and its gates are retired with it rather than relaxed: the signal
+// colour, the English field codes, the display numerals, the notch/wipe and the
+// dot matrix are now asserted to be ABSENT. What survives is the part of the HUD
+// work the design kept: the token layer ownership, the 1px role budget (with the
+// accent bar where the signal bar was), the width budget, the embedded face, the
+// build-fresh contract and the mutation discipline.
+//
+// `designSystem.ts` is still the single owner of colour literals. Its values are
+// neutral greys plus two kinds of reference: the accent / focus / error roles point
+// at the HOST's own `--dsw-*` tokens (no second palette), so a reference check must
+// allow a `var()` value and the contrast gate resolves it through the host bag.
+// ==========================================================================
+
+/** Neutralise `${…}` interpolations in a TS template literal's raw source text. */
+function neutraliseTemplateExpressions(source) {
+  let out = ''
+  let index = 0
+  while (index < source.length) {
+    const at = source.indexOf('${', index)
+    if (at < 0) { out += source.slice(index); break }
+    out += source.slice(index, at) + '__EXPR__'
+    let depth = 0
+    let cursor = at + 1
+    while (cursor < source.length) {
+      const char = source[cursor]
+      if (char === '{') depth += 1
+      else if (char === '}') {
+        depth -= 1
+        if (depth === 0) break
+      }
+      cursor += 1
+    }
+    index = cursor + 1
+  }
+  return out
+}
+
+/**
+ * The raw CSS of one `const NAME = \`…\`` template literal, interpolations
+ * neutralised. The neutralising step is REQUIRED: the token block interpolates
+ * `${JSON.stringify(FONT_FAMILY)}`, and a naive brace scan splits :root there
+ * (measured: the light bag parsed as empty before this step existed).
+ * @param source - the module's source text.
+ * @param name - the const name (`TOKENS`, `FONT_FACE`, `PRIMITIVES`, `CSS`).
+ * @returns the CSS text, or null when the literal is absent.
+ */
+function templateLiteralOf(source, name) {
+  const marker = `const ${name} = \``
+  const open = source.indexOf(marker)
+  if (open < 0) return null
+  const body = neutraliseTemplateExpressions(source.slice(open + marker.length))
+  const close = body.indexOf('`')
+  return close < 0 ? null : body.slice(0, close)
+}
+
+/** The comments-stripped CSS of a template literal (comments carry colons and braces). */
+const cssOfLiteral = (source, name) => {
+  const literal = templateLiteralOf(source, name)
+  // A stand-alone `${…}` between rules must not become a bogus selector for the
+  // rule that follows it.
+  return literal === null ? null : literal.replace(/__EXPR__/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+const designSystemSource = read('src/client/designSystem.ts')
+const fontAssetSource = read('src/client/fontAsset.ts')
+const tokensCss = cssOfLiteral(designSystemSource, 'TOKENS')
+const fontFaceCss = cssOfLiteral(designSystemSource, 'FONT_FACE')
+const primitivesCss = cssOfLiteral(designSystemSource, 'PRIMITIVES')
+check('design system: the token block, the face and the primitives exist',
+  tokensCss !== null && fontFaceCss !== null && primitivesCss !== null,
+  { tokens: tokensCss !== null, face: fontFaceCss !== null, primitives: primitivesCss !== null })
+
+/** The raw light/dark `--zmd-*` bags, parsed out of the token block. */
+function zmdBagsOf(css) {
+  const bags = { light: {}, dark: {} }
+  if (css === null) return bags
+  for (const block of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const target = block[1].includes('data-ds-dark-theme') ? bags.dark : bags.light
+    for (const declaration of block[2].split(';')) {
+      const colon = declaration.indexOf(':')
+      if (colon < 0) continue
+      const name = declaration.slice(0, colon).trim()
+      if (name.startsWith('--zmd-')) target[name] = declaration.slice(colon + 1).trim()
+    }
+  }
+  return bags
+}
+const zmd = zmdBagsOf(tokensCss)
+// The dark block is an OVERRIDE of :root, not a full copy: a token defined only in
+// :root still applies in the dark theme (that is how on-accent / grain-tint /
+// accent / focus / danger inherit).
+const zmdMerged = { light: { ...zmd.light }, dark: { ...zmd.light, ...zmd.dark } }
+const HEX_ONLY = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/
+const zmdRefs = /^var\((--(?:zmd|dsw)-[a-z0-9-]+)\)$/
+
+// 17.1 THE LITERAL IS ALLOWED IN EXACTLY ONE PLACE — the `--zmd-*` tokens.
+const tokenBlockLiteralIssues = []
+if (tokensCss !== null) {
+  for (const declaration of tokensCss.matchAll(/([^{};]+):\s*([^;}]+)/g)) {
+    const name = declaration[1].trim()
+    if (!COLOR_LITERAL.test(declaration[2])) continue
+    if (!name.startsWith('--zmd-')) tokenBlockLiteralIssues.push(`${name}: ${declaration[2].trim()}`)
+  }
+  for (const value of tokensCss.matchAll(/:\s*([^;}]+)/g)) {
+    const text = value[1].trim()
+    if (COLOR_LITERAL.test(text)) continue
+    if (HEX_ONLY.test(text) || zmdRefs.test(text)) continue
+    // font/ease values are the two non-colour tokens and are not judged here.
+  }
+}
+for (const [label, css] of [['@font-face', fontFaceCss], ['shared primitives', primitivesCss]]) {
+  if (css !== null && COLOR_LITERAL.test(css)) tokenBlockLiteralIssues.push(`${label} spells a colour literal`)
+}
+check('design system: colour literals live only in the --zmd-* token blocks',
+  tokenBlockLiteralIssues.length === 0, { tokenBlockLiteralIssues })
+
+// 17.2 THE TOKEN SET AND ITS REFERENCES. The accent / focus / error roles are
+// REFERENCES to the host's palette (one palette, not two); every other colour is
+// a literal. A token whose value is neither is a typo that paints nothing.
+const NON_COLOR_TOKENS = new Set(['--zmd-font-latin', '--zmd-ease'])
+const REQUIRED_TOKENS = [
+  '--zmd-panel', '--zmd-panel-deep', '--zmd-hover', '--zmd-line', '--zmd-line-strong',
+  '--zmd-line-control', '--zmd-ink', '--zmd-ink-secondary', '--zmd-ink-mute',
+  '--zmd-wash-top', '--zmd-wash-bottom', '--zmd-grain-tint',
+  '--zmd-accent', '--zmd-on-accent', '--zmd-focus', '--zmd-danger', '--zmd-online',
+]
+const lightNames = new Set(Object.keys(zmd.light).filter(name => !NON_COLOR_TOKENS.has(name)))
+const darkNames = new Set(Object.keys(zmd.dark).filter(name => !NON_COLOR_TOKENS.has(name)))
+const tokenSetIssues = REQUIRED_TOKENS.filter(name => !lightNames.has(name))
+  .map(name => `missing in :root: ${name}`)
+  .concat([...darkNames].filter(name => !lightNames.has(name)).map(name => `dark declares a token light does not: ${name}`))
+check('design system: the ink token set is complete and the dark block only overrides it',
+  tokenSetIssues.length === 0, { tokenSetIssues, light: lightNames.size, dark: darkNames.size })
+
+const tokenRefIssues = []
+const REFERENCED_HOST_TOKENS = new Map([
+  ['--zmd-accent', '--dsw-alias-state-business-primary'],
+  ['--zmd-focus', '--dsw-alias-state-business-primary'],
+  ['--zmd-danger', '--dsw-alias-state-error-primary'],
+])
+for (const name of lightNames) {
+  const value = zmd.light[name]
+  if (HEX_ONLY.test(value)) {
+    if (REFERENCED_HOST_TOKENS.has(name)) tokenRefIssues.push(`${name} must reference the host palette, not spell a literal`)
+    continue
+  }
+  const reference = zmdRefs.exec(value)?.[1] ?? null
+  if (reference === null) { tokenRefIssues.push(`${name}: ${value} is neither a hex value nor a token reference`); continue }
+  if (REFERENCED_HOST_TOKENS.has(name) && REFERENCED_HOST_TOKENS.get(name) !== reference) {
+    tokenRefIssues.push(`${name} points at ${reference}, expected ${REFERENCED_HOST_TOKENS.get(name)}`)
+  }
+  if (reference.startsWith('--zmd-') && !(reference in zmd.light)) {
+    tokenRefIssues.push(`${name} references undeclared ${reference}`)
+  }
+}
+check('design system: the accent/focus/error roles reference the host palette, everything else resolves',
+  tokenRefIssues.length === 0, { tokenRefIssues })
+
+// 17.2b THE HOST ALIASES LIVE ON `body`, NOT `:root` — a CSS custom property's
+// `var()` is substituted on the element that DECLARES it, and the host defines its
+// `--dsw-*` palette on <body>. An alias declared on :root would resolve against
+// :root's own empty host tokens, become guaranteed-invalid and silently inherit as
+// an empty value: every accent bar, focus ring and error edge would disappear with
+// a green build. These four aliases are the whole accent grammar, so their block is
+// pinned: :root is literal-only, a plain `body {}` block declares the aliases (one
+// block serves both themes), and the dark block only overrides the neutrals.
+const tokenBlocks = [...(tokensCss ?? '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .map(match => ({ selector: match[1].trim(), body: match[2] }))
+const rootBlock = tokenBlocks.find(block => block.selector === ':root') ?? null
+const bodyAliasBlock = tokenBlocks.find(block => block.selector === 'body') ?? null
+const darkBlock = tokenBlocks.find(block => block.selector.includes('data-ds-dark-theme')) ?? null
+const ALIASES = ['--zmd-accent', '--zmd-on-accent', '--zmd-focus', '--zmd-danger']
+const aliasIssues = []
+if (rootBlock === null) aliasIssues.push('no :root token block')
+else if (/var\(--dsw-/.test(rootBlock.body)) aliasIssues.push(':root declares a host alias (var() would resolve against :root, not <body>)')
+if (bodyAliasBlock === null) aliasIssues.push('no body{} alias block (host aliases must be declared on <body>)')
+else {
+  for (const alias of ALIASES) {
+    if (!new RegExp(`${alias}\\s*:`).test(bodyAliasBlock.body)) aliasIssues.push(`body{} does not declare ${alias}`)
+  }
+  if (!/--zmd-accent\s*:\s*var\(--dsw-/.test(bodyAliasBlock.body)) aliasIssues.push('accent does not reference the host palette')
+  if (!/--zmd-focus\s*:\s*var\(--dsw-/.test(bodyAliasBlock.body)) aliasIssues.push('focus does not reference the host palette')
+  if (!/--zmd-danger\s*:\s*var\(--dsw-/.test(bodyAliasBlock.body)) aliasIssues.push('danger does not reference the host palette')
+  if (!/--zmd-on-accent\s*:\s*var\(--zmd-panel\)/.test(bodyAliasBlock.body)) aliasIssues.push('on-accent is not the panel ink')
+}
+if (darkBlock === null) aliasIssues.push('no dark override block')
+else {
+  for (const alias of ALIASES) {
+    if (new RegExp(`${alias}\\s*:`).test(darkBlock.body)) aliasIssues.push(`the dark block re-declares ${alias} (it must inherit the body alias)`)
+  }
+}
+check('design system: the host-token aliases are declared on <body> and inherited by both themes',
+  aliasIssues.length === 0, { aliasIssues })
+// Sheets consume the token layer, never the host's action colours directly: the
+// alias is what keeps "one palette" true and lets a future host-theme change reach
+// every accent at once.
+const directHostColours = []
+for (const [name, css] of [
+  ['styles.ts', stylesCode],
+  ['modelConfigStyles.ts', modelConfigPageSheet],
+  ['catalogStyles.ts', modelConfigCatalogSheet],
+]) {
+  for (const match of css.matchAll(/var\((--dsw-alias-state-(?:business|error)-primary)\)/g)) {
+    directHostColours.push(`${name}: ${match[1]}`)
+  }
+}
+check('design system: sheets reach the accent/error roles through the token layer',
+  directHostColours.length === 0, { directHostColours })
+
+// A sheet may only CONSUME tokens; a `--zmd-*` definition inside a sheet is how a
+// second token layer starts. A referenced token that does not exist is invisible
+// at runtime (the property simply does not paint), so the reference scan is the
+// only thing that can catch a typo.
+const sheetCssByName = new Map([
+  ['styles.ts', stylesCode],
+  ['modelConfigStyles.ts', modelConfigPageSheet],
+  ['catalogStyles.ts', modelConfigCatalogSheet],
+  ['designSystem.ts', primitivesCss ?? ''],
+])
+const zmdTokenNames = new Set([...Object.keys(zmd.light), ...Object.keys(zmd.dark)])
+const undeclaredTokens = []
+const locallyDefinedTokens = []
+for (const [name, css] of sheetCssByName) {
+  for (const match of css.matchAll(/var\((--zmd-[a-z0-9-]+)/g)) {
+    if (!zmdTokenNames.has(match[1])) undeclaredTokens.push(`${name}: ${match[1]}`)
+  }
+  const definitions = [...css.matchAll(/(?:^|[;{]\s*)(--zmd-[a-z0-9-]+)\s*:/g)].map(match => match[1])
+  if (definitions.length > 0) locallyDefinedTokens.push(`${name}: ${[...new Set(definitions)].join(', ')}`)
+}
+check('design system: every referenced --zmd-* token is declared',
+  undeclaredTokens.length === 0, { undeclaredTokens: [...new Set(undeclaredTokens)], tokens: zmdTokenNames.size })
+check('design system: no sheet declares its own --zmd-* token',
+  locallyDefinedTokens.length === 0, { locallyDefinedTokens })
+
+// 17.3 THE HUD IS RETIRED — BY ABSENCE, NOT BY MEMORY. These are the constructs
+// the rejected direction introduced. A rule that "no longer renders" is not
+// enough: the code itself must be gone, or the next `git checkout` / a stray
+// comment brings the vocabulary back. Comments are stripped first, because a
+// comment explaining WHY there is no notch is documentation, not a construct.
+const RETIRED_HUD = [
+  ['the signal colour', /--zmd-signal/],
+  ['the English field-code table', /FIELD_CODES/],
+  ['the field-code mark', /\bzmd-code\b/],
+  ['the display numeral', /\bzmd-display\b/],
+  ['the corner notch', /zmd-notch/],
+  ['the entrance wipe', /zmd-wipe/],
+  ['the clip-path reveal', /clip-path/],
+  ['uppercase field-code type', /text-transform:\s*uppercase/],
+  ['width-variable display type', /font-variation-settings[^;}]*[\"']?wdth/],
+]
+const inkSourceFiles = readdirSync(resolve(root, 'src'), { recursive: true, encoding: 'utf8' })
+  .filter(name => /\.tsx?$/.test(name))
+const retiredHudHits = []
+for (const file of inkSourceFiles) {
+  const text = stripComments(read(`src/${file.split(sep).join('/')}`))
+  for (const [label, pattern] of RETIRED_HUD) {
+    if (pattern.test(text)) retiredHudHits.push(`${file}: ${label}`)
+  }
+}
+check('ink: the rejected HUD vocabulary is gone from every source file',
+  retiredHudHits.length === 0, { retiredHudHits, retired: RETIRED_HUD.map(([label]) => label) })
+
+// 17.4 THE SHARED UTILITY CLASSES ARE CROSS-CHECKED IN BOTH DIRECTIONS. The
+// surviving primitives are `zmd-num`, `zmd-rule`, `zmd-wash`, `zmd-grain`; the
+// `dmp-`/`dmc-` dead-class sweeps cannot see them (they live in another module).
+// The negative lookbehind keeps `--zmd-*` TOKEN references in inline styles out
+// of the class set.
+const ZMD_CLASS = /(?<![\w-])zmd-[a-z0-9]+(?:-[a-z0-9]+)*/g
+const zmdClassesInSheet = new Set(
+  [...(primitivesCss ?? '').matchAll(/\.(zmd-[a-z0-9]+(?:-[a-z0-9]+)*)/g)].map(match => match[1]))
+const decorationSourceFiles = [...tsxFiles, ...MODEL_CONFIG_TSX]
+const classNameTexts = decorationSourceFiles.flatMap(file =>
+  [...read(file).matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^{}]*)\})/g)]
+    .map(match => match[1] ?? match[2] ?? match[3] ?? ''))
+const zmdClassesInTsx = new Set(classNameTexts.flatMap(text => [...text.matchAll(ZMD_CLASS)].map(match => match[0])))
+const deadZmdClass = [...zmdClassesInSheet].filter(name => !zmdClassesInTsx.has(name)).sort()
+const unstyledZmdClass = [...zmdClassesInTsx].filter(name => !zmdClassesInSheet.has(name)).sort()
+check('design system: every .zmd-* primitive is used by a component', deadZmdClass.length === 0, { deadZmdClass })
+check('design system: every zmd-* class used by a component is a declared primitive',
+  unstyledZmdClass.length === 0, { unstyledZmdClass })
+
+// 17.5 THE TWO TEXTURES, AND ONLY THE TWO. §4/§6 of the ink language allows exactly
+// two material effects: the local wash (`radial-gradient` on `.zmd-wash`, stops
+// from the three wash/panel tokens) and the fine grain (ONE SVG fractal-noise data
+// URI on `.zmd-grain::after`). Every other gradient, background-image or url() is
+// forbidden, because that is how a HUD's dot matrix / scan line comes back.
+const textureIssues = []
+// Every background-image in the primitives is one of the two textures: the wash's
+// radial gradient or the grain's data URI. A third one (a dot matrix, a scan line,
+// a second gradient) is the HUD coming back.
+const backgroundImageRules = [...(primitivesCss ?? '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .flatMap(rule => [...rule[1].split(',').map(part => part.trim()).filter(part => part !== '')]
+    .flatMap(selector => [...rule[2].matchAll(/(?:^|;)\s*background-image\s*:\s*([^;}]+)/g)]
+      .map(match => ({ selector, value: match[1].trim() }))))
+for (const entry of backgroundImageRules) {
+  if (/gradient\(/.test(entry.value)) {
+    if (entry.selector !== '.zmd-wash') {
+      textureIssues.push(`the wash is the only gradient surface, not ${entry.selector}`)
+      continue
+    }
+    if (!/^radial-gradient\(/.test(entry.value)) textureIssues.push(`.zmd-wash is not a radial-gradient: ${entry.value}`)
+    const colours = [...entry.value.matchAll(/var\((--[a-z0-9-]+)\)/g)].map(match => match[1])
+    const allowedWashColours = new Set(['--zmd-wash-top', '--zmd-panel', '--zmd-wash-bottom'])
+    for (const colour of colours) if (!allowedWashColours.has(colour)) textureIssues.push(`.zmd-wash stop ${colour}`)
+    if (colours.length === 0) textureIssues.push('.zmd-wash has no token stops')
+    continue
+  }
+  if (!/^url\("data:/.test(entry.value)) {
+    textureIssues.push(`${entry.selector}: background-image is not a texture token/URL: ${entry.value}`)
+    continue
+  }
+  if (entry.selector !== '.zmd-grain::after') {
+    textureIssues.push(`the grain is the only data-URI surface, not ${entry.selector}`)
+  }
+}
+// The grain: exactly one data-URI in the primitives, on `.zmd-grain::after`, an
+// SVG fractal-noise tile, never on the sheets and never a network URL.
+const dataUriMatches = [...(primitivesCss ?? '').matchAll(/url\("(data:[^"]+)"\)/g)]
+if (dataUriMatches.length !== 1) textureIssues.push(`expected exactly one data URI in the primitives, found ${dataUriMatches.length}`)
+const grainRule = /\.zmd-grain::after\s*\{([^}]*)\}/.exec(primitivesCss ?? '')?.[1] ?? ''
+const grainUri = dataUriMatches[0]?.[1] ?? ''
+if (grainUri !== '' && !/^data:image\/svg\+xml,/.test(grainUri)) textureIssues.push('the grain tile is not an inline SVG')
+if (grainUri !== '' && !/feTurbulence/.test(grainUri)) textureIssues.push('the grain tile is not fractal noise')
+if (!/background-size:\s*120px 120px/.test(grainRule)) textureIssues.push('the grain tile does not repeat at 120px')
+if (!/pointer-events:\s*none/.test(grainRule)) textureIssues.push('the grain overlay can eat pointer events')
+if (!/\.zmd-grain\s*\{[^}]*position:\s*relative/.test(primitivesCss ?? '')) textureIssues.push('the grain has no positioned host')
+for (const [name, css] of sheetCssByName) {
+  if (name === 'designSystem.ts') continue
+  if (/background-image/.test(css)) textureIssues.push(`${name} sets background-image (texture is owned by the design system)`)
+  if (/url\(/.test(css)) textureIssues.push(`${name} embeds a url()`)
+  if (/(?:linear|conic|radial)-gradient/.test(css)) textureIssues.push(`${name} spells a gradient`)
+}
+if ((fontFaceCss ?? '').match(/url\(/g)?.length !== 1) textureIssues.push('the face must be the one other allowed url()')
+check('ink: the only textures are the .zmd-wash gradient and the one .zmd-grain noise tile',
+  textureIssues.length === 0, { textureIssues })
+
+// The textures sit on bounded surfaces, never on a scrolling list or the whole
+// page: a wash behind scrolling content slides; grain over copy is a HUD tile.
+const TEXTURE_HOSTS = new Set(['dmp-menu', 'dmc-head', 'dmc-catalog-panel', 'dmp-settings', 'dmc-page'])
+const TEXTURE_FORBIDDEN = /^(?:dmp-groups|dmp-models|dmp-rail|dmc-list|dmp-settings-body)$/
+const textureUsers = []
+for (const file of decorationSourceFiles) {
+  for (const match of read(file).matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^{}]*)\})/g)) {
+    const value = match[1] ?? match[2] ?? match[3] ?? ''
+    if (!/\bzmd-(?:wash|grain)\b/.test(value)) continue
+    textureUsers.push({ file, classes: value.split(/\s+/).filter(Boolean) })
+  }
+}
+const textureUserIssues = textureUsers
+  .filter(user => user.classes.some(name => TEXTURE_FORBIDDEN.test(name))
+    || !user.classes.some(name => TEXTURE_HOSTS.has(name)))
+  .map(user => `${user.file}: ${user.classes.join(' ')}`)
+check('ink: the wash and grain ride only on a bounded surface',
+  textureUserIssues.length === 0 && textureUsers.length > 0,
+  { textureUserIssues, users: textureUsers.length })
+// §6.2/§6.4: a surface wears the material as a PAIR — the tonal wash and the paper
+// grain together. A lone wash reads as a gradient; a lone grain reads as noise.
+const texturePairIssues = textureUsers
+  .filter(user => !(user.classes.includes('zmd-wash') && user.classes.includes('zmd-grain')))
+  .map(user => `${user.file}: ${user.classes.join(' ')}`)
+check('ink: the wash and the grain are worn together',
+  texturePairIssues.length === 0, { texturePairIssues })
+
+// 17.6 GEOMETRY: all right angles; no fades, no shadow, no blur, no corner morphing.
+const inkRadiusEntries = [...sheetCssByName].flatMap(([name, css]) =>
+  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(rule =>
+    rule[1].split(',').map(part => part.trim()).filter(part => part !== '')
+      .flatMap(selector => [...rule[2].matchAll(/border-radius:\s*([^;]+);/g)]
+        .map(match => ({ name, selector, value: match[1].trim() })))))
+const inkBadRadius = inkRadiusEntries
+  .filter(entry => !(entry.value === '0' || entry.value === '0px' || entry.value === '50%'))
+  .map(entry => `${entry.name} ${entry.selector}: ${entry.value}`)
+const inkBadDotRadius = inkRadiusEntries
+  .filter(entry => entry.value === '50%' && !/-dot(?:[\s:.[]|$)/.test(entry.selector))
+  .map(entry => `${entry.name} ${entry.selector}`)
+check('geometry: only 0 / 50% (a circle is a state dot)',
+  inkBadRadius.length === 0 && inkBadDotRadius.length === 0,
+  { badRadius: inkBadRadius, badDotRadius: inkBadDotRadius })
+const shadowIssues = []
+const dimmingIssues = []
+const cornerIssues = []
+for (const [name, css] of sheetCssByName) {
+  for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selectors = rule[1].split(',').map(part => part.trim()).filter(part => part !== '')
+    const declarations = property => [...rule[2].matchAll(
+      new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;}]+)`, 'g'))].map(match => match[1].trim())
+    for (const value of declarations('box-shadow')) {
+      const ring = /^(?:inset )?0 0 0 [\d.]+px var\(--(?:zmd-focus|zmd-accent|zmd-line-strong|dsw-focus-ring-color)/.test(value)
+      for (const selector of selectors) if (value !== 'none' && !ring) shadowIssues.push(`${name} ${selector}: box-shadow: ${value}`)
+    }
+    for (const property of ['opacity', 'filter', 'text-shadow', 'mix-blend-mode', 'backdrop-filter']) {
+      for (const value of declarations(property)) {
+        const allowed = (property === 'filter' || property === 'backdrop-filter') && value === 'none'
+        if (!allowed) for (const selector of selectors) dimmingIssues.push(`${name} ${selector}: ${property}: ${value}`)
+      }
+    }
+    for (const value of declarations('corner-shape')) {
+      for (const selector of selectors) {
+        if (!(value === 'round' && /-dot(?:[\s:.[]|$)/.test(selector))) cornerIssues.push(`${name} ${selector}: corner-shape: ${value}`)
+      }
+    }
+  }
+}
+check('geometry: no elevation shadow and no blur anywhere',
+  shadowIssues.length === 0, { shadowIssues })
+check('geometry: no rule fades, blends or dims its own text',
+  dimmingIssues.length === 0, { dimmingIssues })
+check('geometry: corner-shape is only the 50% status dot',
+  cornerIssues.length === 0, { cornerIssues })
+
+// 17.7 THE LINE, THE FILL AND THE ACCENT: the three colour-grammar rules that are
+// decidable statically. §2/§4: a line is structure, a fill is hover/sunken/panel,
+// and the only colour is the host blue used as a graphic.
+const allSheetRules = [...sheetCssByName].flatMap(([name, css]) =>
+  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(rule =>
+    rule[1].split(',').map(part => part.trim()).filter(part => part !== '')
+      .map(selector => ({ sheet: name, selector, body: rule[2] }))))
+const declarationValues = (body, property) => [...body.matchAll(
+  new RegExp(`(?:^|;)\\s*${property.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*([^;}]+)`, 'g'))]
+  .map(match => match[1].trim())
+const ROW_CLASS = /\.(?:dmp-(?:row|rail-row|effort-item|picker-item)|dmc-(?:row|picker-item|model-row|discover-candidate))(?![\w-])/
+const ROW_STATE = /:(?:hover|focus-visible|focus-within|active)\b|\[(?:aria-checked|aria-selected)='?true'?\]|\[data-(?:active|catalog|well)\]/
+const rowFillIssues = allSheetRules
+  .filter(rule => !/::/.test(rule.selector) && !/\s/.test(rule.selector)
+    && new RegExp(`^${ROW_CLASS.source}`).test(rule.selector) && ROW_STATE.test(rule.selector))
+  .flatMap(rule => declarationValues(rule.body, 'background')
+    .filter(value => !/^var\(--zmd-(?:hover|panel-deep)\)$/.test(value) && !/^(?:transparent|none)$/i.test(value))
+    .map(value => `${rule.sheet} ${rule.selector}: ${value}`))
+check('grammar: a row hover/selected fill is --zmd-hover or --zmd-panel-deep',
+  rowFillIssues.length === 0, { rowFillIssues })
+const LINE_FILL_EXEMPT = /\.dmc-backoff-cell\[data-level='0'\]/
+const lineFillIssues = allSheetRules.flatMap(rule => declarationValues(rule.body, 'background')
+  .filter(value => /^var\(--zmd-line\)$/.test(value))
+  .filter(() => !/(?:^|;)\s*(?:height|width)\s*:\s*1px/.test(rule.body))
+  .filter(() => !LINE_FILL_EXEMPT.test(rule.selector))
+  .map(value => `${rule.sheet} ${rule.selector}: ${value}`))
+check('grammar: --zmd-line is never used as a fill',
+  lineFillIssues.length === 0, { lineFillIssues })
+const accentAsTextRules = allSheetRules.flatMap(rule =>
+  // Only `color:` — the host blue is allowed as a text-decoration underline (the
+  // hover of an expanded word action, §5.1) and as the focus ring.
+  declarationValues(rule.body, 'color')
+    .filter(value => /var\(--zmd-accent\)/.test(value))
+    .map(value => `${rule.sheet} ${rule.selector}: color: ${value}`))
+check('grammar: the host blue never paints text',
+  accentAsTextRules.length === 0, { accentAsTextRules })
+const dangerAsTextRules = allSheetRules.flatMap(rule =>
+  [...['color', 'text-decoration-color', 'caret-color']]
+    .flatMap(property => declarationValues(rule.body, property)
+      .filter(value => /var\(--zmd-danger\)/.test(value))
+      // The error colour may still INK A GLYPH: a warning/error icon is a graphic
+      // carried by `currentColor`, not a word. §6.5 keeps the red state mark and
+      // §5.4 keeps the fact itself in ink, so the exemption is narrow: the
+      // selector must be an icon slot (or an svg) and nothing else.
+      .filter(() => !/(?:-icon)(?:[\s:.[]|$)|(?:^|\s)svg(?:[\s:.[]|$)/.test(rule.selector))
+      .map(value => `${rule.sheet} ${rule.selector}: ${property}: ${value}`)))
+check('grammar: the error red is a 4px bar, never a word',
+  dangerAsTextRules.length === 0, { dangerAsTextRules })
+const accentFillPairIssues = allSheetRules.flatMap(rule => {
+  const fills = declarationValues(rule.body, 'background')
+    .filter(value => /^var\(--zmd-accent\)$/.test(value))
+  if (fills.length === 0) return []
+  const ownInk = [...declarationValues(rule.body, 'color'), ...declarationValues(rule.body, 'border-color')]
+  const carriesInk = ownInk.some(value => /var\(--zmd-on-accent\)/.test(value))
+  // The framed checkbox states the fill on the control and the tick on its own
+  // `::after`; that pair is one object, so a sibling pseudo/state rule counts. The
+  // base is the selector with its state pseudo-classes/attributes stripped.
+  const baseOf = value => value
+    .replace(/::?(?:before|after)/g, '')
+    .replace(/:(?:checked|hover|focus-visible|focus-within|active|disabled|not\([^)]*\))/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+  const glyphRule = allSheetRules.some(other => {
+    if (other.sheet !== rule.sheet || other.selector === rule.selector) return false
+    return baseOf(other.selector) === baseOf(rule.selector) && /var\(--zmd-on-accent\)/.test(other.body)
+  })
+  return carriesInk || glyphRule ? [] : [`${rule.sheet} ${rule.selector}: blue fill without --zmd-on-accent ink`]
+})
+check('grammar: a blue fill carries --zmd-on-accent ink',
+  accentFillPairIssues.length === 0, { accentFillPairIssues })
+
+// 17.8 THE 1px BUDGET ACROSS ALL THREE SURFACES, in the same four roles as the
+// page block above. The seat and the catalog get their own frozen control lists:
+// a real form field is the only thing allowed to carry the control ink; the only
+// bars are the 2px accent and the 4px error, on the left.
+const CONTROL_EDGES_BY_SHEET = new Map([
+  ['styles.ts', new Set(['.dmp-search-row .dmp-search', '.dmp-settings .dmp-settings-switch', '.dmp-settings-input'])],
+  ['modelConfigStyles.ts', new Set([...PAGE_CONTROL_EDGES, ...PAGE_MARK_EDGES])],
+  ['catalogStyles.ts', new Set([
+    '.dmc-model-input', '.dmc-discover-check', '.dmc-discover-search',
+    '.dmc-reasoning-value', '.dmc-reasoning-level',
+  ])],
+])
+const unifiedEdgeIssues = []
+for (const rule of allSheetRules) {
+  for (const property of ['border', 'border-top', 'border-right', 'border-bottom', 'border-left']) {
+    for (const value of declarationValues(rule.body, property)) {
+      if (/^(?:none|0|0px)$/.test(value)) continue
+      const width = borderWidthOf(value)
+      if (width === null) continue
+      const token = borderTokenOf(value)
+      const left = property === 'border-left'
+      const glyph = /::(?:before|after)/.test(rule.selector) && width <= 3
+        && ['--zmd-panel', '--zmd-on-accent', '--zmd-ink'].includes(token ?? '')
+      const bar = left && BAR_WIDTHS.get(token ?? '') === width
+      const structure = (token === '--zmd-line' || token === '--zmd-line-strong')
+      const control = token === CONTROL_LINE_TOKEN && CONTROL_EDGES_BY_SHEET.get(rule.sheet)?.has(rule.selector)
+      if (glyph || bar) continue
+      if (structure) {
+        if (width !== 1) unifiedEdgeIssues.push(`${rule.sheet} ${rule.selector}: structure line at ${width}px`)
+        continue
+      }
+      if (control) {
+        if (width !== 1) unifiedEdgeIssues.push(`${rule.sheet} ${rule.selector}: control edge at ${width}px`)
+        continue
+      }
+      unifiedEdgeIssues.push(`${rule.sheet} ${rule.selector}: ${property}: ${value}`)
+    }
+  }
+}
+const unregisteredControlSheets = [...CONTROL_EDGES_BY_SHEET].flatMap(([sheet, selectors]) =>
+  [...selectors].filter(selector => !allSheetRules.some(rule => rule.sheet === sheet && rule.selector === selector
+    && ['border', 'border-top', 'border-right', 'border-bottom', 'border-left']
+      .some(property => declarationValues(rule.body, property)
+        .some(value => borderTokenOf(value) === CONTROL_LINE_TOKEN)))))
+check('grammar: every sheet edge is a structure line, a registered control edge, a 2px accent or a 4px error bar',
+  unifiedEdgeIssues.length === 0, { unifiedEdgeIssues })
+check('grammar: each frozen form-control edge is present and carries the control ink',
+  unregisteredControlSheets.length === 0, { unregisteredControlSheets })
+// §5: the accent's whole vocabulary is the GRAPHIC mark — and the two marks the
+// language promises must actually exist: the seat's 2px accent left bar (the
+// current row / the session's provider) and the 4px error bar (the status rail and
+// the diagnostic). A stylesheet that never paints them has lost the accent grammar
+// while every "never as text" assertion above stays green.
+const accentBarRules = allSheetRules.filter(rule =>
+  ['border-left', 'border-inline-start'].some(property => declarationValues(rule.body, property)
+    .some(value => /^2px solid var\(--zmd-accent\)$/.test(value))))
+const errorBarRules = allSheetRules.filter(rule =>
+  ['border-left', 'border-inline-start'].some(property => declarationValues(rule.body, property)
+    .some(value => /^4px solid var\(--zmd-danger\)$/.test(value))))
+check('grammar: the accent 2px bar and the 4px error bar actually exist',
+  accentBarRules.length > 0 && errorBarRules.length > 0,
+  {
+    accentBars: accentBarRules.map(rule => `${rule.sheet} ${rule.selector}`),
+    errorBars: errorBarRules.map(rule => `${rule.sheet} ${rule.selector}`),
+  })
+
+// 17.9 THE TYPE SCALE HAS NO DISPLAY TIER ANY MORE. The HUD's 44px numeral, 800
+// weight and uppercase Latin codes are gone (§3/§4); the largest type in the ink
+// language is the 20px ready statement. This also catches a surviving
+// `font-weight: 800` display rule whose size was reduced by hand.
+const typeScaleIssues = []
+for (const [name, css] of sheetCssByName) {
+  for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const value of declarationValues(rule[2], 'font-size')) {
+      const size = Number.parseFloat(value)
+      if (Number.isFinite(size) && size > 20) typeScaleIssues.push(`${name} ${rule[1].trim()}: font-size: ${value}`)
+    }
+    for (const value of declarationValues(rule[2], 'font-weight')) {
+      const weight = Number.parseFloat(value)
+      if (Number.isFinite(weight) && weight >= 700) typeScaleIssues.push(`${name} ${rule[1].trim()}: font-weight: ${value}`)
+    }
+  }
+}
+check('type: no display-tier size and no display weight survives the HUD removal',
+  typeScaleIssues.length === 0, { typeScaleIssues })
+
+// 17.10 THE EMBEDDED FACE: three independent byte counts, the OFL file, and the
+// family name in every place that must agree (unchanged from the HUD revision —
+// the user kept the face).
+const fontFamily = /export const FONT_FAMILY = "([^"]+)"/.exec(fontAssetSource)?.[1] ?? null
+const fontBase64 = /export const FONT_WOFF2_BASE64 = "([A-Za-z0-9+/=]+)"/.exec(fontAssetSource)?.[1] ?? null
+const fontHeaderBytes = Number.parseInt(/Raw woff2: (\d+) bytes/.exec(fontAssetSource)?.[1] ?? 'NaN', 10)
+const fontProvenanceBytes = Number.parseInt(/"bytes": (\d+)/.exec(fontAssetSource)?.[1] ?? 'NaN', 10)
+const fontLicenseText = exists('docs/fonts/Archivo-OFL.txt') ? read('docs/fonts/Archivo-OFL.txt') : ''
+const fontProvenanceLicense = /"license": "([^"]+)"/.exec(fontAssetSource)?.[1] ?? null
+const fontSourceUrl = /"source": "([^"]+)"/.exec(fontAssetSource)?.[1] ?? null
+const decodedFont = fontBase64 === null ? null : Buffer.from(fontBase64, 'base64')
+const fontBytes = decodedFont === null ? NaN : decodedFont.length
+const woff2Magic = decodedFont === null ? false : decodedFont.slice(0, 4).toString('latin1') === 'wOF2'
+const fontBase64Shape = fontBase64 !== null && fontBase64.length % 4 === 0
+  && /^[A-Za-z0-9+/]+={0,2}$/.test(fontBase64)
+const fontFaceUsesImportedFamily = /font-family:\s*\$\{JSON\.stringify\(FONT_FAMILY\)\};/.test(designSystemSource)
+const tokenUsesImportedFamily = /--zmd-font-latin:\s*\$\{JSON\.stringify\(FONT_FAMILY\)\},/.test(designSystemSource)
+const fontIssues = []
+if (fontFamily === null) fontIssues.push('FONT_FAMILY is missing')
+if (fontBase64 === null) fontIssues.push('FONT_WOFF2_BASE64 is missing')
+if (!Number.isFinite(fontBytes) || fontBytes > 64 * 1024) fontIssues.push(`decoded woff2 is ${fontBytes} bytes (budget 64KB)`)
+if (!woff2Magic) fontIssues.push('decoded payload is not woff2 (no wOF2 magic)')
+if (!fontBase64Shape) fontIssues.push('FONT_WOFF2_BASE64 is not valid base64')
+if (fontHeaderBytes !== fontBytes) fontIssues.push(`header says ${fontHeaderBytes} bytes, decoded ${fontBytes}`)
+if (fontProvenanceBytes !== fontBytes) fontIssues.push(`provenance says ${fontProvenanceBytes} bytes, decoded ${fontBytes}`)
+if (fontProvenanceLicense !== 'SIL Open Font License 1.1') fontIssues.push(`license is ${fontProvenanceLicense}`)
+if (fontSourceUrl === null || !/^https:\/\/raw\.githubusercontent\.com\/google\/fonts\//.test(fontSourceUrl)) {
+  fontIssues.push(`source is ${fontSourceUrl}`)
+}
+if (!fontLicenseText.includes('SIL OPEN FONT LICENSE')) fontIssues.push('docs/fonts/Archivo-OFL.txt is missing the OFL header')
+if (!/Copyright/.test(fontLicenseText)) fontIssues.push('docs/fonts/Archivo-OFL.txt is missing the copyright line')
+if (!fontFaceUsesImportedFamily || !tokenUsesImportedFamily || fontFamily === null) {
+  fontIssues.push('the family is not interpolated from the single FONT_FAMILY constant')
+}
+if (fontFaceCss !== null) {
+  if (!/url\(data:font\/woff2;base64,/.test(fontFaceCss)) fontIssues.push('the face is not a woff2 data URI')
+  if (/https?:/.test(fontFaceCss)) fontIssues.push('the face references a network URL')
+  if (!/font-display:\s*swap/.test(fontFaceCss)) fontIssues.push('the face does not declare font-display: swap')
+  if (!/font-weight:\s*100 900/.test(fontFaceCss)) fontIssues.push('the face does not declare the 100–900 weight axis')
+  if (!/font-stretch:\s*62% 125%/.test(fontFaceCss)) fontIssues.push('the face does not declare the 62–125% width axis')
+}
+check('font: the embedded face is a valid, bounded woff2 with matching byte counts',
+  fontIssues.length === 0, { fontIssues, fontBytes, fontHeaderBytes, fontProvenanceBytes })
+check('font: the family is declared identically in the face, the token layer and fontAsset.ts',
+  fontFamily !== null && fontFaceUsesImportedFamily && tokenUsesImportedFamily,
+  { fontFamily })
+const manifest = JSON.parse(read('package.json'))
+const gitignore = read('.gitignore')
+check('font: the OFL licence ships in the repository and in the package',
+  exists('docs/fonts/Archivo-OFL.txt')
+  && JSON.stringify(manifest.files ?? []).includes('docs/fonts/Archivo-OFL.txt'),
+  { files: manifest.files, ofl: exists('docs/fonts/Archivo-OFL.txt') })
+check('font: the asset is committed while the regeneration cache stays ignored',
+  /^\.cache\/\s*$/m.test(gitignore)
+  && !gitignore.split(/\r?\n/).some(line => !line.trim().startsWith('#')
+    && /^(?:\/)?src\/client\/(?:fontAsset\.ts)?$|fontAsset\.ts/.test(line.trim()))
+  && manifest.scripts?.['font:build'] === 'node scripts/build-font-asset.mjs',
+  { cacheIgnored: /^\.cache\/\s*$/m.test(gitignore), fontBuildScript: manifest.scripts?.['font:build'] ?? null })
+const sheetFontLiterals = [...sheetCssByName]
+  .filter(([name]) => name !== 'designSystem.ts')
+  .filter(([, css]) => /font-family:\s*["']ZMD Archivo/.test(css) || /@font-face/.test(css))
+  .map(([name]) => name)
+check('font: only the design system declares the face or spells its family',
+  sheetFontLiterals.length === 0, { sheetFontLiterals })
+
+// 17.11 WIDTH BUDGET: the ten numbers the 331/175/113 model is made of stay
+// PINNED, not merely re-derived (§9: the ink language does not move the budget).
+function ruleBodyOf(css, selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css)
+  return match === null ? null : match[1]
+}
+const pinnedRule = (selector, property) => {
+  const body = ruleBodyOf(stylesCode, selector)
+  return body === null ? null : declarationValues(body, property)[0] ?? null
+}
+const budgetPins = [
+  ['.dmp-menu', 'padding', '4px'],
+  ['.dmp-rail', 'flex', '0 0 176px'],
+  ['.dmp-rail', 'padding', '2px 4px 2px 0'],
+  ['.dmp-models', 'padding-left', '4px'],
+  ['.dmp-row', 'gap', '6px'],
+  ['.dmp-check', 'flex', '0 0 14px'],
+  ['.dmp-row-copy', 'gap', '5px'],
+  ['.dmp-row-name', 'min-width', '48px'],
+]
+const budgetPinIssues = budgetPins
+  .filter(([selector, property, expected]) => pinnedRule(selector, property) !== expected)
+  .map(([selector, property, expected]) => `${selector} ${property}: ${pinnedRule(selector, property)} (pinned ${expected})`)
+const rowPadToken = /--dmp-row-pad-x:\s*(\d+)px/.exec(stylesCode)?.[1] ?? null
+const cardWidth = ruleBodyOf(stylesCode, '.dmp-card') ?? ''
+const cardWidthPinned = /width:\s*min\(520px, calc\(100vw - 32px\)\)/.test(cardWidth)
+const collapsePinned = /@media \(max-width: 536px\)/.test(stylesCode)
+check('layout: the ten budget inputs of the two-pane card are pinned',
+  budgetPinIssues.length === 0 && rowPadToken === '7' && cardWidthPinned && collapsePinned,
+  { budgetPinIssues, rowPadToken, cardWidthPinned, collapsePinned })
+/** One `@container (max-width: Npx)` block's body, by balanced braces. */
+function containerBodyOf(css, width) {
+  const marker = `@container (max-width: ${width}px)`
+  const open = css.indexOf(marker)
+  if (open < 0) return null
+  const bodyStart = css.indexOf('{', open)
+  if (bodyStart < 0) return null
+  let depth = 0
+  for (let index = bodyStart; index < css.length; index += 1) {
+    if (css[index] === '{') depth += 1
+    else if (css[index] === '}') {
+      depth -= 1
+      if (depth === 0) return css.slice(bodyStart + 1, index)
+    }
+  }
+  return null
+}
+const dmcTier560 = containerBodyOf(modelConfigPageSheet, 560)
+const dmcTier484 = containerBodyOf(modelConfigPageSheet, 484)
+const dmcTier360 = containerBodyOf(modelConfigPageSheet, 360)
+check('layout: the page asks the container in three tiers (560 / 484 / 360)',
+  dmcTier560 !== null && dmcTier484 !== null && dmcTier360 !== null
+  && !/@media[^{]*max-width/.test(modelConfigPageSheet),
+  { tiers: [dmcTier560, dmcTier484, dmcTier360].map(body => body !== null) })
+
+// 17.12 THE COLUMN KEY STAYS READABLE (§6.2). The four Chinese column names are
+// the only place a sighted user learns what the four badges mean; the HUD's
+// English codes are gone, so the readable words are not optional.
+const keyLabels = [...picker.matchAll(/t\('(badge\.key\.[a-z]+)'\)/g)].map(match => match[1])
+const legendOrdered = /const legend[\s\S]*?'text'[\s\S]*?'image'[\s\S]*?'effort'[\s\S]*?'context'/.test(picker)
+const legendRendered = /className="dmp-legend"/.test(picker)
+  && /className="dmp-legend-word"/.test(picker)
+  && !/className="dmp-legend"[^>]*aria-hidden/.test(picker)
+check('badges: the four readable column keys survive, in the columns order',
+  legendOrdered && legendRendered && keyLabels.length === 4 && new Set(keyLabels).size === 4,
+  { keyLabels, legendOrdered, legendRendered })
 
 const pkg = JSON.parse(read('package.json'))
 check('manifest: exports["./client"] is declared', typeof pkg.exports?.['./client'] === 'object')

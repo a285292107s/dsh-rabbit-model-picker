@@ -177,8 +177,29 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
       jitterRatio: view.jitterRatio,
     }
     const waits = retryWaitCurve(backoff, retries)
-    return { retries, first: backoff.initialDelayMs, longest: waitRange(waits, view.jitterRatio).high }
+    return { retries, first: backoff.initialDelayMs, longest: waitRange(waits, view.jitterRatio).high, waits }
   }, [parsedCap, parsedRetries, view.initialDelayMs, view.jitterRatio, view.maxDelayMs, view.maxRetries])
+
+  /**
+   * The backoff scale: the FIRST five waits of the SAME curve the summary states,
+   * each mapped to one of FOUR heights (design language §4.4).
+   *
+   * It is not a second fact and it is not a chart: every filled tick is a real wait
+   * from `retryWaitCurve`, the number of filled ticks is the number of waits the
+   * policy actually spends (a 2-retry policy fills two), and the tier is the wait's
+   * share of the largest wait shown. The five SLOTS are always drawn: an unfilled
+   * slot is a baseline mark in the structure line, not a value, so a short policy
+   * reads as a short schedule instead of pretending data it does not have. Nothing
+   * here is invented, and nothing outside this curve is sampled. It is aria-hidden
+   * because the summary beside it already states the same schedule in words and
+   * figures.
+   */
+  const backoffTicks = useMemo(() => {
+    const shown = preview.waits.slice(0, 5)
+    if (shown.length === 0) return []
+    const peak = Math.max(...shown, 1)
+    return shown.map(wait => Math.min(4, Math.max(1, Math.ceil((wait / peak) * 4))))
+  }, [preview.waits])
 
   /** Clear the drafts back to whatever the store now holds. */
   const settle = useCallback((message: string | null): void => {
@@ -249,11 +270,10 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
    */
   const dirty = retriesText !== String(view.maxRetries)
     || capText !== formatMaxDelaySeconds(view.maxDelayMs)
-  const summary = [
-    `${preview.retries} ${t(KEYS['config.retryPolicy.retriesUnit'])}`,
-    t(KEYS['config.retryPolicy.first'], { count: formatDuration(preview.first) }),
-    t(KEYS['config.retryPolicy.total'], { count: formatDuration(preview.longest) }),
-  ].join(' · ')
+  // The two schedule figures as sentences; the count is stated by the display-tier
+  // numeral beside them, so it is not repeated inside the joined sentence.
+  const firstWait = t(KEYS['config.retryPolicy.first'], { count: formatDuration(preview.first) })
+  const longestTotal = t(KEYS['config.retryPolicy.total'], { count: formatDuration(preview.longest) })
 
   return (
     <div className="dmc-retry" id={`dmc-retry-${provider}`}>
@@ -298,7 +318,30 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
           the wait and the count it then spends are exactly these two numbers. */}
       <p className="dmc-notice">{t(KEYS['config.retryPolicy.recovery'])}</p>
 
-      <p className="dmc-retry-summary">{summary}</p>
+      {/* The summary in one line: the display-tier count first (the same number
+          the field above writes), then the schedule's two ends. Tabular so a digit
+          change never reflows the line. */}
+      <p className="dmc-retry-summary">
+        <span className="dmc-retry-tally">{preview.retries}</span>
+        <span className="dmc-retry-tally-unit">{t(KEYS['config.retryPolicy.retriesUnit'])}</span>
+        <span className="dmc-retry-detail">{firstWait} · {longestTotal}</span>
+      </p>
+
+      {/* The backoff scale: five slots, the filled ones are REAL waits from the
+          curve, the empty ones are baseline marks in the structure line. aria-hidden:
+          the summary above already states the schedule in words. */}
+      <span className="dmc-backoff" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => {
+          const level = backoffTicks[index]
+          return (
+            <span
+              className="dmc-backoff-cell"
+              data-level={level === undefined ? '0' : String(level)}
+              key={String(index)}
+            />
+          )
+        })}
+      </span>
 
       <div className="dmc-retry-actions">
         <button

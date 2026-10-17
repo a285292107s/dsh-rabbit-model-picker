@@ -434,9 +434,7 @@ export function SettingsMenu({
     <MenuSurface
       ref={panelRef}
       id={`${idPrefix}-settings`}
-      className={position === null
-        ? 'dmp-menu dmp-settings'
-        : `dmp-menu dmp-settings dmp-menu-in ${side === 'top' ? 'dmp-from-top' : 'dmp-from-bottom'}`}
+      className="dmp-menu dmp-settings zmd-wash zmd-grain"
       style={position === null ? MEASURE_STYLE : { ...position, maxHeight }}
       role="group"
       aria-label={t('settings.aria', { model: modelLabel })}
@@ -476,7 +474,10 @@ export function SettingsMenu({
       <div className="dmp-settings-body">
         {showsInputSection(address, capability) && (
           <div className="dmp-settings-section">
-            <div className="dmp-settings-label">{t('settings.input.title')}</div>
+            <div className="dmp-settings-label">
+              <span>{t('settings.input.title')}</span>
+              <span className="zmd-rule" aria-hidden="true" />
+            </div>
             <div className="dmp-settings-row">
               <span className="dmp-settings-name">{t('settings.input.text')}</span>
               <Switch
@@ -513,7 +514,10 @@ export function SettingsMenu({
             number in force. */}
         {showsContextField(address, capability) && (
           <div className="dmp-settings-section">
-            <div className="dmp-settings-label">{t('settings.context.title')}</div>
+            <div className="dmp-settings-label">
+              <span>{t('settings.context.title')}</span>
+              <span className="zmd-rule" aria-hidden="true" />
+            </div>
             <div className="dmp-settings-row">
               <Input
                 className={capacityError ? 'dmp-settings-input dmp-settings-input-bad' : 'dmp-settings-input'}
@@ -543,7 +547,10 @@ export function SettingsMenu({
 
         {reasoning !== undefined && (
           <div className="dmp-settings-section">
-            <div className="dmp-settings-label">{t('settings.effort.title')}</div>
+            <div className="dmp-settings-label">
+              <span>{t('settings.effort.title')}</span>
+              <span className="zmd-rule" aria-hidden="true" />
+            </div>
             <div className="dmp-effort-list" role="radiogroup" aria-label={t('settings.effort.title')}>
               {choices.map(choice => (
                 <button
@@ -556,7 +563,10 @@ export function SettingsMenu({
                   onClick={() => { pickEffort(choice.effort) }}
                 >
                   <span className="dmp-effort-name">{choice.label}</span>
-                  <span className="dmp-effort-check">
+                  <span
+                    className="dmp-effort-check"
+                    data-on={choice.effort === activeEffort ? '' : undefined}
+                  >
                     {choice.effort === activeEffort ? <IconCheckOutlineRegular /> : null}
                   </span>
                 </button>

@@ -191,6 +191,15 @@ function protocolLabel(t: Translate, protocol: string): string {
 /** What one row is allowed to do; every entry point is the page's, not the row's. */
 interface ProviderRowProps {
   readonly row: ModelConfigRow
+  /**
+   * This row's position in the ledger, 1-based.
+   *
+   * The ledger's two-digit number (01, 02 …) is decoration over real order, so it
+   * is `aria-hidden`; it exists to make eleven rows read as a manifest rather than
+   * as eleven unrelated cards. It is computed from the same `listed` array the
+   * readout counts, never from a stored counter.
+   */
+  readonly index: number
   readonly store: ModelConfigStore
   readonly t: Translate
   /** Whether the settings document accepts writes at all. */
@@ -240,6 +249,8 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
   const session = isSessionRoute(row)
   const busy = props.pending !== undefined
   const editable = props.writable && !busy
+  /** The ledger's two-digit position (decoration; the order itself is the data). */
+  const manifestIndex = String(props.index).padStart(2, '0')
 
   const namespace = row.entry.settingsNs === '' ? undefined : store.namespace(row.entry.settingsNs)
   const choices = namespace === undefined ? [] : protocolChoices(namespace)
@@ -327,8 +338,11 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
       />
 
       {/* Segment one, left end: identity. The route id rides inside the name's own
-          track, so the two can never be separated by a grid gap. */}
+          track, so the two can never be separated by a grid gap. The two-digit
+          number is the ledger's position mark: decoration over the real order of
+          `listed`, so it is aria-hidden and spends no information of its own. */}
       <span className="dmc-name">
+        <span className="dmc-index" aria-hidden="true">{manifestIndex}</span>
         {displayName}
         <span className="dmc-route">{provider}</span>
       </span>
@@ -534,6 +548,11 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
               ? null
               : (
                 <>
+                  {/* The lifecycle entry is not a provider VALUE, so the destructive
+                      line is separated from the three fields above it by one
+                      structural rule. The field code names the block; it carries no
+                      Chinese label because the action below already names itself. */}
+                  <span className="dmc-well-rule" aria-hidden="true" />
                   <span className="dmc-field-label" aria-hidden="true" />
                   <span className="dmc-field-value">
                     <button
@@ -869,15 +888,14 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
         close()
       }}
     >
-      <div className="dmc-head">
-        {/* NO VISIBLE SECTION TITLE (brief §16 P1). The settings rail already
-            names this tab in its own selected item, and a 16px label sitting on
-            top of the 20px statement read to two jurors as an eyebrow, which the
-            house rules cap. The section is not nameless: the aria-label on the
-            section above carries `config.title`, so assistive tech still
-            announces it and the copy key stays in use. */}
-        {/* Keyed on its own sentence: a recount remounts the node, which is what
-            replays the 160ms landing exactly once (and only when it changed). */}
+      <div className="dmc-head zmd-wash zmd-grain">
+        {/* THE HEAD IS ONE SENTENCE ON A WASHED BAND (docs/ink-design-language.md
+            §6.4). The wash and the grain are material only; the sentence is the
+            page's live thing and keeps its own key-remount landing. No numeral, no
+            field code, no top bar: the surface is software, not a console.
+            NO VISIBLE SECTION TITLE: the settings rail already names this tab in its
+            own selected item; the section's aria-label still carries
+            `config.title`. */}
         <p className="dmc-readout" key={readout}>{readout}</p>
       </div>
 
@@ -917,10 +935,11 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
           — that head is a deliberate deletion (brief §3.1). */}
 
       <ul className="dmc-list">
-        {listed.map(row => (
+        {listed.map((row, index) => (
           <ProviderRow
             key={row.entry.provider}
             row={row}
+            index={index + 1}
             store={store}
             t={t}
             writable={snapshot.writable}

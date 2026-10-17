@@ -31,10 +31,12 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "docs/fonts/Archivo-OFL.txt"
   ],
   "scripts": {
     "build": "node scripts/build-client.mjs",
+    "font:build": "node scripts/build-font-asset.mjs",
     "typecheck": "tsc --noEmit",
     "selfcheck": "node scripts/selfcheck-static.mjs",
     "contrast": "node scripts/check-contrast.mjs",
@@ -44,9 +46,10 @@
     "test:model-config": "node scripts/test-model-config.mjs",
     "test:model-config-copy": "node scripts/test-model-config-copy.mjs",
     "test:mutations": "node scripts/mutate-anchor-loss.mjs",
+    "test:mutations:endfield": "node scripts/mutate-endfield-gates.mjs",
     "test:fresh": "node scripts/check-build-fresh.mjs",
     "theme:fixture": "node scripts/_dump-theme-fixture.mjs",
-    "test": "npm run typecheck && npm run build && npm run test:fresh && npm run selfcheck && npm run contrast && npm run test:params && npm run test:retry && npm run test:recovery && npm run test:model-config && npm run test:model-config-copy && npm run test:mutations",
+    "test": "npm run typecheck && npm run build && npm run test:fresh && npm run selfcheck && npm run contrast && npm run test:params && npm run test:retry && npm run test:recovery && npm run test:model-config && npm run test:model-config-copy && npm run test:mutations && npm run test:mutations:endfield",
     "prepublishOnly": "npm test"
   },
   "license": "MIT",

@@ -807,6 +807,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   // The region's head states the catalog itself. It does NOT repeat the provider's
   // name and route id: the ledger row directly above it already states both, and a
   // second copy would make the expanded region read as a detached card again.
+  // The field code names the block in the language's decorative grammar and the
+  // right-end tally is the ROSTER's own count (the models this draft holds, not a
+  // stored counter), so the region reads as a manifest page of the ledger.
+  const rosterCount = String(models.length).padStart(2, '0')
   const catalogHead = (
     <div className="dmc-catalog-head">
       <div className="dmc-catalog-heading">
@@ -817,6 +821,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
             : t(KEYS['config.models.inherited'])}
         </span>
       </div>
+      <span className="dmc-roster-count zmd-num">{rosterCount}</span>
       <button type="button" className="dmc-btn dmc-catalog-close" onClick={onRequestClose}>
         {t(KEYS['config.catalog.collapse'])}
       </button>
@@ -844,7 +849,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   /** The region: the row's expanded body, with the page's guard line above it. */
   const panel = (body: ReactNode, foot: ReactNode): ReactElement => (
     <div
-      className="dmc-catalog-panel"
+      className="dmc-catalog-panel zmd-wash zmd-grain"
       id={`dmc-catalog-${row.entry.provider}`}
       ref={panelRef}
     >
@@ -922,7 +927,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
    * inside the well that the door opens. Same grammar as the page's provider rows,
    * one level narrower.
    */
-  const modelRow = (model: DraftModel): ReactElement => {
+  const modelRow = (model: DraftModel, position: number): ReactElement => {
     const message = problems.get(model.key)
     const wellId = `dmc-model-well-${model.key}`
     const used = new Set(model.reasoning.map(entry => entry.level))
@@ -930,6 +935,8 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     const alias = model.name.trim()
     const context = model.contextWindow.trim()
     const output = model.maxTokens.trim()
+    /** The roster's two-digit position mark (decoration over the real array order). */
+    const manifestIndex = String(position).padStart(2, '0')
     return (
       <li
         key={model.key}
@@ -938,9 +945,9 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
         data-invalid={message === undefined ? undefined : 'true'}
         data-well={model.open ? 'true' : undefined}
       >
-        {/* Line one: identity and the row's one door. The id is cut with an ellipsis
-            when the endpoint handed us a long one; the title keeps the whole string
-            reachable, and nothing here is a control besides the door. */}
+        {/* Line one: identity and the row's one door. The two-digit number is the
+            roster's position mark — decoration over the draft array's real order. */}
+        <span className="dmc-model-index" aria-hidden="true">{manifestIndex}</span>
         <span className="dmc-model-ref" title={model.id === '' ? undefined : model.id}>
           {model.id === '' ? t(KEYS['config.model.newLabel']) : model.id}
         </span>
@@ -955,22 +962,26 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
         </button>
         {/* Line two: display name + capacity facts, all in the quiet ink. "Both
             overrides empty" is a fact too — the model uses the provider's own
-            capacity, and the roster states that rather than leaving the line blank. */}
+            capacity, and the roster states that rather than leaving the line blank.
+            The facts are a group of their own, right-aligned on the roster's right
+            edge so the capacities form a tabular column down the list. */}
         <span className="dmc-model-sub">
           {alias === '' ? null : <span className="dmc-model-alias">{alias}</span>}
-          {context === '' ? null : (
-            <span className="dmc-model-fact">
-              {t(KEYS['config.model.contextShort'])} {context}
-            </span>
-          )}
-          {output === '' ? null : (
-            <span className="dmc-model-fact">
-              {t(KEYS['config.model.outputShort'])} {output}
-            </span>
-          )}
-          {alias === '' && context === '' && output === ''
-            ? <span className="dmc-model-fact">{t(KEYS['config.model.capacityDefault'])}</span>
-            : null}
+          <span className="dmc-model-facts">
+            {context === '' ? null : (
+              <span className="dmc-model-fact">
+                {t(KEYS['config.model.contextShort'])} {context}
+              </span>
+            )}
+            {output === '' ? null : (
+              <span className="dmc-model-fact">
+                {t(KEYS['config.model.outputShort'])} {output}
+              </span>
+            )}
+            {alias === '' && context === '' && output === ''
+              ? <span className="dmc-model-fact">{t(KEYS['config.model.capacityDefault'])}</span>
+              : null}
+          </span>
         </span>
         {model.open ? (
           <div className="dmc-model-well" id={wellId}>
@@ -1133,7 +1144,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       {storedModels.length === 0 && models.length === 0
         ? <p className="dmc-catalog-notice">{t(KEYS['config.models.empty'])}</p>
         : null}
-      <ul className="dmc-model-list">{models.map(model => modelRow(model))}</ul>
+      <ul className="dmc-model-list">{models.map((model, index) => modelRow(model, index + 1))}</ul>
       {/* The roster's add entry: one full-width line under the last model, the same
           shape the page's own add entry uses. */}
       <button type="button" className="dmc-btn dmc-model-add" disabled={!writable || busy} onClick={addModel}>

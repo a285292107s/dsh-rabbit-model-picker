@@ -2534,6 +2534,102 @@ ink 与 size，且只有 primary / secondary 可作文字。
 
 > 决策记录：[ADR 0004](docs/adr/0004-inline-catalog-region.md)（取代 Q27 的右侧抽屉形态）。
 
+### 5.38 整体 UI 焕新（2026-10-17）：墨色语言
+
+**动因。** 用户判定当前 UI「过于呆板乏味」，要求整体焕新；首轮参考定为《明日方舟：终末地》，
+并明确全部插件表面、暗色主稿、完整工业编辑强度、内嵌开源窄体拉丁、允许微调结构但交互契约不变、
+门保留并逐条修订、静态验收为主、完整文档交付。
+
+**首轮被否（记录，不是本文档的现行方向）。** 第一版按游戏 HUD 落地：近黑底 + 信号黄 +
+英文大写字段码 + 44px 显示数字 + `[ 13 ]` 括号计数 + 14px 切角 + 扫光。用户随后直接修正：
+**「摒弃 HUD 风格，毕竟我们不是游戏 HUD」**，并且**「软黄色背景和 DSH 默认色差异过大，
+应以黑、灰、水墨质感的背景色为准」**；三选一里选定：单色 + 宿主蓝、移除 HUD 元素只留线与序号、
+局部墨晕 + 细微噪点。HUD 版的字段码、大数字、切角、扫光、信号黄全部退役（`CONTEXT.md` 废弃表有记录）。
+
+**现行方向：墨色语言。** 规范落盘为 `docs/ink-design-language.md`，取舍记录为
+[ADR 0005](docs/adr/0005-ink-language.md)。一句话：**界面是一张墨与纸**——底色有极淡的墨晕与纸纹，
+字是墨，线是淡墨；唯一会「跳出来」的是宿主自己的蓝色，只出现在「你正在这里 / 点这里」的地方。
+秩序来自线与字，不来自色块。
+
+**证据。** 用户指定的材质与调性来自终末地的另一面（官网/印刷编辑风）与水墨质感：纸与墨是主体、
+强调色只是信号、全直角、数字等宽（[dsh-theme-endfield 设计语言](https://github.com/ymh0000123/dsh-theme-endfield/blob/main/docs/design-language.md)
+量化了「亮色下强调色必须下沉才能作文字」这条硬结论）；HUD 版留下的是同族配方里
+**矩形、细线、序号、超大段号**的结构部分，色彩与仪表语汇被用户否掉
+（[ark-ui-skill](https://github.com/Brandon030722/ark-ui-skill/blob/main/references/recipes.md)）。
+
+**实现契约**
+
+| 项 | 决定 |
+|---|---|
+| 主题 | 中性纸/墨双主题。令牌层 `--zmd-*` 声明在 `:root`，暗色覆盖用宿主既有的 `body[data-ds-dark-theme]` 布尔属性（ui-theme `boot-theme` 契约），无 JS 侦测、无 `prefers-color-scheme` |
+| 令牌 | 面板 `#f6f6f4`/`#1a1a1a`、沉底 `#ededeb`/`#121212`、hover `#e7e7e4`/`#242424`；细线/重线/控件边 `#d8d8d4`/`#b4b4ae`/`#82827c`（暗 `#333330`/`#5a5a56`/`#85857e`）；墨三级 `#141414`/`#4c4c48`/`#66665f`（暗 `#f1f1ee`/`#b6b6b1`/`#8b8b86`）；墨晕两端 `#fbfbfa`→`#f0f0ed`（暗 `#222222`→`#161616`）。**强调色与错误色直接引用宿主令牌**（`--dsw-alias-state-business-primary` / `-error-primary`），不引入第二套品牌色；黄整套删除 |
+| 字体 | **ZMD Archivo**：Archivo Variable（SIL OFL 1.1，wght 100–900 / wdth 62–125）子集化为 **46,728 B** woff2（ASCII + 基础符号），base64 data-URI 打进 `lib/client.js`（+62,304 B），零网络请求；中文回落宿主字体栈。生成器 `scripts/build-font-asset.mjs`（需要 Python+fonttools+网络，只在重新生成时跑）；许可证 `docs/fonts/Archivo-OFL.txt` 随包发布。只用于常规字重与字距，不做 `wdth` 125 显示字 |
+| 字阶 | 页首陈述 20/28/500（live thing，不再是 600 大字）、行题 14/20/600、正文 13/20/400、微字 12/18/400、序号 10/12/500 `tabular-nums`；不引入第五档 |
+| 几何 | 全直角；1px 细线是唯一结构工具（分栏/行间/边界/字段边）；两位数序号只给可数清单；无阴影、无切角、无扫光、无字段码、无大数字、无括号计数 |
+| 材质 | `.zmd-wash`：低对比径向墨晕（亮端→暗端），只出现在有边界的表面；`.zmd-grain::after`：120px 分形噪点、中灰、SVG 自带 alpha 约 5%、`pointer-events:none`。文字对墨晕两端都要过 AA |
+| 强调 | 唯一彩色 = 宿主信息蓝：当前会话 2px 左条、选中勾、焦点环、展开动作 hover 下划线；**蓝永不作文字**（亮色 3.91:1）；蓝底只配 `--zmd-on-accent`。错误红只做 4px 竖条/诊断左条；绿只做在线态 |
+| 动效 | 悬停底色 120ms、按下 `translateY(1px)` 80ms、选中勾 `scale` 160ms、数值落定 160ms；全程只动 transform/背景色；无扫光/无揭幕/无透明度过渡；`prefers-reduced-motion` 全关 |
+| 座位行 | 触发器无信号条；打开 = `--zmd-panel-deep` 底 + chevron 旋转；齿轮直角 1px 边，`data-edited` 边取宿主蓝；焦点环 2px 宿主蓝；宽度预算 `min(360px, 45cqw)` 不变 |
+| 模型卡 | 无顶部状态条；卡面 `.zmd-wash .zmd-grain` + 1px `--zmd-line-strong` 边；两栏与 536px 折叠不变；rail 行两位数序号，当前会话 = 2px 宿主蓝左条 + 名字 500，选中范围 = `--zmd-panel-deep` + `inset 1px --zmd-line-strong` 环；搜索 = 底线输入（聚焦底线变宿主蓝）；表头 = 四个中文列名 + 上下 1px 线、无计数；模型行保留四列徽章与 331/175/113 预算，行高 38px、行间 1px，选中 = `--zmd-panel-deep` + 2px 宿主蓝左条 + 蓝底 `--zmd-on-accent` 勾；分组头改不透明 `--zmd-panel` |
+| 参数面板 | 模型名 + 恢复默认头（无字段码）；分区改中文标题 + 1px 细线；方形开关（开 = 宿主蓝底 + `--zmd-on-accent` 块）；底线输入；推理档位选中 = `--zmd-panel-deep` + 2px 宿主蓝左条 + 蓝勾；不加关闭按钮（原面板没有，新增会改焦点链） |
+| 模型配置页 | 页首 = 就绪陈述（20px、live thing 语义与 key 重挂载不变）+ 墨晕带 + 纸纹 + 一条 1px 线；**无大序号/字段码/顶条**。账本行 48px：两位数序号、行间 1px、状态竖条红、名称 14/600、route id 12px、答案词右端 tabular、门「管理」纯文字动作（hover 宿主蓝下划线）、展开行 `--zmd-hover` 底。井 = `--zmd-panel-deep` + 1px 线，标签单行中文，表单边 1px `--zmd-line-control`，危险动作前 1px 分隔，诊断句红左条。目录区 = `.zmd-wash .zmd-grain` 面板 + 1px 边，「模型目录」+ 状态 + 普通计数，模型行两位序号/13-600 id/右对齐 tabular 容量/行间 1px，内嵌井 `--zmd-panel-deep`，`+ 添加模型` 纯文字动作，方形勾选框（选中 = 宿主蓝底 + on-accent 勾）。重试编辑器 = 无字段码，两个数字框，5 槽退避刻度改灰阶（实心 `--zmd-ink-mute`、空槽 `--zmd-line`，真实数据、`aria-hidden`、reduced-motion 关闭） |
+| 徽章图标 | 四枚统一**单 16 网格**、同一 stroke、14px 渲染（屏幕 1.4px）：文字=两横线、图片=山形、推理=升序短柱、窗口=比例括号；只用墨色，宽度预算 113px 与「四列固定、不支持留空」不变 |
+| 响应式 | 断点语义不变：卡片 ≤536px 折叠；设置页 `@container` 560 / 484 / ≤360；106px 仍是「有序降级」（无横向溢出、无单字孤行、可点 40px）；序号在 ≤360 可隐藏 |
+
+**质量门的修订（不是放宽，逐条留了改坏证明）**
+
+1. `selfcheck-static`：`designSystem.ts` 解析（中和模板插值/注释/两主题令牌袋）与
+   「字面量只许令牌块、引用已声明、两主题集合对齐」保留；HUD 规则整套退役，改成**断言 HUD 构件不存在**
+   （无 `--zmd-signal*`、无 `FIELD_CODES`、无 `.zmd-code`/`.zmd-display`、无 `clip-path`/notch/wipe）；
+   1px 分三类（结构线 / 冻结表单边 / 2px 强调条只许宿主蓝）；hover 填充只许 `--zmd-hover`/panel-deep；
+   `--zmd-line` 不得作填充；`--zmd-accent` 不得作文字、蓝底必须 `--zmd-on-accent`；
+   纹理只允许 `.zmd-wash` 的 radial-gradient（stops 只用 wash/panel 令牌）与 `.zmd-grain::after`
+   的唯一 data-URI 噪点；保留 radius/opacity/阴影/宽度预算/字体资产断言。
+2. `check-contrast`：解析 `--zmd-*` 两主题（accent/danger 是 `var(--dsw-*)` 引用，沿宿主令牌链解析）；
+   文字白名单 = `--zmd-ink`/`ink-secondary`/`ink-mute`/`on-accent`/`online`；**墨晕两端各量一次取更差**；
+   装饰线亮度区间、控件边与 focus ≥3:1 保留；`dmc-` 闭包覆盖全部剩余画字规则。
+3. `check-build-fresh`：提交态断言 `fontAsset.ts` / `designSystem.ts` / OFL 已提交；
+   committed `lib/client.js` 必须内嵌 committed base64 与 `@font-face` / 新令牌标记
+   （`--zmd-wash-top` 等），entry 必须 `injectDesignSystem`。
+4. `mutate-anchor-loss`：基线绿前置保留。`mutate-endfield-gates.mjs` 的 HUD 17 条改写成墨色版（实际 24 条改坏证明）
+   （断言 HUD 构件不存在、wash/grain 允许面、accent 图形不成字、无 clip-path 等），保持基线绿前置。
+
+**验证（静态验收，按用户选择不碰运行中的 GUI）**
+
+- `npm run typecheck`：绿。
+- `scripts/selfcheck-static.mjs`：全绿（taste-skill lint 0 FAIL；WARN 仅 numbering/outlined-box/em-dash）。
+- `scripts/check-contrast.mjs`：全绿；最紧处 = 弱墨压暗色 hover 底 4.53:1（亮色 4.67:1）。
+- 5 个单元门（params / retry / recovery / model-config / model-config-copy）：全绿。
+- mutation：旧 **22/22** + 墨色 **24/24** 全部 caught；基线绿前置生效（套件先拒绝红基线）。
+- `npm run build` + 提交：`lib/client.js` 373,132 → **（构建后回填）**；`fontAsset` 46,728 B woff2 / 62,304 B base64。
+- 静态预览：卡 520 / 模型窗格 331 / 名字列 175 / 徽章条 113 / 行高 38；窄屏卡 396 + rail 横条、零横向溢出；
+  设置页 560/484 行高 48、右沿 spread 0、页/井/目录面板 overflow 0；106 档无横向溢出。
+- 截图：`shots/ink-*.png`（浅/深、宽/窄、井/目录区/重试编辑器），README 换图并保留「静态预览非真机」说明。
+
+**已知边界（如实记，不算已解决）**
+
+- **行高变大**：模型卡行 26px 级 → 38px，卡里可见行数变少（滚动增加），换来可比较的字阶与结构线；卡宽 520 未变。
+- **可借的装饰更少**：字段码/大数字/切角都被否掉后，结构感只能靠细线、序号、字阶与留白；宿主蓝用多会重新变吵。
+- **106px 档仍是降级**：宿主「800px 设置面板 + 390 视口」给内容列约 94–106px，只保证有序，不保证好看。
+- **参数面板没有关闭 ×**：原面板没有；新增会改 §5.10 门断言的元素集合与焦点链。
+- **宿主 material 用子串选择器覆盖**：`.dmp-menu [class*='material']` 把宿主半透明膜改成不透明面板；
+  若宿主 CSS-module 哈希改名会失效（回退是 `.dmp-menu` 自身底色，宿主膜会压在上面）。
+- **字体资产是生成物**：`fontAsset.ts` 61KB base64 进包；重新生成需要 Python/fonttools/网络；
+  子集只覆盖 ASCII + 基础符号，超出范围的拉丁字符回落到宿主字体。
+- **静态验收的缺口**：键盘链、滚动、焦点陷阱、Esc 分层只能在真机验证；本轮按用户选择只做静态预览 + 门断言。
+
+**有意不做的事**
+
+1. **不做 HUD**：不要字段码、大号显示数字、切角、扫光、扫描线、括号计数、假仪表盘。
+2. **不用黄色**：强调只用宿主蓝；错误只用红竖条；绿只做在线态。
+3. **不把宿主整体换主题**：只重制本插件表面。
+4. **不在装饰里造假数据**：退避刻度、序号计数全部来自真实数据。
+5. **不改交互形态**：不新增弹层、不搬运控件、不改键盘链与宽度预算。
+6. **不做全屏噪点/纹理铺满**：墨晕与纸纹只在有边界的表面上，文字永远可读。
+
+> 决策记录：[ADR 0005](docs/adr/0005-ink-language.md)。规范正文：
+> [`docs/ink-design-language.md`](docs/ink-design-language.md)。
+
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 
 环境：dsh 0.2.0-rc.2，profile `web`，`dmp-verify` 会话接在 http://127.0.0.1:3080。

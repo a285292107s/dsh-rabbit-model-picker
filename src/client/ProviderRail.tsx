@@ -14,22 +14,40 @@
  * consumes, because the seat's own handler is listening on the ancestor for
  * arrows that walk the model list.
  *
- * Two facts ride on a row, and they must not be confused with each other:
- *   - the SCOPE (`aria-selected`) is on the row this list is narrowed to, drawn
- *     as the check the model rows use for their own selection;
- *   - the SESSION's provider (`aria-current`) is the one this conversation
- *     actually runs on, drawn as a name one weight heavier. It carries no words:
- *     at rail width the words would push the provider name into an ellipsis,
- *     which is the one job this pane cannot fail at — and the fact is already
- *     spelled out beside the card, where the seat's chip names the selected
- *     model's provider.
+ * Two facts ride on a row, and they must not be confused with each other — and
+ * each has its own channel, so the two can never be mistaken for one another:
+ *   - the SCOPE (aria-selected) is the row this list is narrowed to, drawn as
+ *     the sunken fill plus a 1px inset ring in the strong line ink (an inset
+ *     ring, not a border, so the row's width budget is untouched);
+ *   - the SESSION's provider (aria-current) is the one this conversation
+ *     actually runs on, drawn as a 2px host-blue bar at the row's leading edge
+ *     plus a name one weight heavier. It carries no words: at rail width the words
+ *     would push the provider name into an ellipsis, which is the one job this
+ *     pane cannot fail at — and the fact is already spelled out beside the card,
+ *     where the seat's trigger names the selected model's provider.
+ *
+ * A check mark is deliberately NOT used here: the model rows already spend that
+ * mark on "the model in use", and re-using it for a SCOPE would say the rail's
+ * pick is the same claim as the list's pick. The fill+ring reads as "this is the
+ * filter", the bar as "this is where you are".
  *
  * @module dsh-rabbit-model-picker/client/ProviderRail
  */
 
-import { IconCheckOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { KeyboardEvent, MutableRefObject } from 'react'
 import type { Translate } from './contract.ts'
+
+/**
+ * The two-digit ordinal the rail paints beside a scope.
+ *
+ * It is DECORATION, not a scope's identity: the name is the fact, and the number
+ * only turns the pane into a numbered list. Kept as a plain function so the
+ * render site stays one brace expression (no copy call, no string literal) — the
+ * decoration gate reads exactly that shape.
+ * @param index - zero-based option index.
+ * @returns the ordinal padded to two digits (01, 02, …).
+ */
+const ordinalOf = (index: number): string => `${index + 1}`.padStart(2, '0')
 
 /**
  * One row of the rail. `id: null` is the "all providers" scope.
@@ -182,6 +200,10 @@ export function ProviderRail({
           title={option.label}
           onClick={() => { onPick(option.id) }}
         >
+          {/* The two-digit ordinal of the scope list — a quiet index, not a
+              label. It is decoration (the row's name is the fact), so it is
+              aria-hidden; the mute-ink numeral uses tabular figures. */}
+          <span className="dmp-rail-index" aria-hidden="true">{ordinalOf(index)}</span>
           <span className="dmp-rail-copy">
             <span className="dmp-rail-name">{option.label}</span>
           </span>
@@ -196,9 +218,6 @@ export function ProviderRail({
                 </span>
               )
             : <span className="dmp-provider-count">{option.count}</span>}
-          <span className="dmp-check">
-            {option.id === current ? <IconCheckOutlineRegular /> : null}
-          </span>
         </button>
       ))}
     </div>

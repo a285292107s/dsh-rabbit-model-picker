@@ -1,60 +1,33 @@
 /**
  * 「模型配置」页的样式表，每次挂载注入一次。
  *
- * WHY A THIRD SHEET, AND THE THIRD PREFIX. `styles.ts` owns the composer seat
- * (`dmp-`); this sheet owns the 模型配置 settings section and the catalog region it expands into
- * (`dmc-`) and shares a rule with neither, so it keeps the domains independently
- * checkable: the `dmc-` dead-class gate never has to know which TSX file a rule
- * belongs to. A fourth sheet used to own the retry CARD in the shipped Models
- * section; that card is deleted and its editor now opens inside this page's own
- * row wells, so this sheet absorbed the job (see the retry block near the end).
+ * THE DIRECTION IS MONOCHROME INK (docs/ink-design-language.md §6.4), NOT A HUD.
+ * The first pass of this round was an Endfield-style console and the user rejected
+ * it: this is a software surface, not a game HUD. What survives is the structure
+ * the earlier pass proved — one ledger line per route, a settings well as a form,
+ * a 48px scan line, two-digit ordinals, right-aligned answer words, one 1px rule
+ * weight — expressed in ink and paper: a neutral near-black and paper ground, the
+ * host's own information blue as the ONLY accent (graphics/focus/selection only,
+ * never text), a local wash + grain on the page head, and no yellow, field codes,
+ * display numerals, corner cuts or wipes.
  *
- * THE UI LANGUAGE: A ROUTE LEDGER, NOT A CONTROL TABLE (2026-10-17, §5.35).
- * The page is a ledger of provider ROUTES, and a ledger is read by scanning one
- * line per entry. So a row states its three facts on ONE line — who it is
- * (name + route), what it holds (its own model count), and its answer (one word) —
- * and every control that changes it lives in the row's SETTINGS WELL, which opens
- * under the line from the row's one door. The previous sheet put five controls on
- * a second line of fixed tracks; at the settings panel's real 484px content column
- * the credential cell could not hold its own two words, wrapped to a second line,
- * and left the protocol select floating at a vertical centre of its own — the
- * measured row was 108px tall with four different text baselines in it.
+ * WHAT THIS SHEET KEEPS, unchanged: the interaction contract (one row = one route,
+ * one door that opens the settings well, the catalog as the row's disclosure, one
+ * modal — the host's), the ARIA hooks, the focus chain, and the width budgets
+ * (560 / 484 / 106 content columns). Class names are unchanged except for the HUD
+ * decorations that were deleted with the direction.
  *
- * WHAT THE LANGUAGE FIXES, item by item:
- *   - one line, one route: the scan line is 44px at rest and holds no form control;
- *   - the well is a FORM: three labelled fields (凭据 / API 协议 / 自动重试) on one
- *     label column, so a value and its name can never drift apart;
- *   - alignment is shared, not per-row: name, model cell, answer word and door sit
- *     on the same four tracks in every row, and the answer word and door are
- *     right-aligned, so their right edges coincide across the list;
- *   - the destructive entry is behind the door, on the well's last line, away from
- *     the credential words it used to sit beside.
+ * THE STATE LADDER is still the only colour event in the list: nothing at ready;
+ * the 4px danger rail for missing-key / unreachable; the answer word in the
+ * primary ink for those two, the secondary ink otherwise. The accent never paints
+ * text (3.91:1 on the light ground); error never paints text either.
  *
- * THE STATE LADDER (unchanged from the §5.32 direction, and still the only colour
- * event in the list):
- *   - `ready`: nothing. No fill, no rail, and the answer word stays quiet.
- *   - `missing-key`: the rail + the word 缺密钥 in the primary ink. NO row fill.
- *   - `unreachable`: the rail + the word 不可用 + the row's only allowed fill.
- *   - a diagnostic: `data-error="true"` beside whatever answer the row states. It
- *     paints nothing on the row; its sentence is the first line of the row's well.
- *
- * WHAT THIS SHEET REFUSES TO DO, each a measured fact rather than a preference:
- *   - No hardcoded colour. Every paint is a host `--dsw-*` token, so the surface
- *     follows the host skin in both themes.
- *   - No `--dsw-alias-state-error-primary` / `-business-primary` as a TEXT colour:
- *     on the light theme they measure 4.4976:1 and 4.2349:1 against the ground,
- *     both under the 4.5:1 body bar. They are used as GRAPHICS only (the rail, the
- *     alert's 4px bar, the focus ring, the add entry's 4px bar).
- *   - No host layer-N background token as a separator: in the light theme all three
- *     resolve to the same white, so a divider built on them exists only in the dark
- *     theme. Row rhythm comes from the ledger's own line spacing.
- *   - No fading or blending, and no halo: quietness is the secondary ink, never a
- *     faded primary one (also a static gate).
- *   - `border-radius: 0` everywhere. Nothing on this page floats.
- *   - The page keeps exactly TWO 1px lines, and both are real form controls: the
- *     protocol select and the retry editor's number fields. The credential field is
- *     a text action that becomes a field when asked, and its open state is a well
- *     value rather than a bordered box.
+ * WHY THE HEAD IS A BAND. The page opens on one sentence — the live thing that
+ * counts the rows below it and is re-keyed on its own text — on a locally washed
+ * surface carrying a faint grain. The wash and grain are material, not
+ * information: the sentence sits on its own layer and is measured against both
+ * ends of the wash. A single 1px line closes the band; the ledger's own rules do
+ * the rest.
  *
  * @module dsh-rabbit-model-picker/client/modelConfigStyles
  */
@@ -77,7 +50,8 @@ const CSS = `
   /* One narrow column, left-aligned: this section lives in someone else's settings
      panel, so it aligns with that panel rather than centring itself. */
   max-width: 560px;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
+  font-family: var(--zmd-font-latin);
   font-size: 13px;
   line-height: 20px;
 }
@@ -95,31 +69,37 @@ const CSS = `
 .dmc-manage,
 .dmc-danger,
 .dmc-retry-action,
-.dmc-retry-input {
+.dmc-retry-input,
+.dmc-well,
+.dmc-backoff-cell {
   box-sizing: border-box;
 }
 
+/* THE HEAD: one sentence on a washed band, closed by one hairline.
+   The wash and the grain arrive from the shared primitives (the element carries
+   .zmd-wash and .zmd-grain); this rule owns the band's geometry only, and lifts
+   the sentence above the grain overlay so the texture never sits on the text. */
 .dmc-head {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  position: relative;
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid var(--zmd-line); /* taste-skill-ignore: 1px structural line; docs/ink-design-language.md section 4 makes the hairline the only structural tool, and these are table/form rules */
 }
 
-/* THE LEDGER'S BALANCE LINE, and the page's only large thing.
-   It counts the rows below it, so the sentence and the list can never disagree —
-   both are computed from the same reading of the store (see readingOf in
-   ModelConfigPage.tsx). It is INDENTED TO THE NAME COLUMN (16px = the 4px rail
-   plus the 12px gap), so the balance shares a left edge with the entries it
-   counts instead of hanging at the panel's edge.
-   Two decided properties: tabular-nums, so a recount does not reflow the line; and
-   a 160ms TRANSFORM-only landing, replayed by keying the node on its own sentence.
-   Nothing here fades (a static gate forbids opacity in this sheet). */
+.dmc-head > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* THE LIVE SENTENCE, and the page's only loud line: 20px/500, the host's language
+   for a heading that is a sentence. It counts the rows below it (same readingOf),
+   keeps tabular figures so a recount does not reflow, and lands with a 160ms
+   transform-only step replayed by keying the node on its own text. No fade. */
 .dmc-readout {
-  margin: 0 0 0 16px;
+  margin: 0;
   font-size: 20px;
   line-height: 28px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+  color: var(--zmd-ink);
   font-variant-numeric: tabular-nums;
   text-wrap: pretty;
   animation: dmc-readout-landing 160ms ease-out;
@@ -130,37 +110,46 @@ const CSS = `
 .dmc-empty {
   margin: 0;
   max-width: 62ch;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
 }
 
 .dmc-notice {
   margin: 0;
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
 }
 
+/* A text action inside a notice: the underline is the affordance, and the accent
+   (host blue) is allowed as a GRAPHIC — the blue never becomes the word's ink. */
 .dmc-notice-action {
   margin-left: 8px;
   padding: 0;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 12px;
   text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
+  transition: text-decoration-color 120ms ease-out;
 }
 
-/* The read-only alert borrows the page's own motif instead of inventing a second
-   fill rung: a 4px bar in the state colour (a graphic, where the bar clears 3:1)
-   beside a sentence in the primary ink. */
+.dmc-notice-action:hover {
+  text-decoration-color: var(--zmd-accent);
+}
+
+/* The read-only alert: a 4px danger bar (a graphic, where the state colour clears
+   3:1) beside a sentence in the primary ink. */
 .dmc-alert {
   margin: 0;
   padding: 2px 0 2px 12px;
-  border-left: 4px solid var(--dsw-alias-state-error-primary);
-  color: var(--dsw-alias-label-primary);
+  border-left: 4px solid var(--zmd-danger);
+  color: var(--zmd-ink);
 }
 
 .dmc-actions {
@@ -170,34 +159,32 @@ const CSS = `
   gap: 12px;
 }
 
-/* The ledger's add entry, and the page's one accent.
-   NOT a filled button: the theme has no "ink on accent" role, and the white a
-   primary button pairs with the accent fill measures 4.2349:1 light / 2.3278:1
-   dark — both under the 4.5:1 bar. The accent therefore carries the EDGE: a 4px
-   left bar (a solid shape clears the 3:1 graphical bar at 4.2349:1 light /
-   7.8343:1 dark) while the label keeps the primary ink at 17-19:1.
-   The bar is the page's own bar language (the row rail is 4px too), and the two
-   are deliberately different colours for different roles: red marks a state, blue
-   marks the action. Padding-left 12 + the 4px bar puts the label at 16px, the same
-   left edge every row's name sits on. */
+/* THE ADD ENTRY: a plain text action at the page's foot. No bar, no mark, no fill
+   at rest; the pointer gets the quiet hover ground and the accent underline. */
 .dmc-add {
+  display: inline-flex;
+  align-items: center;
   height: 40px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px;
   border: none;
-  border-left: 4px solid var(--dsw-alias-state-business-primary);
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  text-align: left;
   text-wrap: pretty;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
-  transition: transform 80ms linear, background-color 120ms ease-out;
+  transition: background-color 120ms ease-out, text-decoration-color 120ms ease-out, transform 80ms linear;
 }
 
 .dmc-add:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--zmd-hover);
+  text-decoration-color: var(--zmd-accent);
 }
 
 .dmc-add:active:not(:disabled) {
@@ -205,17 +192,13 @@ const CSS = `
 }
 
 .dmc-add:disabled {
-  /* The bar is kept at 4px and only recoloured: dropping it outright would shift
-     the action the moment it became unavailable. */
-  border-left-color: transparent;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
+  text-decoration-color: transparent;
   cursor: default;
 }
 
 /* The add picker: the catalog entries the page does NOT list, disclosed by the
-   one add entry. It is an inline disclosure rather than a floating layer, because
-   adding a provider is a step in this section's own task. */
+   one add entry. An inline disclosure, never a floating layer. */
 .dmc-picker {
   display: flex;
   flex-direction: column;
@@ -226,7 +209,7 @@ const CSS = `
   display: flex;
   flex-direction: column;
   /* The measured deployment offers 38 entries; the list scrolls rather than
-     pushing the section's own action row a screen and a half down. */
+     pushing the section's one action a screen and a half down. */
   max-height: 320px;
   margin: 0;
   padding: 0;
@@ -234,9 +217,6 @@ const CSS = `
   list-style: none;
 }
 
-/* A dormant entry draws NOTHING for its state: being addable is not an error, so
-   the only marker is the live fill under the pointer. The data-state hook stays
-   for accessibility and for the state gate, not for paint. */
 .dmc-picker-item {
   display: flex;
   align-items: center;
@@ -248,7 +228,7 @@ const CSS = `
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -257,52 +237,52 @@ const CSS = `
 }
 
 .dmc-picker-item:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--zmd-hover);
 }
 
 .dmc-picker-item:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
+/* THE LEDGER: one 1px rule between entries and one under the last, so the routes
+   read as one table. The expanded region of a row lives inside that row's li, so
+   it stays inside its own line. */
 .dmc-list {
   display: flex;
   flex-direction: column;
   margin: 0;
   padding: 0;
+  border-bottom: 1px solid var(--zmd-line); /* taste-skill-ignore: 1px structural line; docs/ink-design-language.md section 4 makes the hairline the only structural tool, and these are table/form rules */
   list-style: none;
 }
 
-/* THE LEDGER LINE. One row is one route, on one line:
-     rail | name + route | model count | answer word | door
-   The four tracks are shared by every row, and the answer word and door are
-   right-aligned, so their right edges coincide across the whole list. A row that
-   omits the model cell (it never does) would still park its neighbours here.
-   NO FILL AT REST — not even for a state that needs the reader. At eleven rows the
-   WORD is the primary channel and the rail is the redundant second one; a third
-   channel only made the page shout. The only fills are positional (hover / focus /
-   the row whose catalog is open). */
+/* THE LEDGER LINE. One row is one route, on one 48px line:
+     rail | ordinal · name + route | model count | answer word | door
+   The tracks are shared by every row and the two right-hand cells are right
+   aligned, so their edges coincide down the list. No fill at rest; the only fills
+   are positional (hover / focus / the row whose catalog or well is open). */
 .dmc-row {
   display: grid;
   grid-template-columns: 4px minmax(120px, 1fr) max-content max-content 44px;
   column-gap: 12px;
   align-items: center;
-  min-height: 44px;
-  padding: 10px 0;
-  color: var(--dsw-alias-label-primary);
+  min-height: 48px;
+  padding: 0;
+  border-top: 1px solid var(--zmd-line); /* taste-skill-ignore: 1px structural line; docs/ink-design-language.md section 4 makes the hairline the only structural tool, and these are table/form rules */
+  color: var(--zmd-ink);
 }
 
 .dmc-row:hover,
 .dmc-row:focus-within,
 .dmc-row[data-catalog='true'],
 .dmc-row[data-well='true'] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--zmd-hover);
 }
 
-/* The rail: 4px, spanning the row's own lines. It is the list's scanning column,
-   so it is drawn only for the ONE fact it means — this provider cannot serve a
-   request — and left EMPTY everywhere else, including on a row that merely has a
-   diagnostic. One rung, one meaning. */
+/* The rail: 4px, the list's one state channel. It is drawn only for the ONE fact
+   it means — this provider cannot serve a request — and left empty everywhere
+   else. The error colour is a bar, never a word. */
 .dmc-rail {
   grid-column: 1;
   grid-row: 1 / -1;
@@ -313,36 +293,50 @@ const CSS = `
 
 .dmc-rail[data-state='missing-key'],
 .dmc-rail[data-state='unreachable'] {
-  background: var(--dsw-alias-state-error-primary);
+  background: var(--zmd-danger);
 }
 
-/* Left end: identity. The route id rides inside the name's own track, so the two
-   can never be separated by a grid gap, and both wrap rather than push a neighbour
-   out. */
+/* Left end: the ordinal and the identity share one flex line inside the name's
+   own grid track, so the mark can never be separated from the name by a gap. */
 .dmc-name {
   grid-column: 2;
   grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
   min-width: 0;
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   overflow-wrap: anywhere;
+}
+
+/* The two-digit ordinal of a countable list: 10px mute ink, tabular, aligned on
+   the name's baseline. It is decoration over the real order, so it is aria-hidden
+   in the markup. */
+.dmc-index {
+  flex: none;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 500;
+  color: var(--zmd-ink-mute);
+  font-variant-numeric: tabular-nums;
 }
 
 .dmc-route {
-  margin-left: 8px;
   font-size: 12px;
   line-height: 18px;
   font-weight: 400;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
-/* The model cell: a FACT and the door to the catalog region that curates it. Right-aligned
-   on its own track, so the counts form a column. Tabular figures keep a count
-   change from reflowing the line; the noun is part of the value (a bare number in
-   a settings list reads as a label waiting for its unit). */
+/* The model cell: a FACT and the door to the catalog region that curates it. A
+   text action — no box, no fill at rest — told apart by its pointer, hover ground
+   and accent underline. */
 .dmc-catalog {
   grid-column: 3;
   grid-row: 1;
@@ -352,19 +346,24 @@ const CSS = `
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   font: inherit;
   font-size: 12px;
   line-height: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
-  transition: color 120ms ease-out, background-color 120ms ease-out, transform 80ms linear;
+  transition: color 120ms ease-out, background-color 120ms ease-out, text-decoration-color 120ms ease-out, transform 80ms linear;
 }
 
 .dmc-catalog:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
+  background: var(--zmd-hover);
+  color: var(--zmd-ink);
+  text-decoration-color: var(--zmd-accent);
 }
 
 .dmc-catalog:active:not(:disabled) {
@@ -372,27 +371,24 @@ const CSS = `
 }
 
 .dmc-catalog:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
-/* The row's answer, as ONE word, right-aligned. Its right edge is fixed by the
-   grid, so the answers form a column down the list even though the words differ in
-   width. The ink carries the loudness: a ready row states its word quietly, and
-   the two states that need the reader state it in the primary ink. The rail is the
-   redundant channel, never the first one. */
+/* The row's answer, as ONE word, right-aligned on its own track. The ink carries
+   the loudness: a ready row states its word quietly, the two states that need the
+   reader state it in the primary ink. The rail is the redundant channel. */
 .dmc-verdict {
   grid-column: 4;
   grid-row: 1;
   justify-self: end;
-  /* The 12px left padding is what keeps the answer from reading as the tail of the
-     model cell beside it (默认 已登录): the grid gap alone put two quiet words in
-     one breath. Right-alignment is unaffected — padding widens the column leftward. */
+  /* The 12px left padding keeps the answer from reading as the tail of the model
+     cell beside it (默认 已登录); right-alignment is unaffected. */
   padding-left: 12px;
   font-size: 13px;
   line-height: 20px;
   font-variant-numeric: tabular-nums;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   text-wrap: pretty;
   transition: color 160ms ease-out;
   animation: dmc-verdict-landing 160ms ease-out;
@@ -400,31 +396,37 @@ const CSS = `
 
 .dmc-verdict[data-state='missing-key'],
 .dmc-verdict[data-state='unreachable'] {
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
 }
 
-/* The row's one door. A word, not a chevron: the page's whole control vocabulary
-   is words, and a glyph would need a legend. It is the only control on the scan
-   line besides the model cell's own door, and it opens the well under the line. */
+/* The row's one door: a word, not a chevron. Hover gives it the quiet ground and
+   the accent underline; the accent never becomes the word's ink. */
 .dmc-manage {
   grid-column: 5;
   grid-row: 1;
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
   height: 28px;
   padding: 0 6px;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
-  transition: color 120ms ease-out, background-color 120ms ease-out, transform 80ms linear;
+  transition: background-color 120ms ease-out, text-decoration-color 120ms ease-out, transform 80ms linear;
 }
 
 .dmc-manage:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--zmd-hover);
+  text-decoration-color: var(--zmd-accent);
 }
 
 .dmc-manage:active {
@@ -432,30 +434,27 @@ const CSS = `
 }
 
 .dmc-manage:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
-/* The in-flight word. It takes a line of its own under the scan line rather than a
-   control's cell: a write can be in flight ON a row whose well is also open (the
-   well's controls are merely disabled), and stacking it under the line keeps both
-   readable instead of overlaying one on the other. */
+/* The in-flight word under the scan line: a write can be in flight ON a row whose
+   well is also open (the well's controls are merely disabled), so it takes a line
+   of its own instead of overlaying a control. */
 .dmc-pending {
   grid-column: 2 / -1;
   grid-row: 2;
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
 }
 
-/* THE SETTINGS WELL: the row's controls, as a FORM.
-   Three labelled fields on one label column (凭据 / API 协议 / 自动重试) and the
-   lifecycle entry last. It is a DIRECT CHILD of the row, under both segments of the
-   scan line, so opening it never re-flows the line above. No fill, no edge and no
-   radius of its own: the row's hover fill is its surface, which is why it must
-   live inside .dmc-row.
-   The label column is what makes this a form rather than a row of words: a value
-   and its name can never drift apart, and the three values share one left edge. */
+/* THE SETTINGS WELL: the row's controls as a FORM.
+   Three labelled fields on one label column (凭据 / API 协议 / 自动重试), a
+   structural line, then the lifecycle entry. It is a DIRECT CHILD of the row, so
+   opening it never re-flows the line above. The fill is one step below the panel
+   ground; the 1px edge is structure, not a control border. Labels are single-line
+   Chinese — the ink direction has no field codes. */
 .dmc-well {
   grid-column: 2 / -1;
   display: grid;
@@ -463,27 +462,30 @@ const CSS = `
   column-gap: 12px;
   row-gap: 8px;
   align-items: center;
-  padding: 2px 0 12px;
+  margin: 2px 0 14px;
+  padding: 12px 14px 14px;
+  background: var(--zmd-panel-deep);
+  border: 1px solid var(--zmd-line);
 }
 
-/* The diagnostic sentence. Primary ink, never the red one: measured on the light
-   theme the state colour is under the 4.5:1 body bar, while this pairing is
-   17.39:1. It sits at the top of the well, where the write that produced it
-   happened. */
+/* The diagnostic sentence. Primary ink with a 4px danger bar (the bar is a graphic,
+   where the state colour clears 3:1); the sentence itself is never painted in the
+   error colour. It sits at the top of the well, where the write happened. */
 .dmc-diagnostic {
   grid-column: 1 / -1;
   margin: 0;
-  padding: 2px 0 4px;
+  padding: 2px 0 4px 10px;
+  border-left: 4px solid var(--zmd-danger);
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   overflow-wrap: anywhere;
 }
 
 .dmc-field-label {
   font-size: 12px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-secondary);
+  line-height: 18px;
+  color: var(--zmd-ink-secondary);
 }
 
 .dmc-field-value {
@@ -494,23 +496,25 @@ const CSS = `
   min-width: 0;
   font-size: 13px;
   line-height: 20px;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
 }
 
 /* A value that is stated, not acted on (已配置 / 使用默认值 / 由账号提供). */
 .dmc-quiet {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
 }
 
-/* THE ROW'S TASK ENTRIES, and the ink ladder every de-chromed action shares: the
-   word is the PRIMARY ink at rest, the live fill is the pointer's, and only a
-   DISABLED action drops to the secondary ink. A deployment that cannot write
-   (settings.writable === false) must not draw actions that look clickable; the de
-   -chroming must not remove the only cue that distinguishes them.
-   Both the button that opens the field and the field itself share this class, so
-   the de-chroming is stated once. The open field is the only flexing member: it
-   takes the rest of the value column so a key can be typed without the row growing
-   a second line. */
+/* The structural rule above the lifecycle entry: one 1px line across the well. */
+.dmc-well-rule {
+  grid-column: 1 / -1;
+  height: 1px; /* taste-skill-ignore: 1px structural line; docs/ink-design-language.md section 4 makes the hairline the only structural tool, and these are table/form rules */
+  margin: 4px 0 0;
+  background: var(--zmd-line);
+}
+
+/* THE ROW'S TASK ENTRIES. A text action's word is its affordance: primary ink at
+   rest, the pointer's quiet ground on hover, the secondary ink only when the
+   deployment cannot write. */
 .dmc-key-action {
   min-width: 0;
   height: 28px;
@@ -518,7 +522,7 @@ const CSS = `
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -526,20 +530,24 @@ const CSS = `
   transition: color 120ms ease-out, background-color 120ms ease-out, transform 80ms linear;
 }
 
+/* The open credential field is a real form field: it keeps the control-colour
+   1px edge and the host's own input fill. */
 input.dmc-key-action {
   flex: 1 1 160px;
   width: 100%;
   padding: 0 8px;
+  border: 1px solid var(--zmd-line-control);
   background: var(--dsw-specific-input-major);
+  color: var(--zmd-ink);
 }
 
 .dmc-key-action::placeholder {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
 }
 
 .dmc-key-action:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
+  background: var(--zmd-hover);
+  color: var(--zmd-ink);
 }
 
 .dmc-key-action:active:not(:disabled) {
@@ -547,7 +555,7 @@ input.dmc-key-action {
 }
 
 .dmc-key-action:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
@@ -558,7 +566,7 @@ input.dmc-key-action {
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -566,8 +574,8 @@ input.dmc-key-action {
 }
 
 .dmc-key-clear:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
+  background: var(--zmd-hover);
+  color: var(--zmd-ink);
 }
 
 .dmc-key-clear:active:not(:disabled) {
@@ -575,48 +583,44 @@ input.dmc-key-action {
 }
 
 .dmc-key-clear:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
 /* A real form field keeps its edge: without it the choice reads as static text,
-   and the retry sheet already recorded the regression that removing it caused.
-   The native option list is painted by the platform, so the two colours it needs
-   are stated rather than inherited. */
+   and the retry sheet already recorded the regression that removing it caused. */
 .dmc-protocol {
   min-width: 176px;
   max-width: 100%;
   height: 28px;
   padding: 0 6px;
-  border: 1px solid var(--dsw-alias-border-l3); /* taste-skill-ignore: a real form field is told apart from static text by its edge, which the house rules exempt (the retry sheet recorded the regression that removing it caused) */
+  border: 1px solid var(--zmd-line-control); /* taste-skill-ignore: a real form field is told apart from static text by its edge, which the house rules exempt */
   border-radius: 0;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-input-major);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 
 .dmc-protocol:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
 .dmc-protocol option {
-  background: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-primary);
+  background: var(--zmd-panel);
+  color: var(--zmd-ink);
 }
 
-/* The retry field's action. It states 修改 rather than 自动重试 because the field is
-   already named 自动重试 — an action that repeats its field's name makes the form
-   read as two labels. */
+/* The retry field's action: 修改, not 自动重试 (the field is already named). */
 .dmc-retry-action {
   min-height: 28px;
   padding: 0 6px;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -625,24 +629,22 @@ input.dmc-key-action {
 }
 
 .dmc-retry-action:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--zmd-hover);
 }
 
 .dmc-retry-action:active {
   transform: translateY(1px);
 }
 
-/* The lifecycle entry. It is destructive and it is not one of the provider's
-   values, so it carries no field label and sits on the well's last line. The ink
-   ladder is the page's (primary at rest, secondary when the deployment cannot
-   write); the destructive intent is carried by the word itself. */
+/* The lifecycle entry: destructive, not a provider value, so it sits under the
+   well's structural line without a field label. Its ink ladder is the page's. */
 .dmc-danger {
   min-height: 28px;
   padding: 0 6px;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -650,7 +652,7 @@ input.dmc-key-action {
 }
 
 .dmc-danger:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover-danger);
+  background: var(--zmd-hover);
 }
 
 .dmc-danger:active:not(:disabled) {
@@ -658,34 +660,15 @@ input.dmc-key-action {
 }
 
 .dmc-danger:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
-/* THE INLINE AUTO-RETRY EDITOR: the deleted chart, restated as words.
-
-   WHY THE BAR CHART IS GONE. The card this replaces drew every wait as a bar — a
-   plot, one slot per retry, a cap mark, an axis. Measured against the reading it
-   had to support ("how long will this provider make me wait, and how fast does the
-   delay grow?"), those bars carried no exact value and their height meant nothing
-   across rows: the chart was an illustration OF the two numbers beside it, not a
-   second fact. The rhythm is now stated as words and figures:
-     - the doubling rule as one sentence, which is the one thing the bar row showed
-       only by eye;
-     - the FIRST wait and the LONGEST TOTAL as tabular figures.
-   The total is the HIGH bound of waitRange(waits, jitterRatio) and not the nominal
-   sum: jitter moves every wait, so a line labelled 最长合计 must state the longest
-   the schedule can run or the label is lying.
-
-   THE FAMILY, top to bottom. The editor (.dmc-retry) is a stack of short lines, NOT
-   a card: no fill, no edge, no radius. It is a direct child of .dmc-well and spans
-   both of its columns, under the field line that opened it, so opening it never
-   re-flows the controls above. Then: .dmc-retry-state says whether this provider
-   has a policy of its own; .dmc-retry-fields holds one .dmc-retry-field per number
-   (a .dmc-retry-label over a .dmc-retry-row of .dmc-retry-input + .dmc-retry-unit);
-   .dmc-retry-summary is the one-line schedule; and .dmc-retry-actions reuses the
-   page's own de-chromed action (.dmc-key-action) and notice line (.dmc-notice). No
-   second button vocabulary is introduced. */
+/* THE INLINE AUTO-RETRY EDITOR: a stack of short lines under the field line that
+   opened it. The schedule is stated as words and two numbers (the doubling rule,
+   the first wait, the longest total); the 5-slot tick bar below restates the same
+   real curve as a grey scale — filled slots in mute ink, unfilled slots as
+   baseline marks in the structure line. No chart, no hue. */
 .dmc-retry {
   grid-column: 1 / -1;
   display: flex;
@@ -695,15 +678,12 @@ input.dmc-key-action {
   padding: 2px 0 4px;
 }
 
-/* The one fact the fields cannot state for themselves: whether editing them will
-   write a new value or create one. It takes the primary ink because it answers the
-   question the reader opened the editor with. */
 .dmc-retry-state {
   margin: 0;
   font-size: 12px;
   line-height: 18px;
   font-weight: 600;
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
 }
 
 /* The two fields sit side by side and wrap only when the container is brutal. */
@@ -722,16 +702,12 @@ input.dmc-key-action {
   min-width: 0;
 }
 
-/* A form label, not an eyebrow: it names the value under it, in the quieter ink,
-   at the same 12px every other name on this page uses. */
 .dmc-retry-label {
   font-size: 12px;
   line-height: 16px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
 }
 
-/* The value line: the number and its unit word, kept together so "5" can never
-   read as a bare number without its noun. */
 .dmc-retry-row {
   display: flex;
   align-items: center;
@@ -739,51 +715,111 @@ input.dmc-key-action {
   min-width: 0;
 }
 
-/* THE PAGE'S SECOND REAL FORM CONTROL — and the second, last 1px edge on it. It
-   mirrors the catalog region's field: the same 1px --dsw-alias-border-l3 edge, the
-   same --dsw-specific-input-major fill so the well reads as editable in both
-   themes, the same 12px tabular figures. The width is fixed at about one three-
-   digit number rather than elastic, because two fields of different sizes for the
-   same kind of value would read as a layout accident. */
+/* THE PAGE'S SECOND REAL FORM CONTROL: the same control-colour 1px edge as the
+   protocol field, the host's own input fill, tabular figures. */
 .dmc-retry-input {
   width: 64px;
   min-width: 0;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--dsw-alias-border-l3); /* taste-skill-ignore: a real form field is told apart from static text by its edge, which the house rules exempt (the deleted retry card recorded the regression that removing it caused) */
+  border: 1px solid var(--zmd-line-control); /* taste-skill-ignore: a real form field is told apart from static text by its edge, which the house rules exempt */
   border-radius: 0;
   background: var(--dsw-specific-input-major);
-  color: var(--dsw-alias-label-primary);
+  color: var(--zmd-ink);
   font: inherit;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-/* A rejected draft marks the FIELD, not only the sentence under it — the same
-   graphic-only use of the state colour as the catalog region's invalid field. No text is
-   painted in it, and the sentence still says what to type. */
+/* A rejected draft marks the FIELD, not only the sentence under it — a graphic-only
+   use of the danger colour. No text is painted in it. */
 .dmc-retry-input[aria-invalid='true'] {
-  border-color: var(--dsw-alias-state-error-primary);
+  border-color: var(--zmd-danger);
 }
 
 .dmc-retry-input:disabled {
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
   cursor: default;
 }
 
 .dmc-retry-unit {
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--zmd-ink-secondary);
 }
 
-/* The schedule in one line, tabular so a digit change never reflows it. */
+/* The schedule in one line: the count as an 18px numeral, its unit beside it, then
+   the two ends of the schedule. Tabular so a digit change never reflows. */
 .dmc-retry-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
   margin: 0;
+  color: var(--zmd-ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dmc-retry-tally {
+  font-family: var(--zmd-font-latin);
+  font-size: 18px;
+  line-height: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--zmd-ink);
+}
+
+.dmc-retry-tally-unit {
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-  font-variant-numeric: tabular-nums;
+  color: var(--zmd-ink-secondary);
+}
+
+.dmc-retry-detail {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--zmd-ink-secondary);
+}
+
+/* THE BACKOFF SCALE: five slots. The first five waits the policy spends fill the
+   slots in curve order (four height tiers by the waits' own proportions); slots the
+   policy does not spend stay as a 2px baseline mark in the structure line. Every
+   filled cell is a real wait from retryWaitCurve; the scale is aria-hidden because
+   the summary beside it states the same schedule in words. Grey only. */
+.dmc-backoff {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 20px;
+}
+
+.dmc-backoff-cell {
+  width: 8px;
+  background: var(--zmd-ink-mute);
+  transform-origin: 50% 100%;
+  animation: dmc-backoff-rise 160ms var(--zmd-ease) both;
+}
+
+.dmc-backoff-cell[data-level='0'] {
+  height: 2px;
+  background: var(--zmd-line);
+  animation: none;
+}
+
+.dmc-backoff-cell[data-level='1'] {
+  height: 6px;
+}
+
+.dmc-backoff-cell[data-level='2'] {
+  height: 10px;
+}
+
+.dmc-backoff-cell[data-level='3'] {
+  height: 14px;
+}
+
+.dmc-backoff-cell[data-level='4'] {
+  height: 18px;
 }
 
 .dmc-retry-actions {
@@ -794,10 +830,8 @@ input.dmc-key-action {
   min-width: 0;
 }
 
-/* The two landing voices: the row's answer word and the page's readout. Both are
-   160ms and TRANSFORM-only — an opacity would be a fade, which this sheet's own
-   static gate refuses — and both are replayed by remounting (React keys the node on
-   the value it states), not by a scroll trigger. */
+/* The landing voices and the scale's rise: transform-only, replayed by remounting
+   (React keys the node on the value it states), never by a scroll trigger. */
 @keyframes dmc-verdict-landing {
   from { transform: translateY(2px); }
 }
@@ -806,9 +840,11 @@ input.dmc-key-action {
   from { transform: translateY(2px); }
 }
 
-/* Every focusable control, one ring. The host's own focus-ring token resolves to
-   transparent in both themes, so the business colour is named directly instead of
-   being reached through a fallback that would paint nothing. */
+@keyframes dmc-backoff-rise {
+  from { transform: scaleY(0.35); }
+}
+
+/* Every focusable control, one ring, in the host's blue. */
 .dmc-add:focus-visible,
 .dmc-notice-action:focus-visible,
 .dmc-key-action:focus-visible,
@@ -820,30 +856,29 @@ input.dmc-key-action {
 .dmc-retry-action:focus-visible,
 .dmc-retry-input:focus-visible,
 .dmc-picker-item:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline: 2px solid var(--zmd-focus);
   outline-offset: 2px;
 }
 
 /* NARROW CONTAINER, asked of the CONTAINER and not of the window (see .dmc-page).
-
-   The scan line keeps all four tracks and tightens only the gaps; the well narrows
-   its column gap. NOTHING TALLER HAPPENS HERE: the panel's real narrow desktop width
-   (484px at a 768px viewport) is still a mouse surface, and making every control
-   40px tall there turned each row from 48px into 60px for no readability gain. The
-   thumb-sized branch below is the one that is actually phone-shaped. */
-@container (max-width: 520px) {
+   The breakpoint semantics are the frozen 560 / 484 / <=360; this direction adds no
+   decoration that needs to stand down, so 484 only tightens, and 360 is the phone
+   column (ordered, no overflow, 40px targets) with the ordinals dropped. */
+@container (max-width: 560px) {
   .dmc-row {
     column-gap: 8px;
   }
 
+  .dmc-head {
+    padding: 16px 12px 14px;
+  }
+
   .dmc-well {
-    grid-template-columns: 64px minmax(0, 1fr);
-    column-gap: 8px;
+    column-gap: 10px;
   }
 
   /* The select keeps its CONTENT width rather than stretching: a form field that
-     spans the whole well reads as the page's main control, and this one is a
-     rarely-touched setting. It may still shrink to the container. */
+     spans the whole well reads as the page's main control. It may still shrink. */
   .dmc-protocol {
     width: auto;
     max-width: 100%;
@@ -854,22 +889,30 @@ input.dmc-key-action {
   }
 }
 
-/* The phone column the host actually hands this section (measured: 106px at a
-   390px viewport). Everything stacks into the one surviving track, so nothing can
-   be pushed out of the container, and the rail still spans the row.
+@container (max-width: 484px) {
+  .dmc-well {
+    grid-template-columns: 56px minmax(0, 1fr);
+    column-gap: 8px;
+  }
+}
 
-   DEGRADING IN ORDER, not by accident. This width is an external constraint — an
-   800px settings panel at a 390px viewport leaves the content column about 94px —
-   so the goal here is not a pretty layout but an ORDERED one: nothing overflows, no
-   line is left holding a single character, and every clickable target stays at
-   least 40px. The four facts of the scan line become four lines in a deliberate
-   order (identity, answer, model cell, door), and the well becomes one column with
-   its labels above their values. */
+/* The phone column the host hands this section (measured: 106px at a 390px
+   viewport). Everything stacks into the one surviving track, so nothing can be
+   pushed out of the container; the rail still spans the row, the ordinals stand
+   down, and every clickable target stays at least 40px. */
 @container (max-width: 360px) {
   .dmc-row {
     grid-template-columns: 4px minmax(0, 1fr);
     grid-template-rows: auto auto auto auto auto auto;
     row-gap: 2px;
+  }
+
+  .dmc-index {
+    display: none;
+  }
+
+  .dmc-head {
+    padding: 12px 10px 10px;
   }
 
   .dmc-name {
@@ -906,6 +949,7 @@ input.dmc-key-action {
     grid-row: 6;
     grid-template-columns: minmax(0, 1fr);
     row-gap: 2px;
+    padding: 10px 12px 12px;
   }
 
   .dmc-diagnostic,
@@ -918,9 +962,21 @@ input.dmc-key-action {
     min-width: 0;
   }
 
-  /* THE THUMB BRANCH. This is the phone column (the host hands the section about
-     106px), where the scan line has already stacked, so every control may grow to
-     40px without costing any density: the page is being read on a phone. */
+  /* The two number fields take the surviving column instead of their 64px shape. */
+  .dmc-retry-field {
+    flex: 1 1 100%;
+  }
+
+  .dmc-retry-input {
+    width: 100%;
+  }
+
+  .dmc-backoff {
+    gap: 3px;
+    height: 18px;
+  }
+
+  /* THE THUMB BRANCH: every control may grow to 40px without costing density. */
   .dmc-key-action,
   .dmc-key-clear,
   .dmc-catalog,
@@ -941,17 +997,13 @@ input.dmc-key-action {
   }
 
   .dmc-add {
-    /* The add entry keeps its own width and wraps on natural break points, so it
-       can never be squeezed into a column narrow enough to strand one glyph. */
     flex: none;
     max-width: 100%;
     text-wrap: pretty;
   }
 }
 
-/* The page's motion is control feedback and the two landing voices above, all of
-   it transform or colour. With motion reduced every transition and animation is
-   simply off: the content stays, it just stops moving. */
+/* With motion reduced every transition and animation is off; the content stays. */
 @media (prefers-reduced-motion: reduce) {
   .dmc-add,
   .dmc-key-action,
@@ -962,7 +1014,8 @@ input.dmc-key-action {
   .dmc-picker-item,
   .dmc-verdict,
   .dmc-readout,
-  .dmc-retry-action {
+  .dmc-retry-action,
+  .dmc-backoff-cell {
     transition: none;
     animation: none;
   }

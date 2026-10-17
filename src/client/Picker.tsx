@@ -32,7 +32,7 @@
  */
 
 import {
-  IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconCloseFillRegular,
+  IconCheckOutlineRegular, IconChevronDownOutlineRegular,
   IconDataOutlineRegular, IconSettingsOutlineRegular, IconWarningOutlineRegular, Input, MenuGroup, MenuSurface,
   observeStickyMenuGroups, rankByName, StateDot, Tag, Toast, Tooltip, useAnchoredPosition,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -828,7 +828,7 @@ export function Picker(props: PickerProps) {
         <MenuSurface
           ref={menuRef}
           id={`${id}-menu`}
-          className={menuPos === null ? 'dmp-menu dmp-card' : 'dmp-menu dmp-card dmp-menu-in dmp-from-top'}
+          className="dmp-menu dmp-card zmd-wash zmd-grain"
           style={menuPos ?? MEASURE_STYLE}
           role="group"
           aria-label={t('menu.aria')}
@@ -877,7 +877,12 @@ export function Picker(props: PickerProps) {
                     searchRef.current?.focus()
                   }}
                 >
-                  <IconCloseFillRegular />
+                  {/* A right-angled multiplication sign, not the host's filled
+                      clear glyph: the HUD language is all square marks, and the
+                      filled dot button was the last round object in the card.
+                      The glyph is decorative; the button's aria-label is the
+                      control's name. */}
+                  <span aria-hidden="true">×</span>
                 </button>
               )}
             </div>
@@ -1035,7 +1040,7 @@ export function Picker(props: PickerProps) {
                             </span>
                           )}
                         </span>
-                        <span className="dmp-check">
+                        <span className="dmp-check" data-on={selected ? '' : undefined}>
                           {rowPending
                             ? <StateDot state="ongoing" />
                             : selected ? <IconCheckOutlineRegular /> : null}

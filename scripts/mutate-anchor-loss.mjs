@@ -1,7 +1,14 @@
 /**
- * 改坏验证 for §5.18. Each mutation breaks one decision the fix rests on; the
- * static gate has to notice every one of them, and the source has to come back
- * byte-identical afterwards.
+ * 改坏验证 for §5.18 … and, since the Endfield revision, the gate ON the gates:
+ * each mutation breaks one decision a gate rests on; a gate has to notice every
+ * one of them, and the source has to come back byte-identical afterwards.
+ *
+ * THE BASELINE MUST BE GREEN BEFORE ANY MUTATION RUNS. This is not a convenience:
+ * when the tree is half-edited (or a parallel writer is mid-save) an unrelated red
+ * gate satisfies the mutation detector for every mutation, so the whole suite
+ * reports "caught" while it has proved nothing. That failure mode is worse than a
+ * red gate, so the preflight below refuses to run on a red baseline instead of
+ * counting it as success.
  *
  * Written as a script rather than a shell one-liner because the mutations are
  * line-anchored text edits, and a PowerShell heredoc that mangles a quote or a
@@ -14,6 +21,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 
 const SELFCHECK = 'scripts/selfcheck-static.mjs'
+const CONTRAST = 'scripts/check-contrast.mjs'
 const UNIT = 'scripts/test-params.mjs'
 const RECOVERY_GATE = 'scripts/test-rate-limit-recovery.mjs'
 const LOSS = 'src/client/anchorLoss.ts'
@@ -35,8 +43,56 @@ const WIRING = 'src/index.ts'
  * drop one condition of that rule, or one half of its wiring; none of them is
  * visible to the static gate, which is exactly why the rule needs a gate that
  * drives it.
+ *
+ * The contrast gate joins them for the Endfield mutations: the token layer's
+ * pairs, the line bands and the per-style AA floors live only there, so a
+ * mutation that breaks one of those numbers would otherwise be "unprotected".
  */
-const GATES = [SELFCHECK, UNIT, RECOVERY_GATE]
+const GATES = [SELFCHECK, CONTRAST, UNIT, RECOVERY_GATE]
+
+/**
+ * Run one gate and return its combined output.
+ * @param gate - repository-relative script path.
+ * @returns the stdout and stderr text and whether it failed.
+ */
+function runGate(gate) {
+  const run = spawnSync(process.execPath, [gate], { encoding: 'utf8' })
+  const output = `${run.stdout ?? ''}${run.stderr ?? ''}`
+  // A nonzero exit OR a line that STARTS with FAIL. The old test was a bare
+  // `includes('FAIL')`, which this repo's own selfcheck defeats on every run:
+  // one of its green lines reads "ok taste-skill lint: no FAIL on the four
+  // round surfaces", so the harness reported `caught by selfcheck-static.mjs`
+  // for mutations that selfcheck had exited 0 on.
+  const failed = run.status !== 0 || /(?:^|\n)\s*FAIL\b/.test(output)
+  return { failed, output, status: run.status }
+}
+
+/**
+ * The last line of a gate's output, for the report.
+ * @param gate - repository-relative script path.
+ * @returns the last non-empty line.
+ */
+function gateSummary(gate) {
+  const { output } = runGate(gate)
+  return output.trim().split(/\r?\n/).filter(Boolean).pop() ?? '(no output)'
+}
+
+// --- the baseline preflight ------------------------------------------------
+// A mutation suite is only evidence if the gates start green: otherwise the
+// first red gate "catches" every mutation and the report means nothing.
+const baseline = GATES.map(gate => ({ gate, ...runGate(gate) }))
+const baselineRed = baseline.filter(entry => entry.failed)
+if (baselineRed.length > 0) {
+  console.error('mutation harness: BASELINE IS RED — refusing to run. A red gate would "catch" every mutation, so this run would prove nothing.')
+  for (const entry of baselineRed) {
+    const failing = entry.output.split(/\r?\n/).filter(line => /^\s*FAIL\b/.test(line)).slice(0, 6)
+    console.error(`  ${entry.gate} (exit ${entry.status})`)
+    for (const line of failing) console.error(`    ${line.trim()}`)
+  }
+  console.error('\nFix the baseline (or run the mutation harness after the implementation lands), then re-run.')
+  process.exit(1)
+}
+console.log(`  baseline: ${GATES.length} gate(s) green`)
 
 const MUTATIONS = [
   {
@@ -257,17 +313,8 @@ for (const m of MUTATIONS) {
   let caught = null
   try {
     for (const gate of GATES) {
-      const run = spawnSync(process.execPath, [gate], { encoding: 'utf8' })
-      // A nonzero exit OR a line that STARTS with FAIL. The old test was a bare
-      // `includes('FAIL')`, which this repo's own selfcheck defeats on every run:
-      // one of its green lines reads "ok taste-skill lint: no FAIL on the four
-      // round surfaces", so the harness reported `caught by selfcheck-static.mjs`
-      // for mutations that selfcheck had exited 0 on — including all five of the
-      // rate-limit recovery mutations when they were first added. A gate that
-      // cannot fail is not a gate, and a detector that reads a success line as a
-      // failure is how a mutation suite starts certifying nothing.
-      const output = `${run.stdout ?? ''}${run.stderr ?? ''}`
-      if (run.status !== 0 || /(?:^|\n)\s*FAIL\b/.test(output)) { caught = gate; break }
+      const run = runGate(gate)
+      if (run.failed) { caught = gate; break }
     }
   } finally {
     writeFileSync(m.file, original.get(m.file), 'utf8')
@@ -301,10 +348,7 @@ if (unprotected.length > 0) {
 }
 console.log(`\n${rows.length - missed.length}/${rows.length} mutations caught`)
 
-const final = (() => {
-  const proc = spawnSync(process.execPath, [SELFCHECK], { encoding: 'utf8' })
-  return (proc.stdout + proc.stderr).trim().split(/\r?\n/).pop()
-})()
+const final = gateSummary(SELFCHECK)
 console.log(`after revert: ${final}`)
 
 process.exitCode = missed.length > 0 || final.includes('all good') === false ? 1 : 0
