@@ -2597,14 +2597,15 @@ ink 与 size，且只有 primary / secondary 可作文字。
 **验证（静态验收，按用户选择不碰运行中的 GUI）**
 
 - `npm run typecheck`：绿。
-- `scripts/selfcheck-static.mjs`：全绿（taste-skill lint 0 FAIL；WARN 仅 numbering/outlined-box/em-dash）。
+- `scripts/selfcheck-static.mjs`：**221 条断言全绿**（taste-skill lint 0 FAIL；WARN 仅 numbering/outlined-box/em-dash）。
 - `scripts/check-contrast.mjs`：全绿；最紧处 = 弱墨压暗色 hover 底 4.53:1（亮色 4.67:1）。
 - 5 个单元门（params / retry / recovery / model-config / model-config-copy）：全绿。
 - mutation：旧 **22/22** + 墨色 **24/24** 全部 caught；基线绿前置生效（套件先拒绝红基线）。
-- `npm run build` + 提交：`lib/client.js` 373,132 → **（构建后回填）**；`fontAsset` 46,728 B woff2 / 62,304 B base64。
-- 静态预览：卡 520 / 模型窗格 331 / 名字列 175 / 徽章条 113 / 行高 38；窄屏卡 396 + rail 横条、零横向溢出；
-  设置页 560/484 行高 48、右沿 spread 0、页/井/目录面板 overflow 0；106 档无横向溢出。
-- 截图：`shots/ink-*.png`（浅/深、宽/窄、井/目录区/重试编辑器），README 换图并保留「静态预览非真机」说明。
+- `npm run build` + 提交：`lib/client.js` 373,132 → **430,038 B**（字体 62,304 B base64 + 令牌/样式）；`fontAsset` 46,728 B woff2。
+- 静态预览（三个截图脚本 exit 0，几何断言 "all pinned numbers match"）：卡 520 / 模型窗格 331 / 名字列 175 / 徽章条 113 / 行高 38；窄屏卡 488（≤536 分支：column + rail row）、零横向溢出；
+  设置页 560/484 行高 48、答案词与「管理」右沿 spread 0、页/井/目录面板 overflow 0；106 档 `scrollWidth == clientWidth`、序号隐藏、可点 ≥40。
+- 材质实测：卡、参数面板、页首带、目录区面板都有 `radial-gradient` 墨晕（亮起点 `rgb(251,251,250)` / 暗起点 `rgb(34,34,34)`）与 `.zmd-grain::after` 噪点；展开行填充亮 `rgb(231,231,228)` / 暗 `rgb(36,36,36)`（= `--zmd-hover`）；HUD 构件在 fixture DOM 中数量为 0。
+- 截图：`shots/ink-*.png` 24 张（浅/深、宽/窄、座位行、参数面板、井/目录区/重试编辑器/空态），README 换图并保留「静态预览非真机」说明。
 
 **已知边界（如实记，不算已解决）**
 
