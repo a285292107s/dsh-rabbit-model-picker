@@ -94,7 +94,7 @@
 - 竖条：只表示「这个提供商现在不能服务请求」（缺密钥 / 不可用），其余为空。
 - 名称：14/600；route id 12/400 secondary，同一行、同一轨道内。
 - 模型格：**事实即门**。有自有目录写 `N 个模型`，否则写 `默认`（title 里是长句「正在使用适配器默认模型」）。
-  点它打开模型抽屉——这是行上除了门之外的唯一可点处。
+  点它展开模型目录区——这是行上除了门之外的唯一可点处。
 - 答案词：一个词（可用 / 已登录 / 缺密钥 / 不可用）。ready 用 secondary，另外两种用 primary。
 - 门：`管理`，13px primary，展开下面那一行的设置井；`aria-expanded` + `aria-controls` 成对。
 
@@ -136,31 +136,36 @@ API 协议   [ OpenAI Chat Completions ▾ ]
 | `data-state`（互斥三值） | ready / missing-key / unreachable | 第四个状态、诊断、加载中 |
 | `data-error="true"`（可叠加） | 这个行有一次写失败或目录报错 | 不画竖条、不换答案词、不铺底 |
 | 竖条 | 「能不能服务」 | 不能表示诊断，不能当装饰 |
-| `data-well` / `data-open` | 这一行正展开 / 它的抽屉正打开 | 不是状态 |
+| `data-well` / `data-catalog` | 这一行的设置井正展开 / 它的模型目录区正展开 | 不是状态 |
 
 每个可点元素都有 `:focus-visible` 环（2px business + 2px offset）。焦点顺序 = 渲染顺序：
 模型格 → 门 → 井内（凭据动作 → 协议 → 修改 → 删除）。空状态、只读、加载失败都是句子里说清楚，不做横幅。
 
-### 4.6 模型抽屉：花名册（roster）
+### 4.6 模型目录区：行内花名册（inline roster）
 
-抽屉（460px 固定面板）说的是同一句话的另一种排版：**一行一个模型，编辑进井**。
+模型目录不是弹层，是**账本行自己的展开区**：它占设置内容列（560 / 484 / 106），随页面滚动，
+没有 fixed / scrim / 阴影 / 圆角 / 焦点陷阱。它说的是同一句话：**一行一个模型，编辑进井**。
 
 ```
-openrouter ──────────────────────────────── 关闭
-模型目录                        已自定义模型目录
+openrouter  openrouter             7 个模型   可用   管理
+模型目录  已自定义模型目录                              收起
 
 deepseek/deepseek-v4.1-flash              编辑
 DeepSeek: DeepSeek V4.1 Flash   上下文 1048576  输出 384K
+
   ┌ 模型 ID        ┌ 显示名称
   ┌ 上下文窗口     ┌ 最大输出 token 数
   推理等级
   添加档位
   删除模型
+
 + 添加模型
 获取可用模型
 保存   恢复默认模型
 ```
 
+- **头**：只陈述目录自己（`模型目录` + `已自定义模型目录` / `正在使用适配器默认模型`），
+  右端一个词 `收起`。**不重复**提供商名与 route id——上面那行账本已经说了。
 - **行**（68px，两行文字）：第一行是模型 id（13/600，过长用省略号 + `title` 保全文）与右端的门 `编辑`；
   第二行是显示名与两个容量事实（12px secondary）。空事实不画；两个容量都没填时写 `使用默认容量`
   ——「没有覆盖」也是一条事实，不留空行。
@@ -168,9 +173,21 @@ DeepSeek: DeepSeek V4.1 Flash   上下文 1048576  输出 384K
   （**没有档位的模型只显示「添加档位」**，不画空表头和解释段），最后一行是 `删除模型`。
 - **添加模型**是花名册末尾的一条账本行（`+ 添加模型`），不是工具条里的一个按钮。
 - 草稿问题（`data-invalid`）走页面的同一条通道：行左侧 4px 红色竖条 + 井顶一句原话。
-- 模型发现（获取 → 勾选 → 添加所选）**结构不变**，只跟随页面的字阶与按钮语法。
+- **未保存守卫**：收起 / 切到另一个提供商前若有脏稿，展开区顶部出现
+  「有未保存的模型修改。继续编辑 / 放弃修改」一行；草稿从不静默消失。
+- 模型发现（获取 → 勾选 → 添加所选）**结构不变**，只跟随页面的字阶与按钮语法；
+  候选清单是展开区内唯一的有界滚动区（`max-height: 360px`），页面本身仍是那一份滚动。
+- Esc 一次只关一层：模型井 → 目录区（→ 未保存问题）→ 宿主设置面板。
 
-这样 7 个模型的自定义目录从「28 个常开输入框」变成「7 行 + 最多一个展开的井」，而所有可编辑项一个都没少。
+这样 7 个模型的自定义目录从「28 个常开输入框」变成「7 行 + 最多一个展开的井」，而所有可编辑项一个都没少；
+同时它不再需要第二个弹层、第二个 scrim、第二个 `aria-modal`。
+
+### 4.7 类名清单（当前实现；静态审计读这里）
+
+> 这一节是 dmc- 类名的机器可读清单：实现是 `modelConfigStyles.ts` + `catalogStyles.ts`，
+> 审计脚本 `.taste-skill/audit-classes.mjs` 以本文件为权威。清单随样式表更新，不单独维护。
+
+`dmc-actions`、`dmc-add`、`dmc-alert`、`dmc-btn`、`dmc-btn-commit`、`dmc-catalog`、`dmc-catalog-body`、`dmc-catalog-close`、`dmc-catalog-error`、`dmc-catalog-foot`、`dmc-catalog-guard`、`dmc-catalog-guard-actions`、`dmc-catalog-head`、`dmc-catalog-heading`、`dmc-catalog-note`、`dmc-catalog-notice`、`dmc-catalog-panel`、`dmc-catalog-section`、`dmc-catalog-status`、`dmc-catalog-title`、`dmc-danger`、`dmc-diagnostic`、`dmc-discover`、`dmc-discover-actions`、`dmc-discover-adopt`、`dmc-discover-candidate`、`dmc-discover-check`、`dmc-discover-group`、`dmc-discover-id`、`dmc-discover-label`、`dmc-discover-list`、`dmc-discover-name`、`dmc-discover-panel`、`dmc-discover-search`、`dmc-discover-tool`、`dmc-discover-tools`、`dmc-empty`、`dmc-field-label`、`dmc-field-value`、`dmc-head`、`dmc-key-action`、`dmc-key-clear`、`dmc-list`、`dmc-manage`、`dmc-model-add`、`dmc-model-alias`、`dmc-model-danger`、`dmc-model-edit`、`dmc-model-error`、`dmc-model-fact`、`dmc-model-fields`、`dmc-model-id`、`dmc-model-input`、`dmc-model-label`、`dmc-model-list`、`dmc-model-name`、`dmc-model-ref`、`dmc-model-row`、`dmc-model-sub`、`dmc-model-tokens`、`dmc-model-well`、`dmc-model-window`、`dmc-name`、`dmc-notice`、`dmc-notice-action`、`dmc-page`、`dmc-pending`、`dmc-picker`、`dmc-picker-item`、`dmc-picker-list`、`dmc-protocol`、`dmc-quiet`、`dmc-rail`、`dmc-readout`、`dmc-reasoning`、`dmc-reasoning-add`、`dmc-reasoning-head`、`dmc-reasoning-help`、`dmc-reasoning-level`、`dmc-reasoning-remove`、`dmc-reasoning-row`、`dmc-reasoning-value`、`dmc-retry`、`dmc-retry-action`、`dmc-retry-actions`、`dmc-retry-field`、`dmc-retry-fields`、`dmc-retry-input`、`dmc-retry-label`、`dmc-retry-row`、`dmc-retry-state`、`dmc-retry-summary`、`dmc-retry-unit`、`dmc-route`、`dmc-row`、`dmc-verdict`、`dmc-well`
 
 ## 5. 响应式：问容器，不问视口
 宿主在设置面板里只给这一页一个固定内容列：1920 视口下 **560px**，768 视口下 **484px**，
@@ -201,14 +218,13 @@ DeepSeek: DeepSeek V4.1 Flash   上下文 1048576  输出 384K
 本轮起用静态 fixture 代替 live 截图（**不要**为此再起第二个 `dsh web`，见 `docs/agent-safety.md`）：
 
 ```bash
-node scripts/_page-preview.mjs     # 生成 shots/_page-preview.html（560 / 484 / 106 三档，真实 sheet）
-node scripts/_shot-page.cjs        # 浅色 + 深色截图到 shots/page-preview-*.png，并打印几何测量
-node scripts/_drawer-preview.mjs   # 生成 shots/_drawer-preview.html（460px 抽屉面板，真实 drawer sheet）
-node scripts/_shot-drawer.cjs      # 抽屉两套主题的截图（model-config-37/38）
+node scripts/_page-preview.mjs     # 生成 shots/_page-preview.html（560 / 484 / 106 三档，真实两张 sheet，560 档含展开的目录区）
+node scripts/_shot-page.cjs        # 浅色 + 深色截图到 shots/page-preview-*.png，并打印行高/溢出几何
 ```
 
-fixture 渲染的是**真实**的 `modelConfigStyles.ts` 样式文本与真实 DOM 结构，只有宿主面板外壳是假的；
-它能证明排版与主题，不证明宿主窗格里的滚动、焦点链与抽屉挂载——那几项必须在真机里由用户确认。
+fixture 渲染的是**真实**的 `modelConfigStyles.ts` + `catalogStyles.ts` 样式文本与真实 DOM 结构，只有宿主面板外壳是假的；
+它能证明排版与主题，不证明宿主窗格里的滚动、焦点链与 Esc 分层——那几项必须在真机里由用户确认
+（§5.37 的真机手测记录在 DESIGN）。旧的 `_drawer-preview.mjs` / `_shot-drawer.cjs` 随抽屉一起退役。
 
 ## 8. 下一个表面怎么沿用
 

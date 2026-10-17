@@ -3,7 +3,7 @@
  *
  * WHAT THIS MODULE IS FOR. The tab ADR 0003 adds is a parallel, full-parity
  * surface, so almost every string it renders is taken verbatim from the official
- * Models page. `KEYS` is the CONTRACT the page (W4) and the drawer (W5) import:
+ * Models page. `KEYS` is the CONTRACT the page (W4) and the catalog region (W5) import:
  * those files are written against the key names below, so a key that is renamed
  * after this file lands is a breaking change, not a copy edit.
  *
@@ -33,8 +33,8 @@
  *      "enter your API keys" line stated nothing the ten rows did not already
  *      state; see `docs/design-model-config-tab.md` §11.
  *   6. `config.fetch.count`: the official discovery panel renders the fetched set
- *      as-is and never counts it, so this counting sentence is ours. The drawer
- *      prints it above the candidate list, and its `{inCatalog}` placeholder is
+ *      as-is and never counts it, so this counting sentence is ours. The catalog
+ *      region prints it above the candidate list, and its `{inCatalog}` placeholder is
  *      deliberately not called `{present}` — that name belongs to the row hook
  *      `data-present` on the same list.
  *   7. `config.key.clear`: the official card draws no clear entry at all, and the
@@ -55,7 +55,7 @@
  *      and its 默认 word, and the retry field's 修改 verb. Each exists because the
  *      row stopped carrying five controls and became a scan line plus a well;
  *      none of these words is the official page's, which edits in place.
- *  10. §5.36's four: the drawer roster's two short capacity names (上下文 / 输出),
+ *  10. §5.36's four: the roster's two short capacity names (上下文 / 输出),
  *      its "使用默认容量" sentence for a model with no overrides, and the "新模型"
  *      placeholder a just-added row states before it has an id.
  *
@@ -122,7 +122,7 @@ export const KEYS = {
   'config.readOnly': 'config.readOnly',
   // Official: conflict :3261/:3398. Host verbatim, so its zh says 「这张卡片」; the
   // official sentence assumes the official card, and D1 applies it to OUR row or
-  // drawer. Kept verbatim on purpose — if the surface word must change, it changes
+  // catalog region. Kept verbatim on purpose — if the surface word must change, it changes
   // here, once, and the gate stays green.
   'config.conflict': 'config.conflict',
 
@@ -213,7 +213,7 @@ export const KEYS = {
   'config.key.clear': 'config.key.clear',
   // AUTHORED (§5.35): the SHORT verbs of the settings well, where the field label
   // (凭据) already names the object, so 替换 API 密钥 / 清除密钥 would repeat it. The
-  // long forms above stay: the drawer and the row's own aria labels still use them.
+  // long forms above stay: the catalog region and the row's own aria labels still use them.
   'config.key.replaceShort': 'config.key.replaceShort',
   'config.key.clearShort': 'config.key.clearShort',
   // AUTHORED (§5.35): the credential field's PRIMARY action on a row that owes a
@@ -343,8 +343,6 @@ export const KEYS = {
   'config.applying': 'config.applying',
   // Official: cancel :3252/:3389.
   'config.cancel': 'config.cancel',
-  // Official: close :3251/:3388.
-  'config.close': 'config.close',
   // Official: savedProvider :3255/:3392. `{provider}`.
   'config.savedProvider': 'config.savedProvider',
   // Official: customized :3275/:3412.
@@ -352,7 +350,7 @@ export const KEYS = {
   // Official: customTag :3334/:3471.
   'config.customTag': 'config.customTag',
 
-  // --- model catalog (the drawer) --------------------------------------------
+  // --- model catalog (the row region) --------------------------------------------
   // Official: models :3283/:3420 (zh 模型目录).
   'config.models.label': 'config.models.label',
   // Official: modelsInherited :3284/:3421.
@@ -369,6 +367,14 @@ export const KEYS = {
   'config.models.empty': 'config.models.empty',
   // Official: resetModels :3286/:3423 (zh 恢复默认模型).
   'config.models.reset': 'config.models.reset',
+  // AUTHORED (§5.37): the catalog is the row's inline disclosure now, so its one
+  // action folds the region back into the row instead of closing a panel. The
+  // three guard keys are the page's answer to "this draft is not saved yet": the
+  // region must never disappear under an edit without the user saying so.
+  'config.catalog.collapse': 'config.catalog.collapse',
+  'config.catalog.unsaved': 'config.catalog.unsaved',
+  'config.catalog.keepEditing': 'config.catalog.keepEditing',
+  'config.catalog.discard': 'config.catalog.discard',
   // Official: model :3287/:3424.
   'config.model.label': 'config.model.label',
   // Official: modelAdvanced :3295/:3432.
@@ -397,7 +403,7 @@ export const KEYS = {
   'config.model.maxTokens': 'config.model.maxTokens',
   // Official: maxTokensPlaceholder :3294/:3431 (使用提供商默认值).
   'config.model.maxTokensPlaceholder': 'config.model.maxTokensPlaceholder',
-  // AUTHORED (§5.36): the drawer is a ROSTER now — one line per model — so the two
+  // AUTHORED (§5.36): the region is a ROSTER now — one line per model — so the two
   // capacity overrides are stated as facts beside the model, with these two short
   // field names instead of the official eight-character labels. `{value}` is the
   // stored draft literal ("1M", "128K"), shown as typed because this page never
@@ -616,7 +622,6 @@ export const zh: Record<ConfigKey, string> = {
   'config.apply': '保存',
   'config.applying': '保存中…',
   'config.cancel': '取消',
-  'config.close': '关闭',
   'config.savedProvider': '已保存 {provider}。',
   'config.customized': '自定义设置',
   'config.customTag': '自定义',
@@ -628,6 +633,10 @@ export const zh: Record<ConfigKey, string> = {
   'config.models.customized': '已自定义模型目录',
   'config.models.empty': '模型选择器中将不显示任何模型；目录外 ID 仍可直接发送。',
   'config.models.reset': '恢复默认模型',
+  'config.catalog.collapse': '收起',
+  'config.catalog.unsaved': '有未保存的模型修改。',
+  'config.catalog.keepEditing': '继续编辑',
+  'config.catalog.discard': '放弃修改',
   'config.model.label': '模型',
   'config.model.advanced': '模型选项',
   'config.model.inputTypes': '输入类型',
@@ -796,7 +805,6 @@ export const en: Record<ConfigKey, string> = {
   'config.apply': 'Apply',
   'config.applying': 'Applying…',
   'config.cancel': 'Cancel',
-  'config.close': 'Close',
   'config.savedProvider': 'Saved {provider}.',
   'config.customized': 'Customized settings',
   'config.customTag': 'Custom',
@@ -808,6 +816,10 @@ export const en: Record<ConfigKey, string> = {
   'config.models.customized': 'Customized model catalog',
   'config.models.empty': 'No models will be shown in the selector. Unlisted IDs can still be sent directly.',
   'config.models.reset': 'Restore defaults',
+  'config.catalog.collapse': 'Collapse',
+  'config.catalog.unsaved': 'Unsaved model changes.',
+  'config.catalog.keepEditing': 'Keep editing',
+  'config.catalog.discard': 'Discard changes',
   'config.model.label': 'Model',
   'config.model.advanced': 'Model options',
   'config.model.inputTypes': 'Input types',

@@ -18,7 +18,7 @@
  *
  * WHICH SHEETS IT READS. All three of the plugin's sheets, not just the seat's:
  * `styles.ts` (`dmp-`), `modelConfigStyles.ts` (the 模型配置 page, `dmc-`) and
- * `drawerStyles.ts` (that page's drawer, also `dmc-`). Before this gate was
+ * `catalogStyles.ts` (that page's inline catalog region, also `dmc-`). Before this gate was
  * widened, the two `dmc-` sheets were read by NO contrast measurement at all —
  * their copy had never been measured in either theme, which is the exact class of
  * gap this file exists to close.
@@ -303,16 +303,18 @@ const STYLES = [
   { selector: '.dmc-retry-input', note: '数字字段的值：页面上第二个真实表单控件，自带填充' },
   { selector: '.dmc-retry-unit', note: '单位词（次 / 秒）：数字旁边的那一个字' },
   { selector: '.dmc-retry-summary', note: '一行排期（5 次 · 首次等待 0.5s · 最长合计 ~15s）：tabular 数字' },
-  // --- the drawer (`dmc-`, drawerStyles.ts) ---------------------------------
-  { selector: '.dmc-drawer', note: 'drawer shell (its own fill)' },
-  { selector: '.dmc-drawer-title', note: 'drawer title' },
-  { selector: '.dmc-drawer-sub', note: 'drawer subtitle' },
-  { selector: '.dmc-btn', note: 'drawer control' },
-  { selector: '.dmc-drawer-section', note: 'drawer section heading' },
-  { selector: '.dmc-drawer-status', note: 'discovery status sentence' },
-  { selector: '.dmc-drawer-notice', note: 'drawer notice' },
-  { selector: '.dmc-drawer-error', note: 'Host diagnostic, verbatim' },
-  { selector: '.dmc-drawer-note', note: 'drawer footnote' },
+  // --- the catalog region (`dmc-`, catalogStyles.ts) ------------------------
+  // The region is the row's expanded body now, so its text is composited against
+  // the row's positional fill — not against a floating panel's own ground.
+  { selector: '.dmc-catalog-panel', note: 'the region shell (states the inherited ink and size)' },
+  { selector: '.dmc-catalog-title', note: 'catalog title (模型目录)' },
+  { selector: '.dmc-catalog-status', note: 'catalog state / discovery count sentence' },
+  { selector: '.dmc-btn', note: 'catalog control' },
+  { selector: '.dmc-btn-commit', note: 'catalog commit word (保存 / 添加所选)' },
+  { selector: '.dmc-catalog-section', note: 'catalog section heading (选择要添加的模型)' },
+  { selector: '.dmc-catalog-notice', note: 'catalog notice' },
+  { selector: '.dmc-catalog-error', note: 'Host diagnostic, verbatim' },
+  { selector: '.dmc-catalog-note', note: 'catalog footnote' },
   { selector: '.dmc-model-ref', note: 'roster line: the model id (§5.36)' },
   { selector: '.dmc-model-alias', note: 'roster line: the display name' },
   { selector: '.dmc-model-fact', note: 'roster line: the capacity facts (上下文 / 输出)' },
@@ -344,7 +346,7 @@ const PRIMITIVE_SIZE = { size: 11, weight: 400 }
 const SHEETS = [
   { file: 'src/client/styles.ts', owner: 'the composer seat (dmp-)', dmc: false },
   { file: 'src/client/modelConfigStyles.ts', owner: 'the 模型配置 page (dmc-)', dmc: true },
-  { file: 'src/client/drawerStyles.ts', owner: 'the model drawer (dmc-)', dmc: true },
+  { file: 'src/client/catalogStyles.ts', owner: 'the model catalog region (dmc-)', dmc: true },
 ]
 
 /**
@@ -540,8 +542,8 @@ const CONTAINERS = {
   '.dmp-legend-word': '.dmp-legend-item',
 
   // --- the 模型配置 page (`dmc-`) -------------------------------------------
-  // The page states its ink once, on `.dmc-page`, and the drawer states its own on
-  // `.dmc-drawer`; every rule below that does not declare a colour of its own
+  // The page states its ink once, on `.dmc-page`, and the catalog region states its own on
+  // `.dmc-catalog-panel`; every rule below that does not declare a colour of its own
   // reaches one of those through this chain. A class missing here has no
   // inheritable ink to find, which for a sized rule is a reported failure rather
   // than a pass.
@@ -599,24 +601,27 @@ const CONTAINERS = {
   '.dmc-retry-unit': '.dmc-retry-row',
   '.dmc-retry-summary': '.dmc-retry',
   '.dmc-retry-actions': '.dmc-retry',
-  // --- the drawer (`dmc-`) ---------------------------------------------------
-  '.dmc-drawer-scrim': null,
-  '.dmc-drawer': null,
-  '.dmc-drawer-head': '.dmc-drawer',
-  '.dmc-drawer-heading': '.dmc-drawer-head',
-  '.dmc-drawer-title': '.dmc-drawer-heading',
-  '.dmc-drawer-sub': '.dmc-drawer-heading',
-  '.dmc-drawer-close': '.dmc-drawer-head',
-  '.dmc-btn': '.dmc-drawer',
-  '.dmc-btn-commit': '.dmc-drawer-foot',
-  '.dmc-drawer-body': '.dmc-drawer',
-  '.dmc-drawer-foot': '.dmc-drawer',
-  '.dmc-drawer-section': '.dmc-drawer-body',
-  '.dmc-drawer-status': '.dmc-drawer-body',
-  '.dmc-drawer-notice': '.dmc-drawer-body',
-  '.dmc-drawer-error': '.dmc-drawer-body',
-  '.dmc-drawer-note': '.dmc-drawer-body',
-  '.dmc-model-list': '.dmc-drawer-body',
+  // --- the catalog region (`dmc-`), inside the provider row ------------------
+  // The region hangs off `.dmc-row` rather than off `null`: it is IN the row, so
+  // its text is composited against the row's positional fill tokens
+  // (`backdropsFor` below), which is the whole point of moving it inline.
+  '.dmc-catalog-panel': '.dmc-row',
+  '.dmc-catalog-head': '.dmc-catalog-panel',
+  '.dmc-catalog-heading': '.dmc-catalog-head',
+  '.dmc-catalog-title': '.dmc-catalog-heading',
+  '.dmc-catalog-close': '.dmc-catalog-head',
+  '.dmc-catalog-status': '.dmc-catalog-heading',
+  '.dmc-btn': '.dmc-catalog-panel',
+  '.dmc-btn-commit': '.dmc-catalog-foot',
+  '.dmc-catalog-body': '.dmc-catalog-panel',
+  '.dmc-catalog-foot': '.dmc-catalog-panel',
+  '.dmc-catalog-guard': '.dmc-catalog-body',
+  '.dmc-catalog-guard-actions': '.dmc-catalog-guard',
+  '.dmc-catalog-section': '.dmc-catalog-body',
+  '.dmc-catalog-notice': '.dmc-catalog-body',
+  '.dmc-catalog-error': '.dmc-catalog-body',
+  '.dmc-catalog-note': '.dmc-catalog-foot',
+  '.dmc-model-list': '.dmc-catalog-body',
   '.dmc-model-row': '.dmc-model-list',
   // §5.36 — the roster line. Its identity, its quiet fact line and its door hang off
   // the row; the fields and the reasoning editor hang off the well the door opens.
@@ -635,7 +640,7 @@ const CONTAINERS = {
   '.dmc-model-input': '.dmc-model-id',
   '.dmc-model-error': '.dmc-model-well',
   '.dmc-model-danger': '.dmc-model-well',
-  '.dmc-model-add': '.dmc-drawer-body',
+  '.dmc-model-add': '.dmc-catalog-body',
   '.dmc-reasoning': '.dmc-model-well',
   '.dmc-reasoning-head': '.dmc-reasoning',
   '.dmc-reasoning-row': '.dmc-reasoning',
@@ -644,11 +649,11 @@ const CONTAINERS = {
   '.dmc-reasoning-add': '.dmc-reasoning-head',
   '.dmc-reasoning-remove': '.dmc-reasoning-row',
   '.dmc-reasoning-help': '.dmc-reasoning',
-  '.dmc-discover-actions': '.dmc-drawer-body',
+  '.dmc-discover-actions': '.dmc-catalog-body',
   '.dmc-discover': '.dmc-discover-actions',
   '.dmc-discover-adopt': '.dmc-discover-actions',
   '.dmc-discover-tool': '.dmc-discover-actions',
-  '.dmc-discover-panel': '.dmc-drawer-body',
+  '.dmc-discover-panel': '.dmc-catalog-body',
   '.dmc-discover-tools': '.dmc-discover-panel',
   '.dmc-discover-list': '.dmc-discover-panel',
   '.dmc-discover-candidate': '.dmc-discover-list',
@@ -679,7 +684,7 @@ function bareSelector(selector) {
  *
  * This is what makes the backdrop honest rather than merely conservative: a row
  * carries the tone ladder (`--dsw-alias-interactive-bg-hover` while the pointer or
- * the open drawer is here, `-hover-danger` for a row that cannot serve), so text
+ * the open catalog region is here, `-hover-danger` for a row that cannot serve), so text
  * inside a row can sit on a fill the card backdrop never shows. Text that is not
  * in a row — the title, the ready statement, the add action — is judged against
  * the card backdrop alone.

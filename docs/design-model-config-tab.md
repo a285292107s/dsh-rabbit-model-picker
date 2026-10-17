@@ -1,5 +1,10 @@
 # 「模型配置」tab 的视觉方向
 
+> **历史设计稿（2026-10-17 加注）。** §5.5 的「右侧抽屉」与 §11.6.1 的 53 个 `dmc-drawer*` 类
+> 已被 [DESIGN §5.37](../DESIGN.md) 取代：模型目录现在是账本行内的展开区，不是弹层。
+> 当前类清单的唯一权威是 [docs/ui-language.md](ui-language.md) §4.7（`.taste-skill/audit-classes.mjs` 读它）。
+> 本文保留为当时的设计证据，不再逐条同步；与 §5.37 冲突处，以 §5.37 为准。
+
 > 本文是 `task-6` 的交付物：`settings.section` 里新增的「模型配置」页（与官方「模型」页**并存**，
 > 见 [ADR 0003](adr/0003-parallel-tab-with-full-parity.md)）的视觉方向、行内信息层级、tone 阶梯方案，
 > 以及实现者可直接使用的 `dmc-` 类名清单。

@@ -86,7 +86,7 @@ const CREDENTIAL_BATCH = 64
  * The page's fact store.
  *
  * Deliberately NOT a React hook: the same instance is read by the page and by
- * the drawer, so opening the drawer cannot kick off a second read of the same
+ * the catalog region, so opening it cannot kick off a second read of the same
  * directory and the two cannot show different revisions.
  */
 export class ModelConfigStore {
@@ -430,7 +430,7 @@ export class ModelConfigStore {
   /**
    * Ask a provider endpoint what models it serves.
    *
-   * A PURE READ, and that is the load-bearing fact for the drawer's three-step
+   * A PURE READ, and that is the load-bearing fact for the catalog's three-step
    * flow: the Host's own contract says discovery "reads or writes nothing" — it
    * describes a DRAFT, not a stored route — so the candidates this returns are
    * metadata the user may adopt, never a write. Merging them into the profile is

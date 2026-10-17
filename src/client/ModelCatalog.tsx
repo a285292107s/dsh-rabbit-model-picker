@@ -1,17 +1,19 @@
 /**
- * 模型抽屉：一个提供商的模型目录，以及「发现 → 勾选确认 → 落盘」三步。
+ * 模型目录：一个提供商的模型目录，以及「发现 → 勾选确认 → 落盘」三步。
  *
- * WHERE THIS RENDERS, AND WHY IT IS A DRAWER. The 模型配置 tab edits provider-level
- * fields in its rows (`docs/design-model-config-tab.md` §2.3); the catalog is one
- * provider's own array, too large for a row, so it slides in from the row's side
- * instead (`models-page-parity-checklist.md` §2: 右侧抽屉，从行旁滑出，保留页面上下文).
- * It is deliberately not a centered dialog and not a second page: the row that
- * opened it stays where it was, the list behind stays readable, and the drawer is
- * the only thing on the page allowed to float.
+ * WHERE THIS RENDERS, AND WHY IT IS INLINE. The 模型配置 tab is a PAGE inside the
+ * host's settings dialog, and that dialog is the only modal the task is allowed to
+ * have. The catalog used to be a right-side drawer (`position: fixed`, its own
+ * scrim, `role=dialog`, `aria-modal`, a Tab trap): a second viewport-level modal
+ * inside the host's, which at a wide viewport landed OUTSIDE the settings dialog
+ * and at 1920 covered 460 of the page's 560px content column. This component is
+ * therefore the provider row's own expanded region: it spans the content column,
+ * scrolls with the page, and carries no overlay semantics. The row above states
+ * whose catalog this is; the head below states only the catalog itself.
  *
- * ONE STORE, TWO SURFACES. The drawer reads and writes through the page's own
+ * ONE STORE, TWO SURFACES. The catalog reads and writes through the page's own
  * `ModelConfigStore` — never around it and never a second read of its own — so the
- * row and the drawer can never disagree about the same revision, and the drawer
+ * row and the catalog can never disagree about the same revision, and the catalog
  * inherits the store's conflict retry (re-read the revision, re-apply once).
  *
  * THE THREE STEPS, EACH ONE ITS OWN CALL. `store.discover` is a PURE READ: the
@@ -20,8 +22,9 @@
  * ticks; only then does the adopt action merge them into the draft layer and issue
  * ONE `write`. An empty answer never opens the checklist at all, and a refused
  * answer is printed exactly as the Host worded it (not localized, no prefix) in
- * session state, so closing the drawer loses it — which is what "not persisted"
- * means here.
+ * session state, so collapsing the catalog loses it — which is what "not persisted"
+ * means here. (The DRAFT is different: it is guarded. See `onRequestClose` and the
+ * unsaved-changes line.)
  *
  * THE CHECKLIST IS GROUPED, BECAUSE THE MEASURED ONE HAS 396 ROWS. A flat run of
  * 396 equal checkboxes is a wall rather than a list, so the listed candidates are
@@ -42,11 +45,11 @@
  * fields alone would delete whatever else an entry declares — `input` on the pi-ai
  * adapter, a field a later release adds — the moment the user saved anything.
  *
- * @module dsh-rabbit-model-picker/client/ModelDrawer
+ * @module dsh-rabbit-model-picker/client/ModelCatalog
  */
 
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import type {
   DiscoveredModel, ModelCatalogEntry, ModelConfigRow, ModelDiscoveryRequest, Translate,
 } from './contract.ts'
@@ -57,7 +60,7 @@ import {
 import { KEYS, VALIDATION_KEYS } from './modelConfigCopy.ts'
 import type { ConfigKey } from './modelConfigCopy.ts'
 import { formatContext, parseContext } from './params.ts'
-import { injectDrawerStyles } from './drawerStyles.ts'
+import { injectCatalogStyles } from './catalogStyles.ts'
 
 /** The wire's own name for the level that turns reasoning off. */
 const OFF_LEVEL = 'off'
@@ -66,20 +69,13 @@ const OFF_LEVEL = 'off'
 const EDITED_FIELDS: readonly string[] = ['id', 'name', 'contextWindow', 'maxTokens', 'reasoningEfforts']
 
 /**
- * The focusable descendants a Tab wrap walks.
- *
- * Listed rather than queried by a library: the drawer's whole keyboard contract is
- * "Tab reaches every control and stops at the ends", and this is the set of
- * controls the drawer renders.
+ * The model well whose Escape key this panel owns, when the event started inside
+ * one. The roster can have several wells open at once, and Escape must close the
+ * INNERMOST thing first: a model's well, then the discovery checklist, then (by
+ * bubbling to the section) the whole catalog. The row carries its draft key in
+ * `data-key`, so the handler can name the exact model without a second lookup map.
  */
-const FOCUSABLE = [
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  'a[href]',
-  '[tabindex]:not([tabindex="-1"])',
-].join(', ')
+const MODEL_ROW_SELECTOR = '.dmc-model-row'
 
 /** The key added rows get; seeded rows use their position, so a reload remounts nothing. */
 let addedKeySeed = 0
@@ -97,7 +93,7 @@ function nextAddedKey(): string {
  * Whether a value is a plain record.
  *
  * Both `modelConfigModel.ts` and `params.ts` keep an equivalent one-liner private,
- * and neither of the two frozen pure functions exposes one, so the drawer carries
+ * and neither of the two frozen pure functions exposes one, so the catalog carries
  * its own rather than reaching into either module's internals.
  * @param value - the value to test.
  * @returns whether it can be read by key.
@@ -122,7 +118,7 @@ interface DraftReasoning {
 }
 
 /**
- * One model as the drawer edits it.
+ * One model as the catalog edits it.
  *
  * `extra` carries every field this editor does not own, because the write replaces
  * the whole `models` array: a draft rebuilt from the four editable fields alone
@@ -158,7 +154,7 @@ interface ModelEdit {
 /**
  * The discovery sub-flow's state.
  *
- * Every arm of this union lives in component state and dies with the drawer: the
+ * Every arm of this union lives in component state and dies with the region: the
  * candidate list, the ticks, and the Host's refusal are session facts, never
  * settings.
  */
@@ -316,7 +312,7 @@ function groupByPrefix(candidates: readonly DiscoveredModel[]): readonly Candida
  * reader: a catalog the official page wrote outside that range must survive an
  * edit made here, so a field still holding exactly the text it was seeded with
  * keeps the number it came from instead of being refused (which would block every
- * save in the drawer until the user destroyed a value the adapter was using).
+ * save in the region until the user destroyed a value the adapter was using).
  * @param text - the field's text.
  * @param stored - the number the seed text came from, when it was one.
  * @returns the count, undefined when the field is empty, null when it is not a capacity.
@@ -395,7 +391,7 @@ function storedValueOf(model: DraftModel): Record<string, unknown> {
  * A key-order-independent rendering of a value.
  *
  * `pathOps` compares with `JSON.stringify`, which is sensitive to key order; the
- * drawer needs its own "did anything move" answer that is not, so that a draft
+ * catalog needs its own "did anything move" answer that is not, so that a draft
  * which merely re-serializes the stored fields (extra fields first) does not read
  * as an edit and does not make the save button claim there is something to write.
  * @param value - the value to render.
@@ -427,7 +423,7 @@ function reasoningProblemOf(rows: readonly DraftReasoning[]): ConfigKey | undefi
 }
 
 /**
- * Every draft row the drawer would refuse to write.
+ * Every draft row the catalog would refuse to write.
  * @param models - the draft catalog.
  * @param t - the surface's translator.
  * @returns the sentence to show on each offending row, by row key.
@@ -456,28 +452,39 @@ function problemsOf(models: readonly DraftModel[], t: Translate): ReadonlyMap<st
   return messages
 }
 
-/** Props the 模型配置 page dispatches its drawer with. */
-export interface ModelDrawerProps {
-  /** The provider row this drawer belongs to. */
+/** Props the 模型配置 page dispatches its catalog region with. */
+export interface ModelCatalogProps {
+  /** The provider row this catalog belongs to. */
   readonly row: ModelConfigRow
-  /** The page's fact store: the drawer reads and writes through it, never around it. */
+  /** The page's fact store: the catalog reads and writes through it, never around it. */
   readonly store: ModelConfigStore
   /** The surface's translator. */
   readonly t: Translate
-  /** Close the drawer. */
-  readonly onClose: () => void
+  /**
+   * Report the draft's dirty state to the page, which owns the collapse guard:
+   * the page asks whether to discard before it removes this region.
+   */
+  readonly onDirtyChange: (dirty: boolean) => void
+  /** Ask the page to collapse; the page decides whether the draft needs confirming. */
+  readonly onRequestClose: () => void
+  /** Whether the page is holding a discard confirmation open. */
+  readonly confirming: boolean
+  /** Dismiss that confirmation and keep editing. */
+  readonly onKeepEditing: () => void
+  /** Discard the draft and proceed with the page's pending action. */
+  readonly onDiscard: () => void
 }
 
 /**
- * The model drawer for one provider row.
- * @param props - the row, the store, the translator and the close action.
- * @returns the scrim and the drawer panel.
+ * The model catalog for one provider row, as the row's expanded region.
+ * @param props - the row, the store, the translator, and the page's collapse guard.
+ * @returns the catalog region.
  */
-export function ModelDrawer(props: ModelDrawerProps): ReactElement {
-  const { row, store, t, onClose } = props
+export function ModelCatalog(props: ModelCatalogProps): ReactElement {
+  const { row, store, t, onRequestClose } = props
   // The snapshot is named as the server snapshot too: this surface only ever runs
   // in the browser, but the third argument is what lets a plain renderer render
-  // the drawer at all (without it React refuses with "Missing getServerSnapshot"),
+  // the catalog at all (without it React refuses with "Missing getServerSnapshot"),
   // and it makes the markup assertable without a DOM.
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
   const settingsNs = row.entry.settingsNs
@@ -486,10 +493,10 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
   const namespace = snapshot.namespaces.get(settingsNs)
   const writable = snapshot.writable
 
-  // The sheet is injected by the surface that renders it, so the drawer is styled
+  // The sheet is injected by the surface that renders it, so the catalog is styled
   // wherever it is mounted and the injection stays idempotent (the injector
   // replaces its own element and the disposer removes only what it created).
-  useEffect(() => injectDrawerStyles(), [])
+  useEffect(() => injectCatalogStyles(), [])
 
   const mounted = useRef(true)
   useEffect(() => {
@@ -497,30 +504,10 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
     return () => { mounted.current = false }
   }, [])
 
-  // Keyboard contract, first half: opening the drawer moves focus into it, so Tab
-  // starts at the first control instead of walking the page behind it.
+  // The region is inside the provider row, so focus is NOT moved on open: the
+  // model cell that opened it keeps focus and Tab continues into the region. When
+  // the page collapses it, the page returns focus to that cell.
   const panelRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => { panelRef.current?.focus() }, [])
-
-  // Escape closes, wherever focus is inside the drawer. It is bound on the
-  // document rather than on the panel because the panel is not the only thing a
-  // pointer can target while the drawer is open.
-  //
-  // CAPTURE, AND CONSUME. A bubble-phase listener on the document fires AFTER the
-  // host settings dialog's own React keydown handler, so by the time it runs the
-  // panel has already decided to close — stopping propagation there is too late,
-  // and one Escape closed the drawer AND the entire settings panel. Capturing on
-  // the document (the outermost node) runs before the host's handler, and
-  // stopping propagation there is what keeps the keystroke inside the drawer.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      event.stopPropagation()
-      onClose()
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => { document.removeEventListener('keydown', onKeyDown, true) }
-  }, [onClose])
 
   const levelChoices = useMemo(
     () => reasoningLevelChoices(namespace),
@@ -544,6 +531,71 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
   const dirty = canonical(models.map(storedValueOf)) !== baseline
   const problems = useMemo(() => problemsOf(models, t), [models, t])
   const invalid = problems.size > 0
+
+  // The page owns the collapse guard (it also owns the pending switch target), so
+  // the region reports its draft state and clears it on unmount: a stale "dirty"
+  // left behind by a removed region would make the next collapse ask a question
+  // about a draft that no longer exists.
+  useEffect(() => { props.onDirtyChange(dirty) }, [dirty, props.onDirtyChange])
+  useEffect(() => () => { props.onDirtyChange(false) }, [props.onDirtyChange])
+
+  /**
+   * Escape, innermost first. It is a DOCUMENT CAPTURE listener, not a React
+   * handler on the region, because the host settings dialog also closes on Escape
+   * and its handler would win otherwise — the same ordering the old drawer recorded
+   * (a bubble-phase document listener fires after the host's handler). Capture runs
+   * first and consumes the keystroke, so one Escape closes one layer:
+   *
+   *   1. the provider's own key field owns its Escape (we return without stopping);
+   *   2. an open model well closes, focus returns to that row's 编辑 door;
+   *   3. an open discovery checklist closes, focus returns to 获取可用模型;
+   *   4. the discard question is answered (keep editing);
+   *   5. otherwise the page is asked to collapse the region (which may raise the
+   *      same question when the draft is dirty).
+   *
+   * The handler reads the LATEST render through a ref, so it can be registered once
+   * and still see the current draft and discovery state.
+   */
+  const escapeRef = useRef<(event: KeyboardEvent) => void>(() => {})
+  escapeRef.current = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') return
+    const target = event.target instanceof Element ? event.target : null
+    // The provider's settings well is a sibling, not a layer of this region; its
+    // key field cancels itself and must not also lose the catalog.
+    if (target?.closest('.dmc-well') != null) return
+    event.stopPropagation()
+    event.preventDefault()
+    if (props.confirming) {
+      props.onKeepEditing()
+      return
+    }
+    const modelRow = target?.closest(MODEL_ROW_SELECTOR) ?? null
+    if (modelRow !== null) {
+      const key = modelRow.getAttribute('data-key')
+      const model = key === null ? undefined : models.find(entry => entry.key === key)
+      // Only an OPEN well is a layer to close. Without this guard, Escape on the
+      // row's `编辑` door would keep being consumed by a well that is already
+      // closed, and the region itself could never be collapsed from the keyboard.
+      if (key !== null && model?.open === true) {
+        modelRow.querySelector<HTMLElement>('.dmc-model-edit')?.focus()
+        patch(rows => rows.map(entry => entry.key === key ? { ...entry, open: false } : entry))
+        return
+      }
+    }
+    if (discovery.kind !== 'idle') {
+      // A refused or empty answer is session state and dies with the checklist;
+      // closing the checklist is the gesture that says "I am done with this".
+      panelRef.current?.querySelector<HTMLElement>('.dmc-discover')?.focus()
+      setDiscovery({ kind: 'idle' })
+      return
+    }
+    props.onRequestClose()
+  }
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void => { escapeRef.current(event) }
+    document.addEventListener('keydown', listener, true)
+    return () => { document.removeEventListener('keydown', listener, true) }
+  }, [])
 
   /** Replace the draft rows, dropping any message that described the old ones. */
   const patch = (change: (rows: readonly DraftModel[]) => readonly DraftModel[]): void => {
@@ -633,7 +685,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
   const writeModels = async (next: readonly DraftModel[]): Promise<boolean> => {
     if (namespace === undefined) return false
     const profile = asRecord(readPath(namespace.value, settingsPath)) ?? {}
-    // `pathOps` against the profile the drawer is showing, so only the fields that
+    // `pathOps` against the profile the catalog is showing, so only the fields that
     // moved become ops. `after` carries the effective profile plus the new array,
     // which is what keeps this write from unsetting a field it does not own.
     const ops = pathOps(settingsPath, profile, { ...profile, models: next.map(storedValueOf) })
@@ -752,56 +804,57 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
     if (written && mounted.current) setDiscovery({ kind: 'idle' })
   }
 
-  // Keyboard contract, second half: Tab walks the controls and turns around at
-  // the ends, so nothing behind the drawer can be reached while it is open.
-  const onPanelKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== 'Tab') return
-    const panel = panelRef.current
-    if (panel === null) return
-    const focusables = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)]
-    const first = focusables[0]
-    const last = focusables[focusables.length - 1]
-    if (first === undefined || last === undefined) return
-    const active = document.activeElement
-    if (!event.shiftKey && active === last) {
-      event.preventDefault()
-      first.focus()
-      return
-    }
-    if (event.shiftKey && (active === first || active === panel)) {
-      event.preventDefault()
-      last.focus()
-    }
-  }
+  // The region's head states the catalog itself. It does NOT repeat the provider's
+  // name and route id: the ledger row directly above it already states both, and a
+  // second copy would make the expanded region read as a detached card again.
+  const catalogHead = (
+    <div className="dmc-catalog-head">
+      <div className="dmc-catalog-heading">
+        <h2 className="dmc-catalog-title">{t(KEYS['config.models.label'])}</h2>
+        <span className="dmc-catalog-status">
+          {storedModels.length > 0
+            ? t(KEYS['config.models.customized'])
+            : t(KEYS['config.models.inherited'])}
+        </span>
+      </div>
+      <button type="button" className="dmc-btn dmc-catalog-close" onClick={onRequestClose}>
+        {t(KEYS['config.catalog.collapse'])}
+      </button>
+    </div>
+  )
 
-  const titleId = `dmc-drawer-title-${row.entry.provider}`
-
-  /** The panel and its scrim. */
-  const panel = (body: ReactNode, foot: ReactNode): ReactElement => (
-    <>
-      <div className="dmc-drawer-scrim" aria-hidden="true" onClick={onClose} />
-      <div
-        className="dmc-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        ref={panelRef}
-        onKeyDown={onPanelKeyDown}
-      >
-        <div className="dmc-drawer-head">
-          <div className="dmc-drawer-heading">
-            <h2 className="dmc-drawer-title" id={titleId}>{row.entry.displayName}</h2>
-            <span className="dmc-drawer-sub">{row.entry.provider}</span>
-          </div>
-          <button type="button" className="dmc-btn dmc-drawer-close" onClick={onClose}>
-            {t(KEYS['config.close'])}
+  // The collapse guard. It is a line in the region, not a dialog on top of it: the
+  // page only removes a dirty draft after this line has been answered.
+  const guardLine = props.confirming
+    ? (
+      <div className="dmc-catalog-guard" role="alert">
+        <p className="dmc-catalog-notice">{t(KEYS['config.catalog.unsaved'])}</p>
+        <div className="dmc-catalog-guard-actions">
+          <button type="button" className="dmc-btn" onClick={props.onKeepEditing}>
+            {t(KEYS['config.catalog.keepEditing'])}
+          </button>
+          <button type="button" className="dmc-btn dmc-btn-commit" onClick={props.onDiscard}>
+            {t(KEYS['config.catalog.discard'])}
           </button>
         </div>
-        <div className="dmc-drawer-body">{body}</div>
-        {foot}
       </div>
-    </>
+    )
+    : null
+
+  /** The region: the row's expanded body, with the page's guard line above it. */
+  const panel = (body: ReactNode, foot: ReactNode): ReactElement => (
+    <div
+      className="dmc-catalog-panel"
+      id={`dmc-catalog-${row.entry.provider}`}
+      ref={panelRef}
+    >
+      {catalogHead}
+      <div className="dmc-catalog-body">
+        {guardLine}
+        {body}
+      </div>
+      {foot}
+    </div>
   )
 
   // A route with no settings address has no profile to write and inherits the
@@ -812,11 +865,11 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
       <>
         {snapshot.status === 'error' ? (
           <>
-            <p className="dmc-drawer-notice">{t(KEYS['config.loadFailed'])}</p>
-            {snapshot.error === null ? null : <p className="dmc-drawer-error">{snapshot.error}</p>}
+            <p className="dmc-catalog-notice">{t(KEYS['config.loadFailed'])}</p>
+            {snapshot.error === null ? null : <p className="dmc-catalog-error">{snapshot.error}</p>}
           </>
         ) : (
-          <p className="dmc-drawer-status">{t(KEYS['config.models.inherited'])}</p>
+          <p className="dmc-catalog-status">{t(KEYS['config.models.inherited'])}</p>
         )}
       </>,
       null,
@@ -881,6 +934,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
       <li
         key={model.key}
         className="dmc-model-row"
+        data-key={model.key}
         data-invalid={message === undefined ? undefined : 'true'}
         data-well={model.open ? 'true' : undefined}
       >
@@ -1072,19 +1126,12 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
 
   const body = (
     <>
-      {/* The catalog section: its title, and the state of the catalog at the far
-          end of the same line. The first `.dmc-drawer-status` in the drawer is
-          this one, which is also the sentence that says whether the list below is
-          the adapter's own or the user's. */}
-      <h3 className="dmc-drawer-section">
-        {t(KEYS['config.models.label'])}
-        <span className="dmc-drawer-status">
-          {storedModels.length > 0 ? t(KEYS['config.models.customized']) : t(KEYS['config.models.inherited'])}
-        </span>
-      </h3>
-      {writable ? null : <p className="dmc-drawer-notice">{t(KEYS['config.readOnly'])}</p>}
+      {/* The head above states the catalog's own state (custom or inherited), so
+          the body starts with the state that needs the reader: a read-only
+          deployment, and the empty-catalog sentence. */}
+      {writable ? null : <p className="dmc-catalog-notice">{t(KEYS['config.readOnly'])}</p>}
       {storedModels.length === 0 && models.length === 0
-        ? <p className="dmc-drawer-notice">{t(KEYS['config.models.empty'])}</p>
+        ? <p className="dmc-catalog-notice">{t(KEYS['config.models.empty'])}</p>
         : null}
       <ul className="dmc-model-list">{models.map(model => modelRow(model))}</ul>
       {/* The roster's add entry: one full-width line under the last model, the same
@@ -1104,19 +1151,19 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
         >
           {t(KEYS['config.fetch.action'])}
         </button>
-        {discovery.kind === 'fetching' ? <span className="dmc-drawer-status">{t(KEYS['config.fetch.fetching'])}</span> : null}
+        {discovery.kind === 'fetching' ? <span className="dmc-catalog-status">{t(KEYS['config.fetch.fetching'])}</span> : null}
       </div>
-      {discovery.kind === 'needsBaseUrl' ? <p className="dmc-drawer-notice">{t(KEYS['config.fetch.needsBaseUrl'])}</p> : null}
-      {discovery.kind === 'empty' ? <p className="dmc-drawer-notice">{t(KEYS['config.fetch.empty'])}</p> : null}
+      {discovery.kind === 'needsBaseUrl' ? <p className="dmc-catalog-notice">{t(KEYS['config.fetch.needsBaseUrl'])}</p> : null}
+      {discovery.kind === 'empty' ? <p className="dmc-catalog-notice">{t(KEYS['config.fetch.empty'])}</p> : null}
       {/* The Host's refusal, verbatim: not localized, not prefixed. It lives in
-          component state, so it is gone when the drawer closes. */}
-      {discovery.kind === 'error' ? <p className="dmc-drawer-error">{discovery.message}</p> : null}
+          component state, so it is gone when the region collapses. */}
+      {discovery.kind === 'error' ? <p className="dmc-catalog-error">{discovery.message}</p> : null}
 
       {/* Step two: the checklist. It exists only while a non-empty answer is held. */}
       {discovery.kind === 'ready' ? (
         <div className="dmc-discover-panel">
-          <h3 className="dmc-drawer-section">{t(KEYS['config.fetch.title'])}</h3>
-          <p className="dmc-drawer-notice">{t(KEYS['config.fetch.description'])}</p>
+          <h3 className="dmc-catalog-section">{t(KEYS['config.fetch.title'])}</h3>
+          <p className="dmc-catalog-notice">{t(KEYS['config.fetch.description'])}</p>
           <input
             className="dmc-discover-search"
             type="search"
@@ -1132,7 +1179,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
                 choosing from: 396 candidates is a set to filter and take from
                 rather than a list to read top to bottom. Tabular figures keep it
                 from shifting as the filter narrows it. */}
-            <span className="dmc-drawer-status">
+            <span className="dmc-catalog-status">
               {t(KEYS['config.fetch.count'], {
                 count: String(visible.length),
                 inCatalog: String(listedInCatalog),
@@ -1156,7 +1203,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
             </button>
           </div>
           {visible.length === 0 ? (
-            <p className="dmc-drawer-notice">{t(KEYS['config.fetch.noMatches'])}</p>
+            <p className="dmc-catalog-notice">{t(KEYS['config.fetch.noMatches'])}</p>
           ) : (
             <ul className="dmc-discover-list">
               {listedGroups.map((group) => (
@@ -1201,7 +1248,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
               ))}
             </ul>
           )}
-          {discovery.note === null ? null : <p className="dmc-drawer-error">{discovery.note}</p>}
+          {discovery.note === null ? null : <p className="dmc-catalog-error">{discovery.note}</p>}
           {/* Step three: merge what is ticked into the draft and write once. */}
           <div className="dmc-discover-actions">
             <button
@@ -1219,7 +1266,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
   )
 
   const foot = (
-    <div className="dmc-drawer-foot">
+    <div className="dmc-catalog-foot">
       <button
         type="button"
         className="dmc-btn dmc-btn-commit"
@@ -1236,7 +1283,7 @@ export function ModelDrawer(props: ModelDrawerProps): ReactElement {
       >
         {t(KEYS['config.models.reset'])}
       </button>
-      {note === null ? null : <span className="dmc-drawer-note">{note}</span>}
+      {note === null ? null : <span className="dmc-catalog-note">{note}</span>}
     </div>
   )
 

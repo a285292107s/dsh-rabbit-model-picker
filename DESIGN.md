@@ -2449,6 +2449,91 @@ ink 与 size，且只有 primary / secondary 可作文字。
 2. 不给花名册加列头（行内第二行已经自带标签，列头只是重复）；
 3. 不在行上做推理档位的预览（档位是罕见配置，行只陈述容量）。
 
+### 5.37 抽屉改回内容列：模型目录成为行内展开区（2026-10-17，接 §5.36）
+
+**动因。** 用户看真机后的反馈：**设置是弹窗，设置→模型配置里又是右侧抽屉**——两个弹层语法打架。
+量了一下，这不是观感问题，是结构问题：
+
+| 观察 | 实测 / 代码 |
+|---|---|
+| 抽屉 `position: fixed` 贴视口右缘，设置弹窗居中 | 宽屏（1587）下抽屉整个落在设置弹窗**外面**，两者之间还有一条缝；窄屏下抽屉从弹窗右缘盖进来 |
+| 宿主给这一页的内容列只有 560 / 484 / 106（1920 / 768 / 390） | 抽屉固定 **460**：覆盖内容列 **82% / 95% / 全屏**，剩 100px；「保留页面上下文」名存实亡 |
+| 抽屉自带 scrim + `role=dialog` + `aria-modal` + Tab 陷阱 + document 捕获 Esc | 设置弹窗本身已是 modal：屏幕上两个 scrim、两个 `aria-modal`，`aria-modal` 套在 `aria-modal` 里；`ModelDrawer.tsx` 的注释自己写着「不 capture 就一次 Esc 连设置一起关」 |
+| 抽屉只能问 `@media`（fixed → 视口宽度），整页其余部分问 `@container` | 同一页两套响应式语法 |
+| 关闭抽屉后焦点没有归处 | `ModelConfigPage` 没有任何 focus 恢复路径；焦点落在 `<body>`，这是可复现的键盘缺陷 |
+
+宿主自己的官方 **模型** 页把 API 密钥、模型 ID/显示名、添加模型、获取可用模型全部摊在同一个内容列里，
+没有第二层弹层。**所以「一个内容列里把模型目录摊开」不是没试过，是宿主的既有做法。**
+
+**决定：模型目录回到账本行内，设置弹窗保持唯一一层 modal。**
+
+- 模型格（`N 个模型` / `默认`）从「开抽屉」改成**disclosure**：`aria-expanded` + `aria-controls`，
+  无 `aria-haspopup`。展开区是 provider `<li>` 的最后一个孩子，`grid-column: 2 / -1`，
+  与设置井同一条左侧脊、同一份内容列、同一份页面滚动。
+- 展开区**无** `position: fixed` / scrim / 阴影 / 圆角 / 入场动画 / `role=dialog` / `aria-modal` / Tab 陷阱。
+- 头部只陈述目录自己（`模型目录` + 自定义/默认），**不重复**提供商名与 route id——上面那一行账本已经说了。
+- 花名册、井、发现三步、保存/恢复默认原样保留（§5.36 的排版不变，只换了外壳）。
+- 两个展开区的关系：**开目录会收起设置井**（收起井本来就等于取消半打的 key），
+  **开设置井不收起目录**（收起目录会丢模型草稿；这是有意的例外）。
+- **草稿守卫**：目录收起 / 切到另一个提供商前，若有未保存修改，展开区里出现一行
+  「有未保存的模型修改。继续编辑 / 放弃修改」（4px 红竖条 + 句子 + 两个词），页面不 silently 丢稿。
+  这是抽屉时代欠的债：抽屉卸载即丢稿，只是没人问过。
+- **Esc 分层**（document capture，一次只关一层）：
+  1. 设置井的 key 字段自己消费 Esc（capture 直接 return）；
+  2. 打开着的模型井 → 关井，焦点回该行的 `编辑`；
+  3. 打开着的发现清单 → 关清单，焦点回 `获取可用模型`；
+  4. 未保存问题 → 回到「继续编辑」；
+  5. 否则请页面收起目录（脏稿则弹回第 4 条）；目录关掉后，再按 Esc 才轮到宿主关设置面板。
+- **焦点**：收起目录后焦点回模型格（`dmc-catalog-btn-<provider>`）；开目录不抢焦点，
+  Tab 从模型格自然走进展开区。上一个「关抽屉后焦点落 body」的缺陷在行内形态里一并修掉。
+- 类名与文件：`ModelDrawer.tsx` → `ModelCatalog.tsx`、`drawerStyles.ts` → `catalogStyles.ts`、
+  `injectDrawerStyles` → `injectCatalogStyles`；`dmc-drawer*` 14 个类名全部退役，新增
+  `dmc-catalog-panel/head/heading/title/status/close/body/foot/guard` 九个；
+  行的开合钩子 `data-open` → `data-catalog`。展开区窄分支改用页面的 `@container`。
+
+**门的修订（不是放宽）**
+
+1. `selfcheck-static.mjs`：三条路径改名；`MODEL_CONFIG_TSX/SHEETS` 换新文件；
+   `DMC_NEW_CLASSES` 增加展开区九个类（各有顶层规则）；`DMC_RETIRED_CLASSES` 增加 14 个 `dmc-drawer*`；
+   删除「抽屉的窄分支用 @media」那条，改成**目录区必须问 @container、必须 `grid-column: 2/-1`、
+   不得 fixed、不得有 scrim**；transient fill 钩子改 `[data-catalog]`；`REMOVED_MODULES` 与
+   退役名扫描加入旧文件/旧前缀。
+2. `check-contrast.mjs`：目录区的父子链改挂 `.dmc-row`（现在文字确实压在行的 positional fill 上），
+   注册新画字类（panel / title / status / btn / btn-commit / section / notice / error / note）。
+3. `test-model-config-copy.mjs`：`config.close` 退役，新增
+   `config.catalog.collapse|unsaved|keepEditing|discard` 四个键（zh/en/KEYS 同序）。
+4. `verify-model-config-tab.cjs`：A7 改成「打开一行设置井读到凭据」；A8 改成「展开区在 row 内、
+   无 fixed/scrim/aria-modal、起于名称脊、止于行右沿」；A9/A11 的根选择器换成 `.dmc-catalog-panel`；
+   A10 从「Tab 不逃出抽屉」改成「Tab 走进并离开展开区」；A12 从「Esc 只关抽屉」改成「Esc 只收起展开区」。
+   截图 `model-config-39-catalog-inline-dark.png`。
+
+**证据**
+
+- 真机（3080，932 视口）手测：点 `7 个模型` → 展开区在行内、占满内容列；`编辑` 开井；
+  Esc 依次「关井（焦点回编辑）→ 收起目录（焦点回模型格）→ 关设置」；
+  改模型 ID 后点 `收起` → 出现未保存问题，`放弃修改` 收起；改 ID 后点另一个提供商的 `模型格`
+  → 同一问题阻止切换，`放弃修改` 后切到新提供商；空目录提供商（xiaomi）显示默认模型句。
+- 静态门：`typecheck` / `build` / `test:fresh` / `selfcheck` / `contrast` / 六个单测 / 22 个 mutation 全绿。
+- 静态预览：`shots/model-config-40-catalog-inline-dark.png` / `-41-catalog-inline-light.png`（560px 单栏，
+  含展开的 openrouter 目录区）；真机截图：`shots/model-config-39-catalog-inline-dark.png`（3080，932 视口）。
+- 旧的 `shots/model-config-37/38-drawer-*.png` 是**历史证据**（§5.36 的 460px 抽屉），不再是当前形态。
+
+**已知边界（如实记）**
+
+- **页面更长**：一个 7 模型的目录展开后约 +600px，页面滚动变长；换来的是零弹层与 100% 内容列宽。
+  一次只开一个提供商的目录（页面只有一份 `catalog` 状态），换提供商时直接切。
+- **A8–A12 是改写，不是本轮跑过的门**：真机手测覆盖了同样的断言，但
+  `verify-model-config-tab.cjs` 需要单独起验证实例（见 `docs/agent-safety.md`），本轮没有跑。
+- **设置井与目录可同时打开**（见上「有意的例外」），因此同一行可能很长；不强制互斥是为了不丢草稿。
+
+**有意不做**
+
+1. 不把设置外壳也改成抽屉/整页：外壳是宿主的，插件只拥有 section；就算能改，也只是把一种两层换成另一种两层。
+2. 不做「抽屉贴回弹窗内」的过渡版本：420/560 仍盖 75%，仍是第二个 modal，返工不值得。
+3. 不把发现清单搬进弹窗：那正是本轮要消灭的第二层。
+
+> 决策记录：[ADR 0004](docs/adr/0004-inline-catalog-region.md)（取代 Q27 的右侧抽屉形态）。
+
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 
 环境：dsh 0.2.0-rc.2，profile `web`，`dmp-verify` 会话接在 http://127.0.0.1:3080。

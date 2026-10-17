@@ -4,13 +4,15 @@
  * WHAT THIS SURFACE IS. The parallel settings tab ADR 0003 adds (the official
  * Models page keeps its own id and stays untouched). This file owns the PAGE half:
  * a provider row per directory entry, edited in place — no popover, no second
- * page. The model catalog itself lives in the drawer (`ModelDrawer.tsx`, task-8),
- * which is why the row only carries a door to it.
+ * page. The model catalog is the row's own expanded region (`ModelCatalog.tsx`),
+ * so the settings dialog remains the only modal the task has: the page never opens
+ * a second overlay, and the catalog's rows are a disclosure of the provider row
+ * above them.
  *
  * EVERY FACT COMES FROM `ModelConfigStore`, and every write goes back through it.
  * The page keeps no copy of the directory, the profile or the credential state:
  * local state here is only what the page itself is doing (a half-typed key, a
- * pending write, an open settings well, an open drawer, an open add picker).
+ * pending write, an open settings well, an open catalog, an open add picker).
  * That is what keeps this tab and the official Models tab from disagreeing — the
  * failure the two-surface design exists to avoid.
  *
@@ -51,7 +53,7 @@ import {
   credentialRefFor, deriveKeyRef, isRemovable, keyConfigured, keyRefOf, keyWritable, modelsOf,
   pathOps, protocolChoices, providerUsable, readPath, retryCapable,
 } from './modelConfigModel.ts'
-import { ModelDrawer } from './ModelDrawer.tsx'
+import { ModelCatalog } from './ModelCatalog.tsx'
 import { RetryEditor } from './RetryEditor.tsx'
 import { injectModelConfigStyles } from './modelConfigStyles.ts'
 
@@ -197,8 +199,15 @@ interface ProviderRowProps {
   readonly pending: string | undefined
   /** This session's failure for this row, if any. */
   readonly failure: string | undefined
-  readonly drawerOpen: boolean
-  readonly onOpenDrawer: () => void
+  /** Whether this row's catalog region is expanded below it. */
+  readonly catalogOpen: boolean
+  /** Whether the page is holding a discard confirmation for this catalog open. */
+  readonly catalogConfirming: boolean
+  readonly onOpenCatalog: () => void
+  readonly onRequestCloseCatalog: () => void
+  readonly onKeepEditingCatalog: () => void
+  readonly onDiscardCatalog: () => void
+  readonly onCatalogDirty: (dirty: boolean) => void
   readonly onSaveKey: (value: string) => void
   readonly onClearKey: () => void
   readonly onProtocol: (protocol: string) => void
@@ -209,7 +218,7 @@ interface ProviderRowProps {
  * One provider row: one ledger line, plus the settings well it opens.
  *
  * THE LINE holds the row's three facts on four shared tracks — identity on the
- * left (name + route id), the model cell (a fact that is also the drawer's door),
+ * left (name + route id), the model cell (a fact that is also the region's door),
  * the answer word, and the row's one door (管理). The answer word and the door are
  * right-aligned, so their right edges coincide down the whole list; that shared
  * right edge is what makes eleven rows read as one ledger rather than eleven cards.
@@ -263,6 +272,20 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
   const [wellOpen, setWellOpen] = useState(false)
   const shown = reading.diagnostic
 
+  // Opening the catalog closes this row's settings well. The well's closing
+  // gesture already means "cancel the half-typed key" (see the manage button), so
+  // this is the same rule applied by the other door — and it keeps the two
+  // expanded regions from stacking. The reverse is deliberately NOT done: opening
+  // the well leaves the catalog open, because collapsing the catalog would throw
+  // away a model draft that the user never asked to discard.
+  useEffect(() => {
+    if (!props.catalogOpen) return
+    setEditing(false)
+    setDraft('')
+    setRetryOpen(false)
+    setWellOpen(false)
+  }, [props.catalogOpen])
+
   /**
    * Commit the typed key.
    *
@@ -293,7 +316,7 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
       data-state={reading.answer}
       data-error={reading.diagnostic === undefined ? undefined : 'true'}
       data-usable={reading.answer === 'unreachable' ? 'false' : 'true'}
-      data-open={props.drawerOpen ? 'true' : undefined}
+      data-catalog={props.catalogOpen ? 'true' : undefined}
       data-well={wellOpen ? 'true' : undefined}
     >
       <span
@@ -311,16 +334,18 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
       </span>
 
       {/* Segment one, middle: the model cell is a FACT (how many models this
-          provider's own catalog holds) and the door to the drawer that curates it.
-          A provider with no catalog of its own says 默认 and the title carries the
-          long sentence the cell cannot hold. */}
+          provider's own catalog holds) and the door to the catalog region that
+          curates it — a DISCLOSURE, not a popup. A provider with no catalog of its
+          own says 默认 and the title carries the long sentence the cell cannot
+          hold. */}
       <button
         type="button"
         className="dmc-catalog"
-        aria-haspopup="dialog"
-        aria-expanded={props.drawerOpen}
+        id={`dmc-catalog-btn-${provider}`}
+        aria-expanded={props.catalogOpen}
+        aria-controls={`dmc-catalog-${provider}`}
         title={models === 0 ? t(KEYS['config.models.inherited']) : undefined}
-        onClick={props.onOpenDrawer}
+        onClick={props.onOpenCatalog}
       >
         {models > 0
           ? t(KEYS['config.models.count'], { count: String(models) })
@@ -531,6 +556,25 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
           </div>
         )
         : null}
+
+      {/* The catalog region. It is the row's own disclosure: it lives inside this
+          <li>, after the settings well, and shares the row's positional fill. The
+          page owns the collapse guard, so the region reports its draft state and
+          asks the page before it unmounts. */}
+      {props.catalogOpen
+        ? (
+          <ModelCatalog
+            row={row}
+            store={store}
+            t={t}
+            onDirtyChange={props.onCatalogDirty}
+            onRequestClose={props.onRequestCloseCatalog}
+            confirming={props.catalogConfirming}
+            onKeepEditing={props.onKeepEditingCatalog}
+            onDiscard={props.onDiscardCatalog}
+          />
+        )
+        : null}
     </li>
   )
 }
@@ -547,7 +591,17 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
   const mounted = useRef(true)
   const [pending, setPending] = useState<Readonly<Record<string, string>>>({})
   const [failures, setFailures] = useState<Readonly<Record<string, string>>>({})
-  const [drawer, setDrawer] = useState<string | null>(null)
+  const [catalog, setCatalog] = useState<string | null>(null)
+  const [catalogDirty, setCatalogDirty] = useState(false)
+  /**
+   * A collapse the user has asked for while the catalog holds an unsaved draft.
+   * `close` is the catalog's own collapse; `switch` is another provider's model
+   * cell asking for the region while this draft is still open. The draft is never
+   * discarded silently — the region prints the question and waits.
+   */
+  const [catalogGuard, setCatalogGuard] = useState<
+    { readonly kind: 'close' } | { readonly kind: 'switch'; readonly provider: string } | null
+  >(null)
   const [picker, setPicker] = useState(false)
 
   useEffect(() => {
@@ -562,6 +616,77 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
   // The store publishes only while it has subscribers, so the read is bound to
   // this mount: a closed panel holds no listener and is never woken to re-read.
   useEffect(() => { void store.load() }, [store])
+
+  /** Put focus back on the model cell that opened a catalog. */
+  const focusCatalogTrigger = useCallback((provider: string): void => {
+    if (typeof document === 'undefined') return
+    document.getElementById(`dmc-catalog-btn-${provider}`)?.focus()
+  }, [])
+
+  /** Collapse the catalog now; the caller has already settled the draft. */
+  const collapseCatalog = useCallback((): void => {
+    const provider = catalog
+    setCatalog(null)
+    setCatalogDirty(false)
+    setCatalogGuard(null)
+    if (provider !== null) focusCatalogTrigger(provider)
+  }, [catalog, focusCatalogTrigger])
+
+  /** Ask to collapse: a dirty draft is confirmed first. */
+  const requestCloseCatalog = useCallback((): void => {
+    if (catalog === null) return
+    if (catalogDirty) {
+      setCatalogGuard({ kind: 'close' })
+      return
+    }
+    collapseCatalog()
+  }, [catalog, catalogDirty, collapseCatalog])
+
+  /** Open one provider's catalog; another provider's dirty draft is confirmed first. */
+  const openCatalog = useCallback((provider: string): void => {
+    if (catalog === provider) {
+      requestCloseCatalog()
+      return
+    }
+    if (catalog !== null && catalogDirty) {
+      setCatalogGuard({ kind: 'switch', provider })
+      return
+    }
+    setCatalog(provider)
+    setCatalogDirty(false)
+    setCatalogGuard(null)
+  }, [catalog, catalogDirty, requestCloseCatalog])
+
+  /** Answer the guard: the draft is abandoned and the pending action proceeds. */
+  const discardCatalogDraft = useCallback((): void => {
+    const pendingAction = catalogGuard
+    setCatalogDirty(false)
+    setCatalogGuard(null)
+    if (pendingAction === null) return
+    if (pendingAction.kind === 'switch') {
+      // Focus the cell that asked for the switch: the clicked cell is still there,
+      // and the discard button that was just pressed is not.
+      focusCatalogTrigger(pendingAction.provider)
+      setCatalog(pendingAction.provider)
+      return
+    }
+    collapseCatalog()
+  }, [catalogGuard, collapseCatalog, focusCatalogTrigger])
+
+  /** Keep editing: the guard line goes away and the draft stays. */
+  const keepEditingCatalog = useCallback((): void => { setCatalogGuard(null) }, [])
+
+  // A provider can disappear under an open region (the row was removed in another
+  // tab, or the store re-read a document that no longer has it). The region is
+  // rendered by the row, so a missing row unmounts it; this only clears the
+  // page's own pointer so the next Escape does not address a row that is gone.
+  useEffect(() => {
+    if (catalog === null) return
+    if (snapshot.rows.some(row => row.added && row.entry.provider === catalog)) return
+    setCatalog(null)
+    setCatalogDirty(false)
+    setCatalogGuard(null)
+  }, [catalog, snapshot.rows])
 
   /**
    * Run one row's write, marking the row and landing any failure on it.
@@ -718,9 +843,6 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
   // official page's onboarding card (Q13).
   const empty = snapshot.status === 'ready'
     && (listed.length === 0 || listed.every(row => !providerUsable(row)))
-  const drawerRow = drawer === null
-    ? undefined
-    : snapshot.rows.find(row => row.entry.provider === drawer)
 
   return (
     <section
@@ -728,9 +850,16 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
       aria-label={t(KEYS['config.title'])}
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
-        // Innermost first: the drawer, then the add picker, then the section.
-        if (drawer !== null) {
-          setDrawer(null)
+        // Innermost first: the discard question, then the catalog, then the add
+        // picker, then the section. The catalog's own layers (an open model well,
+        // the discovery checklist) consume Escape inside the region and never
+        // reach this handler.
+        if (catalogGuard !== null) {
+          setCatalogGuard(null)
+          return
+        }
+        if (catalog !== null) {
+          requestCloseCatalog()
           return
         }
         if (picker) {
@@ -797,8 +926,13 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
             writable={snapshot.writable}
             pending={pending[row.entry.provider]}
             failure={failures[row.entry.provider]}
-            drawerOpen={drawer === row.entry.provider}
-            onOpenDrawer={() => { setDrawer(row.entry.provider) }}
+            catalogOpen={catalog === row.entry.provider}
+            catalogConfirming={catalogGuard !== null && catalog === row.entry.provider}
+            onOpenCatalog={() => { openCatalog(row.entry.provider) }}
+            onRequestCloseCatalog={requestCloseCatalog}
+            onKeepEditingCatalog={keepEditingCatalog}
+            onDiscardCatalog={discardCatalogDraft}
+            onCatalogDirty={setCatalogDirty}
             onSaveKey={(value) => { saveKey(row, value) }}
             onClearKey={() => { clearKey(row) }}
             onProtocol={(protocol) => { setProtocol(row, protocol) }}
@@ -806,17 +940,6 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
           />
         ))}
       </ul>
-
-      {drawerRow === undefined
-        ? null
-        : (
-          <ModelDrawer
-            row={drawerRow}
-            store={store}
-            t={t}
-            onClose={() => { setDrawer(null) }}
-          />
-        )}
 
       <div className="dmc-actions">
         <button
@@ -880,7 +1003,7 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
 
 /**
  * The protocol choices one namespace's schema declares.
- * @param store - the shared store (its schema face is the one the drawer reads too).
+ * @param store - the shared store (its schema face is the one the catalog region reads too).
  * @param ns - the settings namespace id.
  * @returns the protocol identifiers, or an empty list.
  */

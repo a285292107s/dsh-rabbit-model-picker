@@ -114,7 +114,7 @@ for (const file of [
   // the "gone from disk, not merely unreferenced" assertion further down owns
   // that, so this list simply stops naming it.
   'src/client/modelConfigStyles.ts',
-  'src/client/drawerStyles.ts',
+  'src/client/catalogStyles.ts',
 ]) {
   const source = read(file)
   const open = source.indexOf('const CSS = `')
@@ -588,24 +588,24 @@ check('copy: a literal join separator exists for modality lists', dictionaryKeys
 // live). It is deliberately NOT added to `tsxFiles`: every key it asks for is a
 // `config.*` key owned by `modelConfigCopy.ts`, and the seat-level
 // `dictionary.ts` checks above would report them all as missing copy.
-const MODEL_CONFIG_TSX = ['src/client/ModelConfigPage.tsx', 'src/client/RetryEditor.tsx', 'src/client/ModelDrawer.tsx']
-const MODEL_CONFIG_SHEETS = ['src/client/modelConfigStyles.ts', 'src/client/drawerStyles.ts']
+const MODEL_CONFIG_TSX = ['src/client/ModelConfigPage.tsx', 'src/client/RetryEditor.tsx', 'src/client/ModelCatalog.tsx']
+const MODEL_CONFIG_SHEETS = ['src/client/modelConfigStyles.ts', 'src/client/catalogStyles.ts']
 const modelConfigCode = stripComments(MODEL_CONFIG_TSX.map(read).join('\n'))
 const modelConfigSheet = stripComments(MODEL_CONFIG_SHEETS.map(read).join('\n'))
 // The two sheets answer different questions about width. The PAGE lives inside the
 // host settings panel, which hands it a fixed content column at ANY viewport, so
-// its narrow branch must ask a CONTAINER query (see the check below). The DRAWER is
+// its narrow branch must ask a CONTAINER query (see the check below). The old DRAWER is
 // a fixed-position panel sized off the viewport (`width: min(460px, 100vw)`), so a
 // viewport media query is the correct instrument there and is left alone. Keeping
 // the two apart is what stops a `@media`-only regression in the page sheet from
-// being masked by the drawer's legitimate one.
+// being masked by another surface's legitimate one.
 const modelConfigPageSheet = stripComments(read('src/client/modelConfigStyles.ts'))
-// The drawer's own sheet, checked separately for the ONE row-shape reason the two
-// cannot share: the drawer is a `position: fixed` panel whose width comes from the
+// The catalog region's own sheet, checked separately for the ONE row-shape reason the two
+// cannot share: the drawer WAS a `position: fixed` panel whose width came from the
 // viewport (`width: min(460px, 100vw)`), so a viewport media query is the correct
 // instrument there — and its `.dmc-model-row` is a four-field form, which the house
 // rules exempt from the one-1px-edge budget that governs the page's rows.
-const modelConfigDrawerSheet = stripComments(read('src/client/drawerStyles.ts'))
+const modelConfigCatalogSheet = stripComments(read('src/client/catalogStyles.ts'))
 // The state vocabulary may live in the page's own module rather than in a JSX
 // attribute (`data-state={reading.answer}`, with `RowAnswer` spelling the three
 // values), so the search for "which states does the TSX produce" reads the
@@ -664,7 +664,13 @@ check('model config: every dmc- token in the TSX is a class or an ARIA id (nothi
 // recorded as necessary. The other nine `dmc-retry-*` names are covered by the
 // generic sweeps above plus the contrast registry; freezing all eleven here
 // would restate the sheet rather than pin the two contracts.
-const DMC_NEW_CLASSES = ['dmc-readout', 'dmc-manage', 'dmc-well', 'dmc-field-label', 'dmc-field-value', 'dmc-catalog', 'dmc-discover-group', 'dmc-model-ref', 'dmc-model-edit', 'dmc-model-well', 'dmc-model-danger', 'dmc-retry', 'dmc-retry-input']
+// §5.37 (the drawer becomes the row's region) freezes the names that carry the
+// NEW SHAPE: the region itself (`.dmc-catalog-panel`, a grid child of the row), its
+// one folding action (`.dmc-catalog-close`), and the head/body/foot that make it a
+// region rather than a floating panel. They are pinned by name because the whole
+// review is "is this still an overlay?", and a rename could otherwise move the
+// surface back out of the row with every generic sweep staying green.
+const DMC_NEW_CLASSES = ['dmc-readout', 'dmc-manage', 'dmc-well', 'dmc-field-label', 'dmc-field-value', 'dmc-catalog', 'dmc-discover-group', 'dmc-model-ref', 'dmc-model-edit', 'dmc-model-well', 'dmc-model-danger', 'dmc-retry', 'dmc-retry-input', 'dmc-catalog-panel', 'dmc-catalog-head', 'dmc-catalog-title', 'dmc-catalog-status', 'dmc-catalog-close', 'dmc-catalog-body', 'dmc-catalog-foot', 'dmc-catalog-guard']
 // §5.35 retires the control line's own anatomy: the row no longer HAS a second
 // segment of fixed tracks (`dmc-edit`), a credential cell (`dmc-key`), a
 // diagnostic glyph (`dmc-error-toggle`) or a table cell for the lifecycle verb
@@ -672,10 +678,18 @@ const DMC_NEW_CLASSES = ['dmc-readout', 'dmc-manage', 'dmc-well', 'dmc-field-lab
 // the shape change, and the rows now state their facts on one line with the
 // controls in a settings well. `.dmc-catalog-count` is retired too: the model cell
 // states its count inside its own label instead of hanging a bare number beside it.
+// §5.37 retires the whole DRAWER family: the scrim, the fixed shell and every
+// head/body/foot name that belonged to it. Listing them here is what makes the
+// rename a contract rather than a sweep — a stray `dmc-drawer-*` rule or string in
+// any of the three surfaces fails by name.
 const DMC_RETIRED_CLASSES = [
   'dmc-list-head', 'dmc-list-head-cell', 'dmc-key-state', 'dmc-intro', 'dmc-title',
   'dmc-edit', 'dmc-enable', 'dmc-error-toggle', 'dmc-error-text', 'dmc-catalog-count',
   'dmc-model-actions', 'dmc-model-options', 'dmc-model-options-panel', 'dmc-model-remove',
+  'dmc-drawer', 'dmc-drawer-scrim', 'dmc-drawer-head', 'dmc-drawer-heading',
+  'dmc-drawer-title', 'dmc-drawer-sub', 'dmc-drawer-close', 'dmc-drawer-body',
+  'dmc-drawer-foot', 'dmc-drawer-section', 'dmc-drawer-status', 'dmc-drawer-notice',
+  'dmc-drawer-error', 'dmc-drawer-note',
 ]
 const newClassState = DMC_NEW_CLASSES.map(name => ({ name, inSheet: dmcInSheet.has(name), inTsx: dmcInTsx.has(name) }))
 check('model config: the frozen new classes exist in BOTH the sheet and the TSX',
@@ -724,7 +738,8 @@ check('model config: prefers-reduced-motion branch exists', modelConfigSheet.inc
 // but on this sheet the branch now has to exist in a form that can match, and the
 // container it queries has to be established; the NEXT check is the one that
 // demands that form. The OR is deliberately NOT a relaxation of the page's
-// requirement: the drawer is a different surface (see the drawer assertion below).
+// requirement: the catalog region is a different sheet (see the catalog assertion
+// below), and it is held to the same container rule.
 check(
   'model config: a narrow-container branch exists',
   /@container[^{]*max-width\s*:/.test(modelConfigPageSheet) || /@media[^{]*max-width\s*:/.test(modelConfigPageSheet),
@@ -745,16 +760,33 @@ check(
   !/@media[^{]*max-width\s*:/.test(modelConfigPageSheet),
   { mediaWidthBranches: (modelConfigPageSheet.match(/@media[^{]*max-width[^{]*/g) ?? []) },
 )
-// And the drawer must NOT be "fixed" to match: it is `position: fixed` and sized
-// from the viewport, so its narrow branch is a media query. Pinned as an assertion
-// with the reason beside it, because the obvious "consistency" edit — copying the
-// page's `@container` onto the drawer — would make the drawer's narrow branch dead
-// (its own width is 100vw, and `container-type` on it would create a query context
-// nothing inside it needs).
+// And the catalog region is inline now: it is a child of the page's own query
+// container, so its narrow branch must be a @container query too. The old drawer
+// was `position: fixed` and sized off the viewport, which is why it carried a
+// viewport media query — that whole surface is gone, and the ban below is
+// symmetric with the page's: no `@media (max-width: …)` may survive here.
 check(
-  'model drawer: the narrow branch stays a viewport media query (fixed panel, viewport width)',
-  /@media[^{]*max-width\s*:/.test(modelConfigDrawerSheet),
-  { mediaBranches: (modelConfigDrawerSheet.match(/@media[^{]*\{/g) ?? []).length },
+  'model catalog: the region asks the page CONTAINER, not the viewport',
+  /@container[^{]*max-width\s*:/.test(modelConfigCatalogSheet)
+  && !/@media[^{]*max-width\s*:/.test(modelConfigCatalogSheet),
+  {
+    containerBranches: (modelConfigCatalogSheet.match(/@container[^{]*\{/g) ?? []).length,
+    mediaWidthBranches: (modelConfigCatalogSheet.match(/@media[^{]*max-width[^{]*/g) ?? []),
+  },
+)
+// And it is placed by the ROW's grid, not by the window: the region starts at the
+// name's spine and shares the scan line's track. A `position: fixed` or a floating
+// box here is the regression this refactor exists to remove, so both are banned by
+// name rather than left to the visual review.
+check(
+  'model catalog: the region is a grid child of the row (column 2, never fixed)',
+  /\.dmc-catalog-panel\s*\{[^}]*grid-column\s*:\s*2\s*\/\s*-1/.test(modelConfigCatalogSheet)
+  && !/\.dmc-catalog-panel\s*\{[^}]*position\s*:\s*fixed/.test(modelConfigCatalogSheet)
+  && !/\.dmc-catalog-scrim/.test(modelConfigCatalogSheet),
+  {
+    hasGridColumn: /grid-column\s*:\s*2\s*\/\s*-1/.test(modelConfigCatalogSheet),
+    fixedDecl: /position\s*:\s*fixed/.test(modelConfigCatalogSheet),
+  },
 )
 // And the container property must sit on `.dmc-page` itself: `container-type` on
 // some inner element would make every `@container` query below it resolve against
@@ -833,7 +865,7 @@ check('model config: data-error paints nothing (the entry and the sentence carry
 // and fought the quiet-instrument direction, while §10.1 had already settled that
 // ten rows are carried by the WORD (primary channel) with the rail as the redundant
 // second. A third channel does not add information; it adds volume. So a row-level
-// rule may paint a fill only while the pointer, the focus ring or an open drawer is
+// rule may paint a fill only while the pointer, the focus ring or an open catalog is
 // present, and no `data-state` (or its `data-usable` alias) may paint at all.
 const dmcRowBackgrounds = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .flatMap(rule => {
@@ -843,7 +875,7 @@ const dmcRowBackgrounds = [...modelConfigPageSheet.matchAll(/([^{}]+)\{([^{}]*)\
       .filter(selector => /^\.dmc-row(?![a-z0-9-])/.test(selector))
       .map(selector => ({ selector, value }))
   })
-const transientFill = selector => /:(?:hover|focus-within|active)|\[data-open|\[data-well/.test(selector)
+const transientFill = selector => /:(?:hover|focus-within|active)|\[data-catalog|\[data-well/.test(selector)
 const paintedRestFills = dmcRowBackgrounds.filter(entry => !transientFill(entry.selector) && !/^(?:transparent|none)$/i.test(entry.value))
 const stateFills = dmcRowBackgrounds.filter(entry => /data-state|data-usable/.test(entry.selector))
 const liveFills = dmcRowBackgrounds.filter(entry => transientFill(entry.selector))
@@ -851,7 +883,7 @@ check('model config: a row has no rest-state fill (the state travels on rail + w
   paintedRestFills.length === 0, { paintedRestFills })
 check('model config: no data-state paints a row, unreachable included',
   stateFills.length === 0, { stateFills })
-check('model config: the live fill survives for :hover / :focus-within / [data-open]',
+check('model config: the live fill survives for :hover / :focus-within / [data-catalog]',
   liveFills.length > 0 && liveFills.every(entry => /^var\(--dsw-/.test(entry.value)), { liveFills })
 
 // §14 R2 — the rail is the "can this serve me" channel and ONLY that: it branches
@@ -889,7 +921,7 @@ const disabledInkRequired = [
   { sheet: 'page', name: '.dmc-key-clear' },
   { sheet: 'page', name: '.dmc-protocol' },
   { sheet: 'page', name: '.dmc-danger' },
-  { sheet: 'drawer', name: '.dmc-btn' },
+  { sheet: 'catalog', name: '.dmc-btn' },
 ]
 // The model cell is no longer a disabled-able control: reading the catalog is legal
 // in a read-only deployment, so it keeps the quiet ink at rest and states no
@@ -915,7 +947,7 @@ function colourOfSelector(css, selector) {
 const disabledInkIssues = []
 const disabledInkPairs = []
 for (const entry of [...disabledInkRequired, ...disabledInkOptional]) {
-  const css = entry.sheet === 'page' ? modelConfigPageSheet : modelConfigDrawerSheet
+  const css = entry.sheet === 'page' ? modelConfigPageSheet : modelConfigCatalogSheet
   const rest = colourOfSelector(css, entry.name)
   const disabled = colourOfSelector(css, `${entry.name}:disabled`)
   const required = disabledInkRequired.some(item => item.name === entry.name && item.sheet === entry.sheet)
@@ -1484,12 +1516,18 @@ check(
 //     are deleted rather than kept as a second surface — and a `git checkout` of
 //     the wrong tree, or an editor restoring a deletion, is exactly the accident
 //     this list is here to catch.
+//     §5.37 adds the drawer's pair: `ModelDrawer.tsx` (the floating model catalog)
+//     and `drawerStyles.ts` (its fixed/scrim sheet). The catalog is now the row's
+//     inline region (`ModelCatalog.tsx` / `catalogStyles.ts`), so the old paths
+//     must stay gone rather than linger as a second, still-floating surface.
 const REMOVED_MODULES = [
   'src/client/ProviderMenu.tsx',
   'src/client/prefs.ts',
   'src/client/recent.ts',
   'src/client/RetryCard.tsx',
   'src/client/retryStyles.ts',
+  'src/client/ModelDrawer.tsx',
+  'src/client/drawerStyles.ts',
 ]
 const resurrected = REMOVED_MODULES.filter(exists)
 check(
@@ -1523,7 +1561,7 @@ check(
 //     history — a name may appear there as the thing that was retired — while the
 //     shipped source may not. `scripts/` is out of scope for the same reason: these
 //     very checks quote the names in their own failure text.
-const retiredNames = ['drc-', 'RetryCard', 'retryStyles']
+const retiredNames = ['drc-', 'RetryCard', 'retryStyles', 'ModelDrawer', 'drawerStyles', 'dmc-drawer']
 const resurrectedNames = []
 for (const name of sourceFiles) {
   const relative = `src/${name.split(sep).join('/')}`
@@ -2140,8 +2178,8 @@ if (tasteLint === undefined) {
   const LINTED = [
     'src/client/ModelConfigPage.tsx',
     'src/client/modelConfigStyles.ts',
-    'src/client/ModelDrawer.tsx',
-    'src/client/drawerStyles.ts',
+    'src/client/ModelCatalog.tsx',
+    'src/client/catalogStyles.ts',
   ]
   const run = spawnSync(process.execPath, [tasteLint, ...LINTED], { cwd: root, encoding: 'utf8' })
   const output = `${run.stdout ?? ''}${run.stderr ?? ''}`

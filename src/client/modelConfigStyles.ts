@@ -2,7 +2,7 @@
  * 「模型配置」页的样式表，每次挂载注入一次。
  *
  * WHY A THIRD SHEET, AND THE THIRD PREFIX. `styles.ts` owns the composer seat
- * (`dmp-`); this sheet owns the 模型配置 settings section and the drawer beside it
+ * (`dmp-`); this sheet owns the 模型配置 settings section and the catalog region it expands into
  * (`dmc-`) and shares a rule with neither, so it keeps the domains independently
  * checkable: the `dmc-` dead-class gate never has to know which TSX file a rule
  * belongs to. A fourth sheet used to own the retry CARD in the shipped Models
@@ -281,7 +281,7 @@ const CSS = `
    NO FILL AT REST — not even for a state that needs the reader. At eleven rows the
    WORD is the primary channel and the rail is the redundant second one; a third
    channel only made the page shout. The only fills are positional (hover / focus /
-   the row whose drawer is open). */
+   the row whose catalog is open). */
 .dmc-row {
   display: grid;
   grid-template-columns: 4px minmax(120px, 1fr) max-content max-content 44px;
@@ -294,7 +294,7 @@ const CSS = `
 
 .dmc-row:hover,
 .dmc-row:focus-within,
-.dmc-row[data-open='true'],
+.dmc-row[data-catalog='true'],
 .dmc-row[data-well='true'] {
   background: var(--dsw-alias-interactive-bg-hover);
 }
@@ -339,7 +339,7 @@ const CSS = `
   overflow-wrap: anywhere;
 }
 
-/* The model cell: a FACT and the door to the drawer that curates it. Right-aligned
+/* The model cell: a FACT and the door to the catalog region that curates it. Right-aligned
    on its own track, so the counts form a column. Tabular figures keep a count
    change from reflowing the line; the noun is part of the value (a bare number in
    a settings list reads as a label waiting for its unit). */
@@ -740,7 +740,7 @@ input.dmc-key-action {
 }
 
 /* THE PAGE'S SECOND REAL FORM CONTROL — and the second, last 1px edge on it. It
-   mirrors the drawer's catalog field: the same 1px --dsw-alias-border-l3 edge, the
+   mirrors the catalog region's field: the same 1px --dsw-alias-border-l3 edge, the
    same --dsw-specific-input-major fill so the well reads as editable in both
    themes, the same 12px tabular figures. The width is fixed at about one three-
    digit number rather than elastic, because two fields of different sizes for the
@@ -760,7 +760,7 @@ input.dmc-key-action {
 }
 
 /* A rejected draft marks the FIELD, not only the sentence under it — the same
-   graphic-only use of the state colour as the drawer's invalid field. No text is
+   graphic-only use of the state colour as the catalog region's invalid field. No text is
    painted in it, and the sentence still says what to type. */
 .dmc-retry-input[aria-invalid='true'] {
   border-color: var(--dsw-alias-state-error-primary);

@@ -54,10 +54,11 @@ DSH 输入框模型选择器的外部替换件。把「Model / Effort 两格 →
 | | 深色 | 浅色 |
 |---|---|---|
 | 模型配置页：一行一条路由的账本（**静态预览**：宿主真实 token + 真实样式表，非真机截图） | ![模型配置（深色）](shots/model-config-35-ledger-dark.png) | ![模型配置（浅色）](shots/model-config-36-ledger-light.png) |
-| 模型抽屉：一行一个模型的花名册，编辑收进该行的井（**静态预览**） | ![模型抽屉（深色）](shots/model-config-37-drawer-dark.png) | ![模型抽屉（浅色）](shots/model-config-38-drawer-light.png) |
+| 模型目录区：账本行内展开的花名册，编辑收进该模型行的井（**静态预览**） | ![模型目录区（深色）](shots/model-config-40-catalog-inline-dark.png) | ![模型目录区（浅色）](shots/model-config-41-catalog-inline-light.png) |
 
-> 以上四张是**静态预览**（宿主真实 token 值 + 真实样式表），**不是真机截图**：这一轮的 live 验收由用户接手，
-> 运行纪律见 [docs/agent-safety.md](docs/agent-safety.md)。页面图是 560×928 元素图，抽屉图是 460×1000 面板图。
+> 以上四张是**静态预览**（宿主真实 token 值 + 真实样式表），**不是真机截图**：live 验收由用户接手，
+> 运行纪律见 [docs/agent-safety.md](docs/agent-safety.md)。图是 560px 单栏：行 1 是收起的账本，
+> 行 2 是展开 openrouter 目录区的同一页；旧 460px 抽屉图（`model-config-37/38`）已降为历史证据（§5.37）。
 
 ## 交互
 
@@ -125,7 +126,7 @@ opencode-go 的 `modelInfo()` 同序），所以徽章和适配器实际用的�
 | 决定的 | 代替了 |
 |---|---|
 | **一行一条路由**（48px，静止态没有表单控件）：身份 / 模型数 / 答案词 / `管理` | 每行两段、第二段 5–6 个小词挤在六个固定轨道里 |
-| **模型格是事实也是门**：`N 个模型`（无自有目录写`默认`）点开模型抽屉 | 一个 12px 的「模型目录」词，旁边悬着一个裸数字 |
+| **模型格是事实也是门**：`N 个模型`（无自有目录写`默认`）点开该行的模型目录区（行内展开，不是抽屉） | 一个 12px 的「模型目录」词，旁边悬着一个裸数字 |
 | **设置井是表单**：凭据 / API 协议 / 自动重试 三行「标签 + 值」，末行才是「删除该提供商」 | 破坏性动作与普通事实同为 12px、相距 20px |
 | **答案词 + 竖条两个通道**：`data-state` = `ready` / `missing-key` / `unreachable`，诊断另用 `data-error` 可叠加，句子在井顶 | 旧的 `data-usable` 布尔把「未添加」和「缺密钥」压成一个红底，筛选后恒为 true |
 | **一句就绪陈述**（`.dmc-readout`，20px，唯一大尺寸元素；存/清 key、增删后当场重算） | 原来那句信息量为零的通用说明 |
@@ -141,9 +142,12 @@ opencode-go 的 `modelInfo()` 同序），所以徽章和适配器实际用的�
 > [`docs/agent-safety.md`](docs/agent-safety.md)）；README 里的两张图是**静态预览**，
 > 用宿主真实 token 值与真实样式表渲染，能证明排版与两套主题，不能证明宿主窗格里的滚动与焦点链。
 
-**模型抽屉（§5.36）** 也换成同一套语法：一行一个模型（id + 打开编辑的门，第二行是显示名与容量事实），
-四个字段、推理档位与「删除模型」收进该行的井；`+ 添加模型` 是花名册末尾的一条账本行。
+**模型目录区（§5.37，取代 §5.36 的右侧抽屉）** 沿用同一套语法：一行一个模型（id + 打开编辑的门，
+第二行是显示名与容量事实），四个字段、推理档位与「删除模型」收进该模型行的井；`+ 添加模型` 是花名册末尾的一条账本行。
 一个七模型的自定义目录因此从「28 个常开输入框」变成「7 行 + 最多一个展开的井」。模型发现（三步）的结构不变。
+**它不再是弹层**：目录区是账本行自己的展开区，占满设置内容列（560 / 484 / 106），没有 fixed / scrim / `aria-modal` /
+焦点陷阱；设置弹窗因此重新成为唯一一层 modal。草稿未保存时收起或切换提供商会先问一句
+「有未保存的模型修改。继续编辑 / 放弃修改」。Esc 一次只关一层：模型井 → 目录区 → 宿主设置面板。
 
 **重试策略（2026-10-17 从官方「模型」页搬进来）**
 
@@ -273,8 +277,8 @@ src/client/modelConfigStore.ts 该页的事实 store（订阅、代际、写入�
 src/client/modelConfigCopy.ts 该页的文案数据（KEYS / zh / en 三块同键同序）
 src/client/modelConfigStyles.ts 该页的样式表（`dmc-` 前缀；`@container` 窄分支；重试编辑器那批新类也在这里，§5.33）
 src/client/ModelConfigPage.tsx 该页主体：就绪陈述 + 账本行 + 设置井（状态由 data-state/data-error 承载，§5.35）
-src/client/ModelDrawer.tsx 模型抽屉：一行一个模型的花名册（编辑进井）+ 三步模型发现（§5.36）
-src/client/drawerStyles.ts 抽屉的样式表（同一 `dmc-` 前缀，独立查死类）
+src/client/ModelCatalog.tsx 模型目录区：行内展开的花名册（编辑进井）+ 三步模型发现（§5.37）
+src/client/catalogStyles.ts 目录区的样式表（同一 `dmc-` 前缀，独立查死类；不再有 fixed/scrim）
 src/client/panelCopy.ts     面板文案（纯数据）
 src/client/RetryEditor.tsx  模型配置页设置井里展开的重试编辑器（`dmc-` 域，DESIGN §5.33）
 src/client/retryPolicy.ts   重试策略的解析与等待曲线（纯函数，编辑器与门共用同一公式）
@@ -298,11 +302,9 @@ scripts/_accept-anchor-loss.cjs §5.18 浏览器验收
 scripts/_accept-capabilities.cjs §5.19 浏览器验收（只读：内置目录的模型到底读到了什么）
 scripts/_verify-settings-layout.cjs 参数面板仍是"头在上、正文在下"的列（材质类共用的守卫，§5.25）
 scripts/_audit-shots.cjs      品质自查截图（两张主题 × 四类表面；当前宿主跟随系统深色，浅色走「设置 → 外观」）
-scripts/_page-preview.mjs     静态预览 fixture：真实 `modelConfigStyles` + 宿主真实 token 值，560/484/106 三档（docs/ui-language.md §7）
+scripts/_page-preview.mjs     静态预览 fixture：真实 `modelConfigStyles` + `catalogStyles` + 宿主 token，560/484/106 三档，含展开的目录区（docs/ui-language.md §7）
 scripts/_shot-page.cjs        该 fixture 的浅/深两主题截图 + 行高/右沿/溢出几何测量
-scripts/_shot-readme.cjs      README 用的单栏（560）静态预览截图
-scripts/_drawer-preview.mjs   抽屉的静态预览 fixture（460px 面板，真实 drawer sheet + 宿主 token）
-scripts/_shot-drawer.cjs      抽屉两套主题的截图（model-config-37/38）
+scripts/_shot-readme.cjs      README 的 560px 单栏截图：收起的账本（35/36）+ 展开的目录区（40/41）
 docs/ui-language.md           「模型配置」页的 UI 语言：诊断、令牌、组件语法、响应式、动效、扩展规则（DESIGN §5.35）
 docs/agent-safety.md          运行纪律与 2026-10-17 事故记录：不要结束别人的进程、不要在同一 DSH_HOME 上起第二个 dsh web
 scripts/_taste-readme-shots.cjs 重拍 README 用的表面，含窄屏折叠那张（深/浅两套，见 DESIGN §5.24/§5.25）

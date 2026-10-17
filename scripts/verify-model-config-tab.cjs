@@ -37,7 +37,8 @@
  * var is absent (that is where `dsh web` prints its one-time URL).
  *
  * A1–A13 are the tab's EXISTING contract (tab seat, layout, credential entry,
- * drawer, save gate, Tab walk, three-step discovery, Escape, console). R1–R8 are
+ * inline catalog region, save gate, Tab walk, three-step discovery, Escape,
+ * console). R1–R8 are
  * the 2026-10-16 refactor's own checks, and they are the reason this file was
  * touched: the redesign's whole claim is that ten rows read as ONE aligned table
  * under ONE counting sentence, so every one of those words is measured rather
@@ -365,11 +366,12 @@ function judgeR3 (snapshot) {
 /**
  * R4 — one 1px edge per row, and the answers stand in one right-aligned column.
  *
- * "Per row" is the PAGE's `.dmc-row` only (§15.4). The drawer's `.dmc-model-row` is
- * a four-field form, and the house rules exempt real form fields from the
- * no-outlined-box rule for exactly the reason the page keeps its one select: a
- * field that has no edge stops reading as a field. This check therefore never looks
- * inside `.dmc-drawer`, which is also why it runs while the drawer is closed.
+ * "Per row" is the PAGE's `.dmc-row` line only (§15.4). The catalog's
+ * `.dmc-model-row` is a record line whose well is a real form, and the house rules
+ * exempt real form fields from the no-outlined-box rule for exactly the reason the
+ * page keeps its one select: a field that has no edge stops reading as a field.
+ * This check therefore never looks inside `.dmc-catalog-panel`, which is also why
+ * it runs while the catalog region is collapsed.
  */
 function judgeR4 (snapshot) {
   const edges = snapshot.rows.map((row) => row.bordered)
@@ -978,7 +980,7 @@ async function main () {
         pageHeight: page ? +page.getBoundingClientRect().height.toFixed(1) : null,
       }
     })
-    record('A3', 'wide layout: 提供商名列有下界（≥140px）、横排可读、且不溢出内容列',
+    record('A3', 'wide layout: 提供商名列有下界与≥140px）、横排可读、且不溢出内容列',
       wide.nameWidth !== null && wide.nameWidth >= 140 && wide.maxNameHeight !== null && wide.maxNameHeight <= 80 && wide.rowsOverflowingPane === 0,
       `tracks="${wide.tracks}" minNameWidth=${wide.nameWidth} maxNameHeight=${wide.maxNameHeight} rowsOverflowingPane=${wide.rowsOverflowingPane} pageHeight=${wide.pageHeight}`)
     await page.screenshot({ path: path.join(SHOTS_DIR, 'model-config-02-page-dark.png') })
@@ -1024,7 +1026,7 @@ async function main () {
         retryWordsOnPage: retryWords.filter((word) => word !== null && text.includes(word)),
       }
     }, [copy.zh.retryTrigger, copy.en.retryTrigger])
-    record('A5', '官方「模型」页仍可打开，但不再渲染任何重试卡（重试编辑器只属于「模型配置」页）',
+    record('A5', '官方「模型」页仍可打开，但不再渲染任何重试卡与重试编辑器只属于「模型配置」页）',
       official.dialogOpen === true && official.drcRoots === 0 && official.cardsWithRetry === 0
       && official.retryWordsOnPage.length === 0,
       `drcRoots=${official.drcRoots} officialRowCards=${official.officialRowCards} `
@@ -1046,13 +1048,42 @@ async function main () {
     record('A6', 'composer 座位仍是本插件的 dmp- 选择器', composerIsOurs, `classes=${JSON.stringify(composer.classes)} label=${composer.label}`)
 
     // A7 — credential controls: every ADDED route but the session one keeps one.
+    // The well is collapsed at rest (§5.35), so the entry is checked by opening
+    // one row's well, reading its first field, and closing it again.
     await ensureModelConfig(page)
-    const keyCells = await page.locator('.dmc-key').count()
+    const credentialRow = await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.dmc-row')].find((x) => {
+        const r = x.querySelector('.dmc-route')
+        return r && r.textContent === 'openrouter'
+      })
+      if (!row) return false
+      row.querySelector('.dmc-manage').click()
+      return true
+    })
+    await page.waitForTimeout(500)
+    const credential = await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.dmc-row')].find((x) => {
+        const r = x.querySelector('.dmc-route')
+        return r && r.textContent === 'openrouter'
+      })
+      if (!row) return { labels: [], actions: 0 }
+      const labels = [...row.querySelectorAll('.dmc-field-label')].map((x) => (x.textContent || '').trim())
+      return { labels, actions: row.querySelectorAll('.dmc-key-action').length }
+    })
+    await page.evaluate(() => {
+      const row = [...document.querySelectorAll('.dmc-row')].find((x) => {
+        const r = x.querySelector('.dmc-route')
+        return r && r.textContent === 'openrouter'
+      })
+      if (row) row.querySelector('.dmc-manage').click()
+    })
+    await page.waitForTimeout(300)
     const verdicts = await page.locator('.dmc-verdict').count()
-    record('A7', '每个已添加的行都保留可编辑的凭据入口（会话路由除外）', keyCells > 0,
-      `.dmc-key=${keyCells} .dmc-verdict=${verdicts} rows=${rowCount}`)
+    record('A7', '每个已添加的行都保留可编辑的凭据入口与会话路由除外）',
+      credentialRow === true && credential.labels.includes('凭据') && credential.actions > 0,
+      `.dmc-key-action=${credential.actions} labels=${JSON.stringify(credential.labels)} .dmc-verdict=${verdicts} rows=${rowCount}`)
 
-    // A8 — the drawer is a right-side panel that keeps the page context.
+    // A8 — the catalog is the row's own inline region, not a second modal.
     await page.evaluate(() => {
       const row = [...document.querySelectorAll('.dmc-row')].find((x) => {
         const r = x.querySelector('.dmc-route')
@@ -1061,34 +1092,49 @@ async function main () {
       if (row) row.querySelector('.dmc-catalog').click()
     })
     await page.waitForTimeout(1000)
-    const drawer = await page.evaluate(() => {
-      const d = document.querySelector('.dmc-drawer')
+    const region = await page.evaluate(() => {
+      const d = document.querySelector('.dmc-catalog-panel')
       if (!d) return { open: false }
+      const row = d.closest('.dmc-row')
       const r = d.getBoundingClientRect()
+      const rr = row ? row.getBoundingClientRect() : null
+      const opener = row ? row.querySelector('.dmc-catalog') : null
       return {
         open: true,
         role: d.getAttribute('role'),
         ariaModal: d.getAttribute('aria-modal'),
         position: getComputedStyle(d).position,
-        anchoredRight: Math.abs(r.right - innerWidth) < 8,
+        fixed: getComputedStyle(d).position === 'fixed',
+        scrim: !!document.querySelector('.dmc-catalog-scrim'),
+        insideRow: row !== null,
+        startsAtNameSpine: rr !== null && r.left > rr.left,
+        endsAtRowEdge: rr !== null && r.right <= rr.right + 1,
+        width: Math.round(r.width),
+        rowWidth: rr === null ? null : Math.round(rr.width),
+        openerExpanded: opener ? opener.getAttribute('aria-expanded') : null,
+        modelRows: d.querySelectorAll('.dmc-model-row').length,
         pageStillRendered: !!document.querySelector('.dmc-row'),
       }
     })
-    record('A8', '抽屉从右侧滑出（fixed + aria-modal）且保留页面上下文',
-      drawer.open === true && drawer.anchoredRight && drawer.position === 'fixed' && drawer.pageStillRendered === true,
-      JSON.stringify(drawer))
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'model-config-12-drawer-openrouter-dark.png') })
+    record('A8', '模型目录是行内展开区与在 .dmc-row 内、无 fixed/scrim/aria-modal），页面上下文仍在',
+      region.open === true && region.insideRow === true && region.fixed === false
+      && region.scrim === false && region.position !== 'fixed'
+      && region.role === null && region.ariaModal === null
+      && region.startsAtNameSpine === true && region.endsAtRowEdge === true
+      && region.openerExpanded === 'true' && region.pageStillRendered === true,
+      JSON.stringify(region))
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'model-config-39-catalog-inline-dark.png') })
 
     // A9 — 保存 is gated on a dirty draft and is a no-op while clean.
     // (Checked while the draft is still clean, i.e. before the discovery panel
-    // takes over the drawer footer.)
+    // takes over the catalog's commit word.)
     const save = await page.evaluate(() => {
-      const d = document.querySelector('.dmc-drawer')
+      const d = document.querySelector('.dmc-catalog-panel')
       const btn = d && d.querySelector('.dmc-btn-commit')
       return { present: !!btn, disabled: btn ? btn.disabled : null }
     })
     const saveDirty = await page.evaluate(() => {
-      const d = document.querySelector('.dmc-drawer')
+      const d = document.querySelector('.dmc-catalog-panel')
       const input = d.querySelector('.dmc-model-row .dmc-model-id input')
       const original = input.value
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
@@ -1098,42 +1144,43 @@ async function main () {
     })
     await page.waitForTimeout(400)
     const dirtyDisabled = await page.evaluate(() => {
-      const btn = document.querySelector('.dmc-drawer .dmc-btn-commit')
+      const btn = document.querySelector('.dmc-catalog-panel .dmc-btn-commit')
       return btn ? btn.disabled : null
     })
     // put the draft back so nothing is left dirty (保存 is never clicked)
     await page.evaluate((original) => {
-      const d = document.querySelector('.dmc-drawer')
+      const d = document.querySelector('.dmc-catalog-panel')
       const input = d.querySelector('.dmc-model-row .dmc-model-id input')
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
       setter.call(input, original)
       input.dispatchEvent(new Event('input', { bubbles: true }))
     }, saveDirty)
     await page.waitForTimeout(300)
-    record('A9', '「保存」在草稿未改动时禁用、改动后启用（未点击保存）',
+    record('A9', '「保存」在草稿未改动时禁用、改动后启用与未点击保存）',
       save.present === true && save.disabled === true && dirtyDisabled === false,
       `clean=${save.disabled} dirty=${dirtyDisabled}`)
 
-    // A10 — Tab walks the drawer controls without escaping it.
+    // A10 — Tab walks into the region and back OUT of it: there is no trap any
+    // more (the host settings dialog owns the only one).
     const walk = []
     for (let i = 0; i < 50; i += 1) {
       await page.keyboard.press('Tab')
       await page.waitForTimeout(70)
       walk.push(await page.evaluate(() => {
         const el = document.activeElement
-        return el ? { text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 20), inDrawer: !!el.closest('.dmc-drawer') } : null
+        return el ? { text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 20), inRegion: !!el.closest('.dmc-catalog-panel') } : null
       }))
     }
-    const escaped = walk.some((s) => s && s.inDrawer === false)
     const reached = new Set(walk.map((s) => s && s.text))
-    record('A10', 'Tab 在抽屉内走通 关闭/模型选项/删除模型/添加模型/获取可用模型/恢复默认模型 且不逃出抽屉',
-      escaped === false && reached.has('添加模型') && reached.has('获取可用模型') && reached.has('恢复默认模型'),
-      `escaped=${escaped} reached=${JSON.stringify([...reached])}`)
+    const leftRegion = walk.some((s) => s && s.inRegion === false)
+    record('A10', 'Tab 走通 收起/编辑/添加模型/获取可用模型/恢复默认模型，并能离开行内区域与无焦点陷阱）',
+      leftRegion === true && reached.has('添加模型') && reached.has('获取可用模型') && reached.has('恢复默认模型'),
+      `leftRegion=${leftRegion} reached=${JSON.stringify([...reached])}`)
 
     // A11 — discovery is a three-step read → tick → commit, and nothing is written before commit.
-    const beforeDiscovery = await page.evaluate(() => document.querySelectorAll('.dmc-drawer .dmc-model-row').length)
+    const beforeDiscovery = await page.evaluate(() => document.querySelectorAll('.dmc-catalog-panel .dmc-model-row').length)
     await page.evaluate(() => {
-      const d = document.querySelector('.dmc-drawer')
+      const d = document.querySelector('.dmc-catalog-panel')
       const b = d && [...d.querySelectorAll('button')].find((x) => /获取可用模型/.test(x.textContent))
       if (b) b.click()
     })
@@ -1141,32 +1188,43 @@ async function main () {
     for (let i = 0; i < 60; i += 1) {
       await page.waitForTimeout(500)
       discover = await page.evaluate(() => {
-        const d = document.querySelector('.dmc-drawer')
+        const d = document.querySelector('.dmc-catalog-panel')
         if (!d) return null
         return {
           checkboxes: d.querySelectorAll('input[type=checkbox]').length,
           hasCommit: [...d.querySelectorAll('button')].some((x) => x.textContent.trim() === '添加所选'),
           modelRows: d.querySelectorAll('.dmc-model-row').length,
-          status: d.querySelector('.dmc-drawer-status') ? d.querySelector('.dmc-drawer-status').textContent.trim() : null,
+          status: d.querySelector('.dmc-catalog-status') ? d.querySelector('.dmc-catalog-status').textContent.trim() : null,
         }
       })
       if (discover === null) break
       if (discover.checkboxes > 0 || /没有列出任何模型|失败|not registered/.test(discover.status || '')) break
     }
     const discoveryOk = discover !== null && discover.checkboxes > 0 && discover.hasCommit && discover.modelRows === beforeDiscovery
-    record('A11', '模型发现三步可见（获取 → 勾选清单 → 添加所选），且未提交前目录未变', discoveryOk,
+    record('A11', '模型发现三步可见与获取 → 勾选清单 → 添加所选），且未提交前目录未变', discoveryOk,
       `before=${beforeDiscovery} after=${JSON.stringify(discover)}`)
     await page.screenshot({ path: path.join(SHOTS_DIR, 'model-config-13-discovery-result-dark.png') })
 
-    // A12 — one Escape must close only the drawer. (KNOWN DEFECT on 2026-10-16.)
+    // A12 — Escape closes ONE layer at a time: the open discovery checklist first,
+    // then the region; the host settings dialog survives both.
     await page.keyboard.press('Escape')
-    await page.waitForTimeout(1200)
-    const afterEsc = await page.evaluate(() => ({
-      drawer: !!document.querySelector('.dmc-drawer'),
+    await page.waitForTimeout(500)
+    const afterFirstEsc = await page.evaluate(() => ({
+      region: !!document.querySelector('.dmc-catalog-panel'),
+      checkboxes: document.querySelectorAll('.dmc-catalog-panel input[type=checkbox]').length,
       settingsDialog: !!document.querySelector('[role=dialog]'),
     }))
-    record('A12', 'Esc 只关抽屉、保留设置面板（已知缺陷：一次 Esc 连设置面板一起关掉）',
-      afterEsc.drawer === false && afterEsc.settingsDialog === true, JSON.stringify(afterEsc))
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(800)
+    const afterEsc = await page.evaluate(() => ({
+      region: !!document.querySelector('.dmc-catalog-panel'),
+      settingsDialog: !!document.querySelector('[role=dialog]'),
+    }))
+    record('A12', 'Esc 一次一层：先关发现清单（目录区保留），再收起目录区，设置面板保留',
+      afterFirstEsc.region === true && afterFirstEsc.checkboxes === 0
+      && afterFirstEsc.settingsDialog === true
+      && afterEsc.region === false && afterEsc.settingsDialog === true,
+      `first=${JSON.stringify(afterFirstEsc)} final=${JSON.stringify(afterEsc)}`)
 
     // ---------------------------------------------------------------------
     // R1–R13: the refactor's own claims, measured on the live page.
@@ -1197,29 +1255,29 @@ async function main () {
       R10: () => judgeR10(snapshot),
     }
     const labels = {
-      R1: 'R1 就绪陈述与每一行的 data-state 逐行对账一致（ready + issues == 总行数，数字严格相等）、≤2 行、字号大于正文',
-      R2: 'R2 每行答案词与自己的 data-state 一致；竖条只画 missing-key / unreachable（诊断不画）',
-      R3: 'R3 编辑段是固定轨道：同类控件逐行左沿对齐（最大最小差 ≤1px）',
-      R4: 'R4 每行带 1px 边的控件 ≤1，且 dmc-verdict 右沿逐行对齐（差 ≤1px）',
-      R8: 'R8 行在 rest 态没有任何底色（ready / missing-key / unreachable 三种都过）',
-      R10: 'R10 同一行上凭据清除与生命周期按钮的可访问名不相等（口径=两名不等，不要求动词不同）',
+      R1: 'R1 就绪陈述与每一行的 data-state 逐行对账一致与ready + issues == 总行数，数字严格相等）、≤2 行、字号大于正文',
+      R2: 'R2 每行答案词与自己的 data-state 一致；竖条只画 missing-key / unreachable与诊断不画）',
+      R3: 'R3 编辑段是固定轨道：同类控件逐行左沿对齐与最大最小差 ≤1px）',
+      R4: 'R4 每行带 1px 边的控件 ≤1，且 dmc-verdict 右沿逐行对齐与差 ≤1px）',
+      R8: 'R8 行在 rest 态没有任何底色与ready / missing-key / unreachable 三种都过）',
+      R10: 'R10 同一行上凭据清除与生命周期按钮的可访问名不相等与口径=两名不等，不要求动词不同）',
     }
     for (const id of ['R1', 'R2', 'R3', 'R4', 'R8', 'R10']) {
       const verdict = judges[id]()
       record(id, labels[id], verdict.ok, verdict.detail)
     }
     const disabledInk = await judgeR9(page)
-    record('R9', 'R9 不可用的文字动作比 rest 更暗（rest = primary ink，:disabled = secondary ink，实测同一主题的两把墨）',
+    record('R9', 'R9 不可用的文字动作比 rest 更暗与rest = primary ink，:disabled = secondary ink，实测同一主题的两把墨）',
       disabledInk.ok, disabledInk.detail)
     const collision = await judgeR13(page)
-    record('R13', 'R13 页面上的关键文本与可点控件中心没有被别的元素盖住（elementFromPoint 归属自查）',
+    record('R13', 'R13 页面上的关键文本与可点控件中心没有被别的元素盖住与elementFromPoint 归属自查）',
       collision.ok, collision.detail)
 
     // The container cap, in CSS px and with the DPR beside it: the visual juror
     // read this page as ~1090px wide, which is one DPR-2 screenshot of a 545px
     // column. The number below is the one that decides.
     const pageCap = snapshot.page === null ? null : snapshot.page.clientWidth
-    record('R7a', 'R7 .dmc-page 的客户区宽度按 CSS px 不超过 560（DPR 一并印出）',
+    record('R7a', 'R7 .dmc-page 的客户区宽度按 CSS px 不超过 560与DPR 一并印出）',
       pageCap !== null && pageCap <= 560 && snapshot.page.containerType === 'inline-size',
       `clientWidth=${pageCap}px dpr=${snapshot.dpr} containerType=${snapshot.page && snapshot.page.containerType}`)
 
@@ -1247,12 +1305,12 @@ async function main () {
       && Math.abs(probe.width - probe.requestedWidth) <= 2
       && probe.docOverflow <= 1 && probe.pageOverflow <= 1 && probe.overflowers.length === 0
       && probe.verdictInside !== false)
-    record('R7b', 'R7 容器 106 / 484 / 560 三档：@container 生效、无横向溢出、verdict 在容器内（106 档布局确实换挡）',
+    record('R7b', 'R7 容器 106 / 484 / 560 三档：@container 生效、无横向溢出、verdict 在容器内与106 档布局确实换挡）',
       containerOk && narrowFired, `narrowFired=${narrowFired} ${JSON.stringify(container)}`)
     // R11 at the same three widths: wide (484/560) must show the label in full, the
     // 106 column may truncate but must not overflow.
     const protocolFit = judgeR11(container)
-    record('R11', 'R11 协议选择器文字：484/560 档不截断；106 档允许截断但不得溢出（clientWidth == scrollWidth、无横向滚动）',
+    record('R11', 'R11 协议选择器文字：484/560 档不截断；106 档允许截断但不得溢出与clientWidth == scrollWidth、无横向滚动）',
       protocolFit.ok, protocolFit.detail)
     // The orphan lines at the narrowest container, reported rather than asserted: a
     // 106px column is where the footer action can leave one character alone on its
@@ -1380,7 +1438,7 @@ async function main () {
     const restored = await page.evaluate(THEME_PROBE)
     await openModelConfig(page)
     const shotBytes = Object.fromEntries(Object.entries(shots).map(([name, file]) => [name, fs.existsSync(file) ? fs.statSync(file).size : 0]))
-    record('R5', 'R5 深/浅两主题各一张截图（走「设置 → 通用设置 → 外观」），两张主题不同、恢复原选择，且页尾动作（页面唯一 accent）确实进了画面',
+    record('R5', 'R5 深/浅两主题各一张截图与走「设置 → 通用设置 → 外观」），两张主题不同、恢复原选择，且页尾动作与页面唯一 accent）确实进了画面',
       bothThemes(firstProbe, secondProbe) && shotBytes[firstName] > 5000 && shotBytes[otherName] > 5000
       && restored.dark === appearance.dark
       && shotPanes[firstName]?.addPainted === true && shotPanes[otherName]?.addPainted === true,
@@ -1441,9 +1499,9 @@ async function main () {
     const retryTriggers = await page.locator('.dmc-retry-action').count()
     if (retryTriggers === 0) {
       record('A14', '可重试的行有 .dmc-retry-action 入口', false,
-        '页面上一行重试入口都没有：schema 里声明了 retryPolicy 的行没拿到门（见 model-config 单元门的 retryCapable）')
+        '页面上一行重试入口都没有：schema 里声明了 retryPolicy 的行没拿到门与见 model-config 单元门的 retryCapable）')
       for (const id of ['A15', 'A16', 'A17', 'A18']) {
-        record(id, '（依赖 A14 的行内重试编辑器）', false, 'skipped: A14 没找到入口')
+        record(id, '与依赖 A14 的行内重试编辑器）', false, 'skipped: A14 没找到入口')
       }
     } else {
       // A14 — the entry point, and the ARIA wiring that names what it opens. The
@@ -1465,7 +1523,7 @@ async function main () {
         && entry.expanded.every((value) => value === 'false')
         && entry.controls.every((value) => value !== null && value.startsWith('dmc-retry-'))
         && entry.disabled === 0
-      record('A14', '可重试的「已添加」行有 .dmc-retry-action 入口：初始收起（aria-expanded=false 且无编辑器）、aria-controls 指向 dmc-retry-*、只读部署也不禁用',
+      record('A14', '可重试的「已添加」行有 .dmc-retry-action 入口：初始收起与aria-expanded=false 且无编辑器）、aria-controls 指向 dmc-retry-*、只读部署也不禁用',
         entryOk, JSON.stringify(entry))
 
       await openRetry()
@@ -1512,7 +1570,7 @@ async function main () {
       // check while the two MEANINGS stay the only two it may state.
       const stateWords = [copy.zh.retryDeclared, copy.zh.retryInherits, copy.en.retryDeclared, copy.en.retryInherits]
       const stateOk = opened.state !== null && stateWords.includes(opened.state)
-      record('A16', '.dmc-retry-state 的文案是「已单独设置 / 使用默认值」之一（语义 = declared）',
+      record('A16', '.dmc-retry-state 的文案是「已单独设置 / 使用默认值」之一与语义 = declared）',
         stateOk, `state=${JSON.stringify(opened.state)} accepted=${JSON.stringify(stateWords)}`)
 
       // A17 — the editor may not push the page sideways at any width, in either
@@ -1549,7 +1607,7 @@ async function main () {
       const expandedOk = expandedMatrix.every((probe) => inContract(probe) && contentFits(probe))
       const collapsedOk = collapsedMatrix.every((probe) => inContract(probe)
         && probe.editorInside === null && contentFits(probe))
-      record('A17', '320/390/768/1920 四档视口、展开前后都无横向溢出（document scrollWidth-clientWidth ≤1），且展开时 .dmc-retry 不越出内容列；内容列可用（未被页面自身撑破）时编辑器内容也必须装进自己的盒子',
+      record('A17', '320/390/768/1920 四档视口、展开前后都无横向溢出与document scrollWidth-clientWidth ≤1），且展开时 .dmc-retry 不越出内容列；内容列可用与未被页面自身撑破）时编辑器内容也必须装进自己的盒子',
         expandedOk && collapsedOk,
         `expanded=${JSON.stringify(expandedMatrix)} collapsed=${JSON.stringify(collapsedMatrix)}`)
 
@@ -1566,13 +1624,13 @@ async function main () {
       // here, so no blur happens).
       //
       // A20 then proves the same intent through the button's own gating, which the
-      // drawer's commit has too (A9). Both are needed: a disabled button that still
+      // catalog's commit has too (A9). Both are needed: a disabled button that still
       // wrote would pass A20's first state and fail this one, and a store that is
       // untouched while the button invites the click would pass this one and fail
       // A20.
       //
       // The edit is applied through the native value setter with an `input` event —
-      // the same technique A9 uses on the drawer.
+      // the same technique A9 uses on the inline catalog region.
       await openRetry()
       const savedWords = [copy.zh.retrySaved, copy.en.retrySaved].filter((word) => word !== null)
       const cleanDraft = await page.evaluate(() => {
@@ -1617,13 +1675,13 @@ async function main () {
       const draftOk = cleanDraft.savePresent === true
         && dirtyDraft.value === typed && dirtyDraft.saved === false
         && afterClose === 0 && afterReopen.value === cleanDraft.value && afterReopen.saved === false
-      record('A18', '不点保存就不写：脏草稿在未 commit 时没有写回（无「已保存」痕迹），折叠再展开后字段回到 store 的值、草稿随组件卸载消失',
+      record('A18', '不点保存就不写：脏草稿在未 commit 时没有写回与无「已保存」痕迹），折叠再展开后字段回到 store 的值、草稿随组件卸载消失',
         draftOk,
         `original=${cleanDraft.value} typed=${typed} cleanSaveDisabled=${cleanDraft.saveDisabled} `
         + `draftAfterTyping=${dirtyDraft.value} savedAfterTyping=${dirtyDraft.saved} summary=${JSON.stringify(dirtyDraft.summary)} `
         + `editorsAfterClose=${afterClose} valueAfterReopen=${afterReopen.value} savedAfterReopen=${afterReopen.saved}`)
 
-      // A20 — the 保存 button is DIRT-GATED, the way the drawer's commit is (A9).
+      // A20 — the 保存 button is DIRT-GATED, the way the catalog's commit is (A9).
       // This is the half A18 cannot carry: A18 proves the store is untouched, A20
       // proves the AFFORDANCE tells the reader the same thing before they click.
       // Three states, in order: freshly opened (pristine → disabled), a different
@@ -1670,7 +1728,7 @@ async function main () {
       const saveGatingOk = pristineSave.disabled === true && dirtySave.disabled === false
         && restoredSave.disabled === true && restoredSave.value === pristineSave.value
         && savedTraces === 0 && afterSaveProbe.value === pristineSave.value && afterSaveProbe.disabled === true
-      record('A20', '保存按钮是脏门控（与抽屉 A9 一致）：刚展开禁用 → 写入不同值启用 → 改回原值再次禁用；全程无「已保存」痕迹且没有产生写入（折叠重开后仍是 store 的值）',
+      record('A20', '保存按钮是脏门控与与抽屉 A9 一致）：刚展开禁用 → 写入不同值启用 → 改回原值再次禁用；全程无「已保存」痕迹且没有产生写入与折叠重开后仍是 store 的值）',
         saveGatingOk,
         `pristine=${JSON.stringify(pristineSave)} dirty=${JSON.stringify(dirtySave)} restored=${JSON.stringify(restoredSave)} `
         + `savedTraces=${savedTraces} afterReopen=${JSON.stringify(afterSaveProbe)}`)
@@ -1740,10 +1798,10 @@ async function main () {
       note(`retry shots: ${JSON.stringify(retryShotBytes)} editor=${JSON.stringify(shotOverflow)} `
         + `theme restored=${restoredTheme.dark === beforeShots.dark} secondPaneAddPainted=${secondPane.addPainted}`)
       for (const [name, bytes] of Object.entries(retryShotBytes)) {
-        record(`A19-${name}`, `§5.33 证据截图 ${name}（行内重试编辑器展开态）存在且非空`,
+        record(`A19-${name}`, `§5.33 证据截图 ${name}与行内重试编辑器展开态）存在且非空`,
           bytes > 5000, `bytes=${bytes} file=${path.basename(retryShotFile(name === 'dark'))}`)
       }
-      record('A19', '§5.33 两张展开态截图取自两个不同主题（拍时各自实测），且拍摄时编辑器确实展开、主题已恢复原选择',
+      record('A19', '§5.33 两张展开态截图取自两个不同主题与拍时各自实测），且拍摄时编辑器确实展开、主题已恢复原选择',
         retryShotBytes.dark > 5000 && retryShotBytes.light > 5000
         && retryShotThemes.dark === true && retryShotThemes.light === false
         && restoredTheme.dark === beforeShots.dark

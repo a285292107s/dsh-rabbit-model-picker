@@ -1,155 +1,106 @@
 /**
- * 模型抽屉的样式表，每次激活注入一次。
+ * 模型目录区的样式表，每次激活注入一次。
  *
  * WHY THIS IS A SECOND dmc- SHEET, AND NOT PART OF THE PAGE'S. The page's own
- * sheet (`modelConfigStyles.ts`) owns the list; this one owns the drawer, which
- * is the only surface in the tab that floats. Keeping them apart is the split the
- * seat's `styles.ts` already makes from this pair: independent rule sets, each
- * checkable on its own. Every class here is one the design record
- * already froze (`docs/design-model-config-tab.md` §5.5), with exactly ONE
- * addition, reported for the record: `dmc-discover-group`, the heading row of
- * one group in the discovery checklist, and the reason no existing class could
- * serve is written at its rule below.
+ * sheet (`modelConfigStyles.ts`) owns the ledger; this one owns one provider's
+ * expanded model region. Keeping them apart is the split the seat's `styles.ts`
+ * already makes from this pair: independent rule sets, each checkable on its own.
+ *
+ * THE REGION IS CONTENT, NOT AN OVERLAY. This sheet used to describe a right-side
+ * drawer: `position: fixed`, its own scrim, a shadow, a corner, a Tab trap and a
+ * document-level Escape capture — a second viewport-level modal inside the host's
+ * settings dialog. At a wide viewport it landed OUTSIDE that dialog, and at 1920 it
+ * covered 460px of the page's 560px content column. It is now a plain child of the
+ * provider row's grid, sharing the page's content column and the page's scroll.
+ * Nothing here is fixed, nothing floats, and the narrow branch asks the page's
+ * `@container` (the pane is the container), so one breakpoint language governs the
+ * whole tab.
  *
  * THE DIRECTION IS THE PAGE'S (quiet-instrument). A narrow column of statements,
- * controls stripped down to words, one ink ladder - the primary ink for whatever
+ * controls stripped down to words, one ink ladder — the primary ink for whatever
  * is being stated or can be acted on, the secondary ink for supporting facts and
- * for a control that cannot act - and exactly one object on the surface that is
- * allowed to float.
+ * for a control that cannot act. No object on this surface floats.
  *
- * WHAT FLOATS HERE, AND WHAT THAT COSTS. The design record allows exactly one
- * floating object on this page and this is it: the drawer is the only rule with
- * a lift and the only rule with a corner, and it is also the only surface here
- * whose own box never scrolls (the header and footer are fixed and the body is
- * the one scrolling region, which is the lesson `.dmp-settings-body` records).
- *
- * WHAT IS NO LONGER A BOX. Every action in the drawer used to be a 1px outlined
- * rectangle: five controls across ten model rows, plus the discovery tools. They
- * are text actions now - no border, no fill at rest, no radius, no lift - told
- * apart from static text by their cursor, their hover step and their focus ring.
- * The one kind of control that keeps an
- * edge is the REAL FORM FIELD (an input, a select, a checkbox): the house rules
- * exempt those, and the retry card this plugin used to ship already recorded the
- * regression that removing a field's edge caused - the numbers stopped reading as
- * fields and started reading as static text. No rule below draws a 1px line for
- * any other purpose, and nothing floats except the panel.
+ * WHAT IS NO LONGER A BOX. Every action used to be a 1px outlined rectangle: five
+ * controls across ten model rows, plus the discovery tools. They are text actions
+ * now — no border, no fill at rest, no radius, no lift — told apart from static
+ * text by their cursor, their hover step and their focus ring. The one kind of
+ * control that keeps an edge is the REAL FORM FIELD (an input, a select, a
+ * checkbox): the house rules exempt those, and the retry card this plugin used to
+ * ship already recorded the regression that removing a field's edge caused — the
+ * numbers stopped reading as fields and started reading as static text.
  *
  * COLOUR AND TYPE ARE THE HOST'S. Every colour comes from a `--dsw-*` semantic
  * token and every size is a px literal, matching `modelConfigStyles.ts`; no font
- * family is set, so the drawer inherits the host's own. The two tokens that may carry
- * text here are `--dsw-alias-label-primary` and `--dsw-alias-label-secondary`.
- * The state colours measure under the 4.5:1 body-text floor in the light theme,
- * so `--dsw-alias-state-error-primary` is used only as a mark (the invalid rail)
- * and `--dsw-alias-state-business-primary` only as the focus ring. There is
- * deliberately no accent-filled control and no accent edge in this sheet: the
- * page spends its one accent on its one action, and an accent fill would also
- * need the palette's white as its label, which is a third ink this drawer does
- * not introduce. The commit words are therefore stated with weight instead.
+ * family is set, so the region inherits the host's own. The two tokens that may
+ * carry text here are `--dsw-alias-label-primary` and
+ * `--dsw-alias-label-secondary`. The state colours measure under the 4.5:1
+ * body-text floor in the light theme, so `--dsw-alias-state-error-primary` is used
+ * only as a mark (the invalid rail and the guard bar) and
+ * `--dsw-alias-state-business-primary` only as the focus ring. There is
+ * deliberately no accent-filled control and no accent edge in this sheet: the page
+ * spends its one accent on its one action, and an accent fill would also need the
+ * palette's white as its label, which is a third ink this region does not
+ * introduce. The commit words are therefore stated with weight instead.
  * Quietness is the secondary ink, never a faded primary one: no `opacity`,
  * `filter`, `text-shadow` or `mix-blend-mode` appears below.
  *
- * The one tone the drawer consumes beyond the label inks is
+ * The one tone the region consumes beyond the label inks is
  * `--dsw-alias-interactive-bg-hover` for the hover step and
  * `--dsw-specific-input-major` for field fills: both are plain fills the host's
  * own panels and fields use, and neither is a row separator (the page's list
  * owns that ladder).
  *
- * @module dsh-rabbit-model-picker/client/drawerStyles
+ * @module dsh-rabbit-model-picker/client/catalogStyles
  */
 
 /** Id of the owned style element (stable, so re-activation replaces it). */
-const STYLE_ELEMENT_ID = 'dsh-rabbit-model-picker-drawer-styles'
+const STYLE_ELEMENT_ID = 'dsh-rabbit-model-picker-catalog-styles'
 
 /** The stylesheet. */
 const CSS = `
-/* The scrim: a click-to-close veil that keeps the page behind it legible. It
-   uses the host's own translucent surface fill, because that is the one token
-   the theme defines for a layer sitting over the page; a veil that hid the page
-   would defeat the point of a drawer that preserves context. It does not move:
-   the panel is the only thing that travels. */
-.dmc-drawer-scrim {
-  position: fixed;
-  inset: 0;
-  background: var(--dsw-menu-surface-fill);
-  z-index: 30;
-}
-
-/* The drawer itself: the one floating object in this tab, and therefore the one
-   rule in this sheet with a lift and a corner. Its own box never scrolls; the
-   body below is the only scrolling region. */
-.dmc-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
+/* The region: a direct child of the .dmc-row five-track grid, so it starts at the
+   name's spine (column 2) and never re-flows the scan line above it. It has no
+   fill, edge, radius or lift of its own: the row's positional fill (hover /
+   focus-within / data-catalog) is its surface, which is why it must live inside
+   the row. The region owns no scroll box — the page scrolls. */
+.dmc-catalog-panel {
+  grid-column: 2 / -1;
   display: flex;
   flex-direction: column;
-  width: min(460px, 100vw);
-  overflow: hidden;
-  background: var(--dsw-alias-bg-base);
+  gap: 16px;
+  min-width: 0;
+  padding: 2px 0 16px;
   color: var(--dsw-alias-label-primary);
   font-size: 13px;
   line-height: 20px;
-  /* The one lift in this sheet, and it is the case the house rule carves out: a
-     role=dialog panel floating over the page. The skill's linter cannot tell a
-     dialog from a card, so the exemption is stated on the line itself, the way
-     the retry field states its field-edge exemption. */
-  box-shadow: var(--dsw-elevation-prominent); /* taste-skill-ignore */
-  border-radius: var(--dsw-radius-md) 0 0 var(--dsw-radius-md);
-  animation: dmc-drawer-in 160ms ease-out;
 }
 
-/* The panel takes focus when it opens, so Tab begins inside the drawer. Its ring
-   is drawn just inside the edge because the panel is flush with the viewport. */
-.dmc-drawer:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
-  outline-offset: -2px;
-}
-
-/* The panel settles in from the side it belongs to. It travels 24px rather than
-   its own width: this is a panel arriving, not a scene change, and the page
-   behind it is meant to stay readable. */
-@keyframes dmc-drawer-in {
-  from {
-    transform: translateX(24px);
-  }
-
-  to {
-    transform: translateX(0);
-  }
-}
-
-.dmc-drawer-head {
+/* The head: identity at the start (模型目录) and the region's one action at the
+   end (收起) — the page's own two-ends grammar. The catalog's state travels
+   beside the title in the quieter ink, so the header is one line rather than a
+   stacked card title. */
+.dmc-catalog-head {
   display: flex;
-  flex: none;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 16px 12px;
+  align-items: baseline;
+  gap: 8px;
 }
 
-.dmc-drawer-heading {
+.dmc-catalog-heading {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
-.dmc-drawer-title {
+.dmc-catalog-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 20px;
   color: var(--dsw-alias-label-primary);
-  overflow-wrap: anywhere;
-}
-
-.dmc-drawer-sub {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 /* --- controls -------------------------------------------------------------
@@ -209,26 +160,40 @@ const CSS = `
   color: var(--dsw-alias-label-primary);
 }
 
-.dmc-drawer-close {
+.dmc-catalog-close {
   flex: none;
 }
 
-.dmc-drawer-body {
+.dmc-catalog-body {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
-  padding: 0 16px 16px;
+  min-width: 0;
 }
 
-.dmc-drawer-foot {
+.dmc-catalog-foot {
   display: flex;
-  flex: none;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px 16px;
+}
+
+/* The collapse guard. It is a LINE in the region, not a dialog on top of it: the
+   page removes a dirty draft only after this line has been answered. The 4px bar
+   is the page's warning motif (a graphic, where the state colour clears 3:1); the
+   sentence stays in the primary ink, and the two answers are words. */
+.dmc-catalog-guard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 2px 12px;
+  border-left: 4px solid var(--dsw-alias-state-error-primary);
+}
+
+.dmc-catalog-guard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* --- prose ---------------------------------------------------------------- */
@@ -236,7 +201,7 @@ const CSS = `
 /* A section title, and - when the section has one - the sentence that states the
    section's own state at the far end of the same line, which is this page's
    grammar for every row: identity at the start, the answer at the end. */
-.dmc-drawer-section {
+.dmc-catalog-section {
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -247,14 +212,14 @@ const CSS = `
   color: var(--dsw-alias-label-primary);
 }
 
-.dmc-drawer-status {
+.dmc-catalog-status {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.dmc-drawer-notice {
+.dmc-catalog-notice {
   margin: 0;
   font-size: 12px;
   line-height: 18px;
@@ -263,7 +228,7 @@ const CSS = `
 
 /* The Host's own diagnostic, printed verbatim. It is emphatic by weight, not by
    the error colour: that colour is a mark here, never an ink. */
-.dmc-drawer-error {
+.dmc-catalog-error {
   margin: 0;
   font-size: 12px;
   line-height: 18px;
@@ -272,7 +237,7 @@ const CSS = `
   overflow-wrap: anywhere;
 }
 
-.dmc-drawer-note {
+.dmc-catalog-note {
   font-size: 12px;
   line-height: 18px;
   font-weight: 600;
@@ -281,7 +246,7 @@ const CSS = `
 
 /* --- the catalog: a roster, one line per model ---------------------------- */
 
-/* THE ROSTER (§5.36). The drawer's own copy of the page's grammar: a model is a
+/* THE ROSTER (§5.36). The region's own copy of the page's grammar: a model is a
    RECORD, so the list states records rather than opening a four-field form per
    model. Line one is the id and its one door; line two is the display name and the
    two capacity facts in the quiet ink; everything editable lives in the well that
@@ -330,7 +295,7 @@ const CSS = `
 
 /* The id is the record's identity: one line, cut with an ellipsis when the endpoint
    handed us a long id. The title attribute on the node keeps the whole string
-   reachable, which is the only honest option inside a 460px panel. */
+   reachable, which is the only honest option inside the settings content column. */
 .dmc-model-ref {
   grid-column: 1;
   grid-row: 1;
@@ -371,7 +336,7 @@ const CSS = `
   white-space: nowrap;
 }
 
-/* The row's one door, parked against the drawer's right edge with every other
+/* The row's one door, parked against the region's right edge with every other
    row's door. */
 .dmc-model-edit {
   grid-column: 2;
@@ -581,38 +546,37 @@ const CSS = `
 /* The checklist's own control row. The count leads it, because the count is what
    the reader is choosing from: the measured deployment lists 396 candidates,
    which is a set to filter and take from rather than a list to read top to
-   bottom. It also PINS to the top of the body while the checklist scrolls under
-   it, because "全选" is most useful halfway down 396 rows - and pinning adds no
-   second scrolling region, which the drawer's contract reserves for its body.
-   The fill it pins against is the drawer's own ground, so no new surface is
-   introduced and no line has to separate the two. */
+   bottom. It does NOT pin: the page is the one scrolling surface now, and a
+   sticky strip inside a region that already lives in the page's scroll would
+   travel over the ledger above it. The row simply leads the list. */
 .dmc-discover-tools {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  background: var(--dsw-alias-bg-base);
 }
 
+/* The checklist is the one bounded scroll region in the region: 396 candidates
+   would otherwise push the save footer a screen and a half down. It is a list
+   scroll, not a panel scroll — the page keeps its own scroll. */
 .dmc-discover-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 360px;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   list-style: none;
 }
 
 /* A group heading in the checklist. 396 rows of equal weight is not a hierarchy,
    so the checklist is grouped by the id's own first segment - the vendor, in the
    endpoint's own spelling - and each heading states how many rows it introduces.
-   An existing class could not serve: "dmc-drawer-section" is the drawer's
+   An existing class could not serve: "dmc-catalog-section" is the region's
    SECTION title (13px, 600, primary ink) and twenty of those inside one
    checklist would turn a quiet panel into a stack of headings, while
-   "dmc-drawer-notice" is documented as a sentence of explanation. The heading is
+   "dmc-catalog-notice" is documented as a sentence of explanation. The heading is
    therefore quieter than the ids beneath it - 12px secondary ink, tabular
    figures - and draws no rule: the separation is rhythm, which is how this page
    separates every group of things. */
@@ -705,15 +669,18 @@ const CSS = `
 
 /* --- narrow and reduced motion -------------------------------------------- */
 
-/* The viewport query is deliberate here, and it is NOT the page's container
-   query: the drawer is position: fixed, so its width comes from the viewport
-   (min(460px, 100vw)) and not from the settings column it was opened inside.
-   Below 560px it takes the whole width, the field and level grids stack, and
-   every target grows to a thumb's size. */
-@media (max-width: 560px) {
-  .dmc-drawer {
-    width: 100vw;
-    border-radius: 0;
+/* The page is the query container, and this region lives inside it, so the narrow
+   branch asks the same container the page's own rows do (the .dmc-page rule declares
+   container-type: inline-size). At the phone column the host actually hands this
+   section (about 106px) the field and level grids stack and every target grows to
+   a thumb's size; the region keeps column 2 of the row's one surviving track. */
+@container (max-width: 360px) {
+  .dmc-catalog-panel {
+    grid-column: 2;
+  }
+
+  .dmc-catalog-head {
+    flex-wrap: wrap;
   }
 
   .dmc-btn {
@@ -731,14 +698,10 @@ const CSS = `
   }
 }
 
-/* With motion reduced, the panel is simply there and a control does not settle:
-   the transition and the transform it would have animated are both off, and
-   nothing else about the surface changes. */
+/* With motion reduced, a control does not settle: the transition and the
+   transform it would have animated are both off, and nothing else about the
+   surface changes. */
 @media (prefers-reduced-motion: reduce) {
-  .dmc-drawer {
-    animation: none;
-  }
-
   .dmc-btn {
     transition: none;
   }
@@ -752,10 +715,10 @@ const CSS = `
 `
 
 /**
- * Create (or replace) the drawer's style element.
+ * Create (or replace) the catalog region's style element.
  * @returns the disposer removing exactly the element this call created.
  */
-export function injectDrawerStyles(): () => void {
+export function injectCatalogStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   document.getElementById(STYLE_ELEMENT_ID)?.remove()
   const element = document.createElement('style')
@@ -768,4 +731,4 @@ export function injectDrawerStyles(): () => void {
 }
 
 /** The stylesheet text, exported for the static selfcheck. */
-export const DRAWER_STYLESHEET = CSS
+export const CATALOG_STYLESHEET = CSS

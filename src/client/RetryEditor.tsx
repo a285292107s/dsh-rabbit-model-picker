@@ -26,7 +26,7 @@
  *
  * EVERY FACT COMES FROM THE STORE, AND EVERY WRITE GOES BACK THROUGH IT. The
  * namespace view is the page's own (`ModelConfigStore.namespace`), so this editor
- * cannot show a revision the drawer or the official tab has moved past, and
+ * cannot show a revision the catalog region or the official tab has moved past, and
  * `store.write` carries the conflict retry (`settings/conflict` → re-read →
  * re-apply once) and the reload that makes the row's next render the Host's
  * answer rather than this component's optimism.
@@ -241,7 +241,7 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
   /**
    * Whether either field has left the value the store holds.
    *
-   * The 保存 action is gated on this, the way the drawer's commit is (A9): a
+   * The 保存 action is gated on this, the way the catalog's commit is (A9): a
    * button that is enabled but writes nothing invites a click that has to be
    * explained. Text comparison, not parsed comparison, because a draft that does
    * not parse yet is exactly when the reader wants to press it and be told what

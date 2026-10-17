@@ -106,7 +106,7 @@
 - 我们的 `dictValues`（`modelConfigModel.ts:388-396`）第一行就是 `if (node.type !== 'dict') return []`，所以对真实 schema **恒返回 []**。
 - 为什么真实节点是 union：`PIAI:1040` `reasoningEfforts: z.union([z.const(false), reasoningEfforts])`，其中 `PIAI:1033` `reasoningEfforts = z.dict(z.union([z.string(), z.const(null)]), z.union(THINKING_LEVELS))`。路径 `['providers', PROBE_ROUTE, 'models', '0', 'reasoningEfforts']` 由 `PIAI:1054` `models: z.array(modelProfile)` + `PIAI:1043-1046` 的 `modelProfile` 决定。
 - 门为什么没抓住：`test-model-config.mjs:311-322` 的 fixture 把 **dict 直接**放在 `reasoningEfforts`（没有外层 union），并在 `:289-296` 用一个「直接按属性走」的伪 `nodeAtPath`——**fixture 形状不是真实形状**，所以门是绿的而部署是空的。
-- 影响面：`ModelDrawer.tsx:477`（符号 `reasoningLevelChoices` 调用点）拿到的档位列表恒空。
+- 影响面：`ModelCatalog.tsx:477`（符号 `reasoningLevelChoices` 调用点）拿到的档位列表恒空。
 - THINKING_LEVELS 的实际值（`PIAI:299-307`，即「升级顺序」）：`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`。
 
 ### 4.3 关于「本部署取不到任何协议选项、整页 0 个 `<select>`」的判定
@@ -329,7 +329,7 @@ function refreshIfLoaded(controller) {                       // :4408
 
 | # | 项 | 官方 | 我们 | 判定 |
 |---|---|---|---|---|
-| **D1** | `reasoningLevelChoices` 节点形状 | MODELS:1270 取 `nodeAtPath(...).list` 再 `find(branch => branch.type === 'dict')` → 读该分支 `sKey.list`；路径上是 **union** | `modelConfigModel.ts:388-396` 要求 `node.type === 'dict'` → 真实 schema 下**恒 `[]`** | **BUG·功能影响**：抽屉里的推理档位选择器恒空（`ModelDrawer.tsx` 的 `reasoningLevelChoices` 调用点）。门 `test-model-config.mjs:311-322` 的 fixture 形状是错的，**必须同步改**，否则修完仍是假绿 |
+| **D1** | `reasoningLevelChoices` 节点形状 | MODELS:1270 取 `nodeAtPath(...).list` 再 `find(branch => branch.type === 'dict')` → 读该分支 `sKey.list`；路径上是 **union** | `modelConfigModel.ts:388-396` 要求 `node.type === 'dict'` → 真实 schema 下**恒 `[]`** | **BUG·功能影响**：模型目录区里的推理档位选择器恒空（`ModelCatalog.tsx` 的 `reasoningLevelChoices` 调用点）。门 `test-model-config.mjs:311-322` 的 fixture 形状是错的，**必须同步改**，否则修完仍是假绿 |
 | **D2** | `joinProviderDirectory` 可选字段 | MODELS:1208 额外展开 `nativeAuth`；下游 :1379/:2004/:2243/:2308/:2716 消费 | `modelConfigModel.ts:82-85` 不展开；`contract.ts:145-155` 无该字段（全仓 grep=0） | **偏差·当前无用户可见影响**（`src/` 无消费者），但 join 已非忠实镜像；若要做原生鉴权提示会静默拿不到 |
 | D3 | 排序 | `rows.toSorted(cmp)`（:1221） | `[...rows].sort(cmp)`（:103） | **无差异**（比较器等价；`sort` 自 ES2019 规范稳定，`toSorted` 同套稳定排序） |
 | D4 | `deriveKeyRef` | `:1231` 正则 `/[^A-Z0-9]+/g` | `:117` 同 | **无差异**（边界样例见 §2；`-lead-`/`模型`/`''` 未进门但有价值） |
