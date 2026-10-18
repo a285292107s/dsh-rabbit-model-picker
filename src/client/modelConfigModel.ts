@@ -217,8 +217,19 @@ export function routeProblemOf(
 ): 'empty' | 'invalid' | 'taken' | undefined {
   const id = route.trim()
   if (id === '') return 'empty'
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return 'invalid'
+  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(id)) return 'invalid'
   return taken.includes(id) ? 'taken' : undefined
+}
+
+export function baseUrlProblemOf(baseURL: string): 'empty' | 'invalid' | undefined {
+  const value = baseURL.trim()
+  if (value === '') return 'empty'
+  try {
+    const protocol = new URL(value).protocol
+    return protocol === 'http:' || protocol === 'https:' ? undefined : 'invalid'
+  } catch {
+    return 'invalid'
+  }
 }
 
 export function modelIdsOf(text: string): readonly string[] {

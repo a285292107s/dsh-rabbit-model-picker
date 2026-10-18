@@ -4,7 +4,7 @@ import type { ModelConfigRow, Translate } from './contract.ts'
 import type { ModelConfigStore } from './modelConfigStore.ts'
 import { KEYS } from './modelConfigCopy.ts'
 import {
-  customProviderOps, deriveKeyRef, modelIdsOf, routeProblemOf,
+  baseUrlProblemOf, customProviderOps, deriveKeyRef, modelIdsOf, routeProblemOf,
 } from './modelConfigModel.ts'
 
 export interface AddProviderCardProps {
@@ -34,9 +34,13 @@ export function AddProviderCard(props: AddProviderCardProps): ReactElement {
     [props.rows],
   )
   const problem = routeProblemOf(route, taken)
+  const urlProblem = baseUrlProblemOf(baseURL)
   const models = modelIdsOf(modelsText)
   const editable = props.writable && !busy
-  const ready = problem === undefined && models.length > 0 && api !== ''
+  const ready = problem === undefined
+    && urlProblem === undefined
+    && models.length > 0
+    && api !== ''
 
   const submit = useCallback(async (): Promise<void> => {
     if (!ready) return
@@ -80,9 +84,13 @@ export function AddProviderCard(props: AddProviderCardProps): ReactElement {
       ? t(KEYS['config.route.invalid'])
       : problem === 'taken'
         ? t(KEYS['config.route.taken'])
-        : models.length === 0
-          ? t(KEYS['config.route.needsModels'])
-          : null
+        : urlProblem === 'empty'
+          ? t(KEYS['config.baseUrl.required'])
+          : urlProblem === 'invalid'
+            ? t(KEYS['config.baseUrl.invalid'])
+            : models.length === 0
+              ? t(KEYS['config.route.needsModels'])
+              : null
 
   return (
     <div className="dmc-custom zmd-card" id="dmc-custom-provider">
@@ -131,6 +139,7 @@ export function AddProviderCard(props: AddProviderCardProps): ReactElement {
             value={baseURL}
             disabled={!editable}
             placeholder={t(KEYS['config.baseUrl.placeholderGateway'])}
+            aria-invalid={urlProblem === 'invalid' ? true : undefined}
             onChange={(event) => { setBaseURL(event.target.value) }}
           />
         </label>
