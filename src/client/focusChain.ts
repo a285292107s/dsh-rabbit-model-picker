@@ -1,4 +1,3 @@
-
 export const CHAIN_SELECTOR = 'a[href], button, input, select, textarea, [tabindex]'
 
 function isDisabled(element: HTMLElement): boolean {
@@ -7,9 +6,6 @@ function isDisabled(element: HTMLElement): boolean {
 
 export function isChainMember(element: HTMLElement): boolean {
   if (isDisabled(element)) return false
-  // A listbox is ONE tab stop: ProviderRail keeps exactly one row at `tabIndex` 0 and the
-  // rest at -1 — the same -1 a model row uses to mean "in the chain" — so the role, not
-  // `tabIndex`, is what tells the two apart here.
   if (element.getAttribute('role') === 'option') return element.tabIndex === 0
   return true
 }

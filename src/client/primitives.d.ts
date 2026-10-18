@@ -1,7 +1,3 @@
-
-// Shapes consumed from a DSH baseline package: the browser bundle resolves it from the
-// shell's frozen module table at runtime (baseline externals are implicit), so it must NOT
-// be added to `dsh.client.external`. Only the consumed surface is declared here.
 declare module '@deepseek-ai/dsh-client-ui-primitives' {
   import type {
     ComponentPropsWithoutRef, CSSProperties, InputHTMLAttributes, ReactElement, ReactNode, Ref, RefObject, SVGProps,

@@ -1,4 +1,3 @@
-
 import type {
   ConfigurableProvider, ModelRoute, ParamsFace, ParamsSnapshot, RemoteFace, RemoteResult, RouteAddress,
   SettingsNamespaceView, SettingsOp, WriteOutcome,
@@ -13,9 +12,6 @@ export const CONTEXT_PLACEHOLDER = '128K'
 
 export const PANEL_MODALITIES = ['text', 'image'] as const
 
-// The schema field each known adapter declares input modalities in. The value actually
-// present on the entry wins (see inputFieldOf), so a renamed field degrades to a
-// read-only panel instead of writing into a name the adapter ignores.
 const INPUT_FIELD_BY_NS: Record<string, string> = {
   'llm-pi-ai': 'input',
   'llm-deepseek': 'inputModalities',

@@ -1,4 +1,3 @@
-
 export const STYLE_ELEMENT_ID = 'dsh-rabbit-model-picker-model-config-styles'
 
 const CSS = `
@@ -282,9 +281,6 @@ const CSS = `
   grid-column: 5;
 }
 
-/* Rows close the list themselves (each carries border-bottom), so the list must not add a
-   second closing rule: two stacked 1px lines read as 2px and made the ledger's last edge
-   heavier than every separator above it. */
 .dmc-list {
   display: flex;
   flex-direction: column;
@@ -315,9 +311,6 @@ const CSS = `
   background: var(--zmd-hover);
 }
 
-/* An OPEN record is not a hovered one. Painting the whole record with the hover token made
-   the product's largest surface an opaque slab that hid the page plate, and made "open" and
-   "hovered" the same colour. The open state is carried by the spine and the well, not a fill. */
 .dmc-row[data-catalog='true'],
 .dmc-row[data-well='true'] {
   background: transparent;

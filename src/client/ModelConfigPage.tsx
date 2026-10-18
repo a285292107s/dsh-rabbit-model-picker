@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import type { ModelConfigRow, Translate } from './contract.ts'
@@ -62,9 +61,6 @@ function without(record: Readonly<Record<string, string>>, key: string): Record<
   return next
 }
 
-// `accountAvailable` is undefined on every route that does not sign in through the
-// session, so a value settles it; the fallback covers a snapshot that has not been
-// told yet — without it this route would be offered a key field nobody stores.
 function isSessionRoute(row: ModelConfigRow): boolean {
   if (row.accountAvailable !== undefined) return true
   return row.entry.active && row.apiKeyEnv === undefined && !providerUsable(row)
@@ -487,9 +483,6 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
     if (failure !== undefined) setFailures(current => ({ ...current, [provider]: failure }))
   }, [])
 
-  // A blank field only gets here as an explicit store (Enter): the host cannot read
-  // a stored secret back, so a field left empty on the way out means "cancel", and
-  // the row says why nothing was written instead of writing an empty value.
   const saveKey = useCallback((row: ModelConfigRow, value: string): void => {
     const ref = credentialRefFor(row)
     if (ref === undefined) return
@@ -523,9 +516,6 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
     })
   }, [run, store, t])
 
-  // No adapter's profile schema has an enable flag, so the profile's existence is the
-  // lever. Delete unsets the credential first — a failure aborts before the profile,
-  // so the row survives — and only where the profile reads the derived key reference.
   const lifecycle = useCallback((row: ModelConfigRow): void => {
     const ns = row.entry.settingsNs
     const provider = row.entry.provider

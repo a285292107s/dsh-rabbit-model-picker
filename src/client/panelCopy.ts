@@ -1,4 +1,3 @@
-
 import { CONTEXT_PLACEHOLDER, PANEL_MODALITIES, formatContext } from './params.ts'
 import type { ParamsSnapshot, RouteAddress, RouteCapability, Translate } from './contract.ts'
 

@@ -1,4 +1,3 @@
-
 import { interpolate, NS } from './dictionary.ts'
 import type { Translate } from './contract.ts'
 
@@ -198,8 +197,6 @@ export const VALIDATION_KEYS: Record<'idEmpty' | 'idDuplicate', ConfigKey> = {
   idDuplicate: KEYS['config.model.idDuplicate'],
 }
 
-// zh, en and KEYS are one contract, not two translations: same keys in the same ORDER with
-// identical `{name}` placeholders, because the copy gate compares them as ordered lists.
 export const zh: Record<ConfigKey, string> = {
   'config.nav': '模型配置',
   'config.title': '模型配置',

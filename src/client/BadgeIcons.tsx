@@ -1,4 +1,3 @@
-
 import type { ReactElement, ReactNode } from 'react'
 import type { BadgeFact } from './facts.ts'
 

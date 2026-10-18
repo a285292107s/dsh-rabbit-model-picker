@@ -1,7 +1,3 @@
-
-// Host fact (measured on dsh 0.2.0-rc.2): an `overlay: true` card in the composer chain
-// keeps the seat root mounted (`isConnected` true) while `display: none` zeroes its box,
-// and blocks rAF callbacks (still dead 600ms later) — so the re-check uses `setTimeout`.
 const CONFIRM_LOOKS = 2
 
 const CONFIRM_DELAY_MS = 16

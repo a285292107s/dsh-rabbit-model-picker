@@ -1,10 +1,7 @@
-
 import type { Translate } from './contract.ts'
 
 export const NS = 'dsh-rabbit-model-picker'
 
-// zh is the key-set source of truth; en must mirror it key-for-key in the same ORDER, with
-// every `{name}` placeholder present on both sides, and the copy gate fails on any drift.
 export const zh: Record<string, string> = {
   'provider.account': 'DeepSeek 账号',
   'provider.all': '全部',

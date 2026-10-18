@@ -1,4 +1,3 @@
-
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import type {
@@ -156,9 +155,6 @@ function groupByPrefix(candidates: readonly DiscoveredModel[]): readonly Candida
   return groups
 }
 
-// parseContext is not the only reader: a seeded capacity outside its range must
-// survive an edit here, so text still equal to the seed keeps the number it came
-// from instead of being refused (which would block every save in the region).
 function capacityOf(text: string, stored: number | undefined): number | null | undefined {
   const trimmed = text.trim()
   if (trimmed === '') return undefined
@@ -333,9 +329,6 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   }
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => { escapeRef.current(event) }
-    // CAPTURE on `document`, not a React handler on the region: the host settings panel has
-    // its own document-level Escape while it is open, so this layer claims the keystroke
-    // first — one Escape closes exactly one layer.
     document.addEventListener('keydown', listener, true)
     return () => { document.removeEventListener('keydown', listener, true) }
   }, [])
@@ -398,8 +391,6 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     updateModel(model, { reasoning })
   }
 
-  // Levels another row of the same model already declares are withheld: two rows for
-  // one level collapse into one dict key on write, silently dropping a value.
   const levelOptionsFor = (current: string, used: ReadonlySet<string>): readonly string[] => {
     const options = [...levelChoices]
     if (current !== OFF_LEVEL && !options.includes(current)) options.push(current)
@@ -407,9 +398,6 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     return options.filter(level => level === current || !used.has(level))
   }
 
-  // `pathOps` unsets every key its `after` omits, so the write repeats the whole
-  // effective profile; each row carries its unedited fields in `extra` for the same
-  // reason — one write replaces the whole `models` array.
   const writeModels = async (next: readonly DraftModel[]): Promise<boolean> => {
     if (namespace === undefined) return false
     const profile = asRecord(readPath(namespace.value, settingsPath)) ?? {}
@@ -433,8 +421,6 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     void writeModels(models)
   }
 
-  // Unsetting the `models` key is the whole reset: an absent list means the adapter's
-  // own catalog is inherited again, where an empty array would state "no models".
   const reset = async (): Promise<void> => {
     if (!writable || busy || namespace === undefined) return
     setBusy(true)
@@ -454,9 +440,6 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   const baseURL = typeof profile?.baseURL === 'string' && profile.baseURL !== '' ? profile.baseURL : undefined
   const api = typeof profile?.api === 'string' && profile.api !== '' ? profile.api : undefined
 
-  // No credential travels: the Host resolves the profile's own key reference and this
-  // surface cannot read a secret. A `declared` route is interrogated only once the
-  // profile states a baseURL, because that call goes to the endpoint.
   const fetchModels = async (): Promise<void> => {
     if (namespace === undefined) return
     if (row.entry.declared === true && baseURL === undefined) {

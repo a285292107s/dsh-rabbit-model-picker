@@ -3369,3 +3369,49 @@ v1.1 交给**独立评审**按 Awwwards 口径打分：设计 6.0 / 可用性 6.
 **未验证。** 视觉判断留给 GUI 里的确认：静态上能断言「渲染出的按钮没有 1px 边」，但 hover /
 focus / open 三种态在真机里的观感本轮没有截图证据。
 
+### 5.45 删除全部代码注释（2026-10-18）
+
+**指令。**「删除所有的代码注释。」
+
+**做法。** 用 TypeScript 解析器定位注释，而不是正则扫全文：字符串、模板块、正则字面量与 JSX 文本
+都是受保护区间，所以 `http://…`、SVG data URI 里的 `//`、文案里的中文标点都不会被误删。样式表把
+CSS 放在 `const CSS = \`…\`` 模板里，那些 `/* … */` 是字符串内容，单独按模板块处理。JSX 里
+`{/* … */}` 这种只剩注释的表达式容器连同大括号一起删掉。
+
+**删了多少。**
+
+| 范围 | 数量 |
+|---|---|
+| `src/` 的 TS/TSX 注释 | 约 190 处（含 `index.ts` 30 处、`Picker.tsx` 14 处、`ModelCatalog.tsx` 16 处） |
+| `scripts/` 两个构建脚本 | 34 处 |
+| CSS 注释（在模板字符串里） | 6 张样式表共 20 处 |
+| `cordis.patch.yml` / `.github/workflows/test.yml` / `.gitignore` 的 `#` 注释 | 全部 |
+
+`src/client/fontAsset.ts` 是生成产物，按规矩不手改：改的是生成器 `build-font-asset.mjs`，连同它
+生成的 banner 一起删掉，产物随之没有注释。
+
+**构建产物也一起清了。** esbuild 默认会在每个源文件前写一行 `// src/…` 的路径标记；那行不是我们
+写的注释，但读起来仍是注释。`build-client.mjs` 新增 `withoutSourceMarkers()`，把 host 与 client
+两份产物里的路径标记行去掉（`write: false` + 字符串后处理，只删匹配
+`^[ \t]*// [^\n]*\.(ts|tsx)$` 的整行）。剩下 345 处 `/* @__PURE__ */` 是 esbuild 给 tree-shaking
+用的构建注解，不是注释文字，删掉会改变产物的语义，因此保留。
+
+**验证。**
+
+- `typecheck` 绿；`npm run build` 成功，两份产物仍通过构建期自检（座位 key、`priority: -10`、
+  无 `default` 导出、host 导出 `apply`）。
+- 产物加载自检：client bundle 在假 `window.__ModuleLoader__` 下能取到 `factory`，`apply` 是函数、
+  `inject` 有 5 项、无 `default`；host bundle `import` 后 `apply` 是函数。
+- 机械证据：用 TypeScript printer 把每个文件与删除前的副本各自 `removeComments` 后对比 emit 结果——
+  34 个文件完全一致，只有两个构建脚本不同（那是本轮新增的 `withoutSourceMarkers` 与 host 构建改成
+  `write: false`，是**代码改动**，不是注释残留）。
+- 全文扫描（受保护区间除外）：`src/`、`scripts/`、`lib/` 里剩下的注释只有产物里的
+  `/* @__PURE__ */`。
+
+**后果（如实记）。**
+
+- 这些注释记的是读代码读不出来的东西：宿主实测行为（`overlay:true` 下 rAF 停摆、`display:none`
+  下卡片仍挂载）、外部契约（`settings/conflict` 重读一次、locale 同键只能有一个 owner）、以及
+  「为什么不用那个显然的写法」。删掉之后，这些理由只在 `DESIGN.md` 的对应章节里。
+- 本轮没有真机验证。`typecheck` 与构建自检是仅有的自动检查。
+

@@ -1,22 +1,9 @@
-# Build output IS committed: `npm run build` regenerates lib/, and git installs
-# (`github:a285292107s/dsh-rabbit-model-picker`) receive the repository verbatim — they
-# run no build step, so an uncommitted lib/ makes every such install fail with
-# "failed to import" (no entry point). Keep lib/ in sync with src/ on every
-# change to src/: run `npm run build` and commit both together.
-# Source maps stay out; they are large and resolve nothing for a git install.
 lib/*.map
 
-# Dev-only toolchain.
 node_modules/
 
-# Font-subsetting cache (the generated asset src/client/fontAsset.ts IS
-# committed: ordinary builds must not need Python/network).
 .cache/
 
-# Local browser-automation scratch from manual verification.
 .playwright-cli/
 
-# Design-iteration working files (tasteskill v2): probe scripts, notes and the
-# screenshots the pass looked at. The record that ships is DESIGN.md; this folder
-# is scratch.
 .taste-skill/

@@ -1,4 +1,3 @@
-
 import {
   rowKey, type CapabilityFace, type CapabilitySnapshot, type CapabilitySource, type ConfigurableProvider,
   type DiscoveredModel, type RemoteLlmFace, type RouteCapability,
@@ -31,8 +30,6 @@ export class CapabilityStore implements CapabilityFace {
   private readonly sources: CapabilitySource[] = []
   private readonly asked = new Set<string>()
   private readonly inflight = new Set<string>()
-  // Asked, but the read never reached an answer (the LLM remote was not mounted yet, the
-  // directory read failed, the transport rejected): the next open asks again.
   private readonly unanswered = new Set<string>()
   private readonly requeue = new Set<string>()
   private readonly routes: Record<string, RouteCapability> = {}
@@ -112,9 +109,6 @@ export class CapabilityStore implements CapabilityFace {
     }
     const directory = await this.providers(llm)
     const entry = directory.find(candidate => candidate.provider === provider)
-    // `declared === true` is the adapter admitting it knows this route from configuration
-    // alone, so discovery would reach the endpoint itself — a network request and a
-    // credential use that opening the model menu must not pay for silently.
     if (entry === undefined || entry.declared === true) return []
     const result = await discover.call(llm, entry.settingsNs, { provider })
     return result.ok ? result.value : []

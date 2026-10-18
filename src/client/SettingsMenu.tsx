@@ -1,4 +1,3 @@
-
 import {
   IconCheckOutlineRegular, IconInfoOutlineRegular, IconWarningOutlineRegular, Input, MenuSurface, Switch,
   useAnchoredPosition,
@@ -104,8 +103,6 @@ export function SettingsMenu({
   const editable = address !== null && snapshot.writable && !busy && !writing
   const capacity = capacityDraft ?? contextField.value
 
-  // Read from the rendered panel, not from refs: the baseline `Switch` forwards no ref, so a
-  // ref-based chain would silently drop both modality switches and leave them unreachable.
   const chain = (): HTMLElement[] => {
     const panel = panelRef.current
     if (panel === null) return []
@@ -212,8 +209,6 @@ export function SettingsMenu({
     const known = PANEL_MODALITIES.filter(candidate => next.has(candidate))
     const extras = shownInput.filter(candidate => !(PANEL_MODALITIES as readonly string[]).includes(candidate))
     const list = [...known, ...extras.filter(candidate => candidate !== modality)]
-    // A model that accepts nothing could serve no request, and pi-ai reads an empty list as
-    // "not declared" (back to the catalog default) — so refuse to switch off the last one.
     if (list.length === 0) {
       setWriteError(t('settings.input.needOne'))
       return

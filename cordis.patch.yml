@@ -1,10 +1,3 @@
-# Mount this plugin as one Loader row.
-#
-# The browser half then claims the composer's `conversation.input.model` seat at
-# priority -10, shadowing the shipped seat (priority 0) — which stays registered
-# and keeps serving the `/model` popup from the same shared directory. Removing
-# this row (or disabling it) restores the default picker; nothing in the DSH
-# installation directory is touched.
 - insert:
     - id: dsh-rabbit-model-picker
       name: dsh-rabbit-model-picker

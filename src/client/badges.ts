@@ -1,4 +1,3 @@
-
 import type { ModelReasoning, RouteAddress, RouteCapability, Translate } from './contract.ts'
 import type { BadgeFact } from './facts.ts'
 import { formatWindow } from './format.ts'
@@ -21,9 +20,6 @@ export interface BadgeInput {
   readonly t: Translate
 }
 
-// The three sources are read in the adapters' own resolution order — the declared field,
-// then what the adapter published, then the configured default — so a row never states a
-// value the Host itself would resolve differently.
 function modalitiesOf(
   address: RouteAddress | null, capability: RouteCapability | undefined,
 ): readonly string[] | undefined {

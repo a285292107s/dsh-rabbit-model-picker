@@ -15,8 +15,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The test scripts were removed on 2026-10-18 by maintainer decision
-      # (see AGENTS.md and DESIGN §5.43). What is left is the one thing a git
-      # install actually depends on: the source type-checks and bundles.
       - run: npm run typecheck
       - run: npm run build

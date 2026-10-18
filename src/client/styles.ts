@@ -1,4 +1,3 @@
-
 const STYLE_ELEMENT_ID = 'dsh-rabbit-model-picker-styles'
 
 const CSS = `
@@ -191,10 +190,6 @@ const CSS = `
   pointer-events: none;
 }
 
-/* The card is a FIXED panel, not a balloon. Its height is set once and stays put, so
-   switching provider (4 models vs 13) does not resize the surface under the pointer, and
-   the footer never moves. Overflow is the panes' job: the rail scrolls in its own column and
-   the model list scrolls inside the payload. */
 .dmp-card {
   width: min(520px, calc(100vw - 32px));
   height: min(420px, calc(100vh - 96px));
@@ -249,11 +244,6 @@ const CSS = `
   white-space: nowrap;
 }
 
-/* The PAYLOAD sizes the card, the index scrolls inside it. As two flex siblings each pane
-   contributed its own content height, so a ten-row provider rail made the card ~100px taller
-   than the model list it frames — and that surplus showed up as undrawn pane under the last
-   row, above the footer. Taking the rail out of flow makes the model list the only thing that
-   can make the card taller; the rail keeps its own scrollbar. */
 .dmp-card-body {
   position: relative;
   display: flex;
@@ -278,8 +268,6 @@ const CSS = `
   scroll-snap-type: y proximity;
   scroll-padding-block: 6px;
   border-right: 1px solid var(--zmd-line);
-  /* The rail scrolls inside a card the model list sizes, so it is routinely cut off. A short
-     fade at its foot states "there is more" where a half-drawn row would read as a defect. */
   mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 18px), transparent 100%);
 }
 
@@ -1160,9 +1148,6 @@ const CSS = `
 }
 
 @media (max-width: 536px) {
-  /* Narrow: the panes are stacked, so a fixed height leaves a void under a short list.
-     The card instead fits its content up to a ceiling — the head, the rail strip, the
-     payload and the foot — and the payload scrolls once the ceiling is reached. */
   .dmp-card {
     height: auto;
     max-height: min(560px, calc(100vh - 96px));
@@ -1173,8 +1158,6 @@ const CSS = `
     min-height: 0;
   }
 
-  /* Below the two-pane breakpoint the rail is a horizontal strip ABOVE the payload again, so
-     it returns to flow: the absolute placement exists only to let the list size the card. */
   .dmp-rail {
     position: static;
     flex: 0 0 auto;
@@ -1216,8 +1199,6 @@ const CSS = `
     padding: 10px 12px 0;
   }
 
-  /* A keyboard hint has no meaning on a touch-width card, and it was taking the line the
-     count needed: at 390 the footer note was ellipsized. The binding stays live; the note goes. */
   .dmp-card-foot-keys {
     display: none;
   }

@@ -1,4 +1,3 @@
-
 export interface ModelSelection {
   readonly provider: string
   readonly model: string
@@ -32,8 +31,6 @@ export interface CatalogFailure {
   readonly message: string
 }
 
-// The opaque row identity every cross-surface lookup keys off, so the `provider/model`
-// spelling is a contract rather than a formatting choice.
 export function rowKey(provider: string, model: string): string {
   return `${provider}/${model}`
 }
@@ -71,9 +68,6 @@ export interface SettingsOp {
 export interface SettingsNamespaceView {
   readonly ns: string
   readonly revision: number
-  // `value` is the effective config (all layers merged, schema defaults applied); `user`
-  // is the profile patch this plugin edits; `base` is the composition layer, and a path
-  // in `user` but not `base` is the user's own change — that is what `removable` reports.
   readonly value: unknown
   readonly user?: unknown
   readonly base?: unknown
@@ -95,8 +89,6 @@ export interface ProviderDirectoryEntry {
   readonly displayName: string
   readonly settingsNs: string
   readonly settingsPath: readonly string[]
-  // Whether this route's adapter is registered right now — a fact the configurable
-  // directory itself cannot answer; llm/listProviders is the other source.
   readonly active: boolean
   readonly declared?: boolean
   readonly defaultBaseURL?: string
@@ -104,8 +96,6 @@ export interface ProviderDirectoryEntry {
   readonly error?: string
 }
 
-// Source and writability of one credential reference; deliberately no value field, since
-// the read crosses the Remote wire — a key can be replaced or unset, never read back.
 export interface CredentialInfo {
   readonly configured: boolean
   readonly source?: string
@@ -114,8 +104,6 @@ export interface CredentialInfo {
 
 export interface ModelConfigRow {
   readonly entry: ProviderDirectoryEntry
-  // `configured` = some layer carries this provider's profile; `added` = the page lists
-  // it, which a live route with no settings address is even when no layer configures it.
   readonly configured: boolean
   readonly added: boolean
   readonly removable: boolean
@@ -168,8 +156,6 @@ export interface ConfigurableProvider {
   readonly displayName: string
   readonly settingsNs: string
   readonly settingsPath: readonly string[]
-  // The adapter's own admission that it serves this route from configuration alone —
-  // the one value that may block llm/discoverModels (see capabilities.ts).
   readonly declared?: boolean
   readonly error?: string
   readonly defaultBaseURL?: string
@@ -203,8 +189,6 @@ export interface RetryPolicyValue {
 
 export interface RemoteSettingsFace {
   describe(): Promise<RemoteResult<SettingsDescribe>>
-  // Only volatile paths are accepted; a write against a stale `expectedRevision` answers
-  // `settings/conflict`, which every caller here retries once after re-reading.
   mutate(
     ns: string,
     ops: readonly SettingsOp[],
@@ -222,16 +206,12 @@ export interface ModelDiscoveryRequest {
 export interface DiscoveredModel {
   readonly id: string
   readonly name?: string
-  // Token counts. Every field but `id` is optional because a listing may disclose an id
-  // and nothing else; absent (or empty) `inputModalities` means unknown, not "none".
   readonly contextWindow?: number
   readonly maxTokens?: number
   readonly inputModalities?: readonly string[]
 }
 
 export interface RemoteLlmFace {
-  // Routes whose adapter is registered right now — deliberately not the same list as
-  // listConfigurableProviders, which also carries routes that nobody registers.
   listProviders?(): Promise<RemoteResult<readonly LlmProviderInfo[]>>
   listConfigurableProviders(): Promise<RemoteResult<readonly ConfigurableProvider[]>>
   discoverModels?(

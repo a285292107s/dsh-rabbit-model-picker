@@ -1,4 +1,3 @@
-
 const STYLE_ELEMENT_ID = 'dsh-rabbit-model-picker-catalog-styles'
 
 const CSS = `
@@ -196,8 +195,6 @@ const CSS = `
   background: var(--zmd-hover);
 }
 
-/* Open is not hovered: a filled open row painted the roster's expanded entry as a slab and
-   hid the plate; the model well's own spine carries the state instead. */
 .dmc-model-row[data-well='true'] {
   background: transparent;
 }

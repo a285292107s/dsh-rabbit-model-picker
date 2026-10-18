@@ -1,7 +1,3 @@
-
-// The snapshots fed here must stay plain JSON-shaped data (objects, arrays, strings,
-// numbers, booleans). A Map or a Date has no own enumerable keys, so two different ones
-// would compare equal — silently, and React would never see the change.
 export function sameSnapshot(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true
   if (typeof left !== 'object' || typeof right !== 'object') return false

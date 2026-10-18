@@ -1,4 +1,3 @@
-
 import { FONT_FAMILY, FONT_WOFF2_BASE64 } from './fontAsset.ts'
 
 const STYLE_ELEMENT_ID = 'dsh-rabbit-model-picker-design'
@@ -12,15 +11,9 @@ const FONT_FACE = `@font-face {
   font-display: swap;
 }`
 
-// Two noise tiles, because one alpha cannot be right for both grounds. The light ground needs
-// a more opaque speck to read at all (dark ink on near-white), the dark ground a softer one:
-// a single 8% tile measured 9.2/255 amplitude in dark and 3.1/255 in light, i.e. two materials.
 const GRAIN_LIGHT = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.42 0 0 0 0 0.44 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E")`
 const GRAIN_DARK = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.62 0 0 0 0 0.62 0 0 0 0 0.66 0 0 0 0.075 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E")`
 
-// Neutral-cool at equal lightness, so the plate sits inside DSH without pulling against it:
-// the ramp keeps the host's slight blue cast but at the object's own values, and the only
-// chroma on a surface is the host's information blue (selection, focus, "you are here").
 const TOKENS = `:root {
   --zmd-font-latin: ${JSON.stringify(FONT_FAMILY)}, var(--dsh-font-family-text, var(--dsh-font-family-text-default, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif));
 
@@ -71,8 +64,6 @@ body {
   --zmd-on-ink: var(--zmd-panel);
 }`
 
-// The shared vocabulary. Every surface composes these and adds nothing structural of its own;
-// that is what keeps one plate, one rule and four action tiers the same everywhere.
 const PRIMITIVES = `
 .zmd-num {
   font-variant-numeric: tabular-nums;
@@ -259,8 +250,6 @@ const PRIMITIVES = `
   transform: translateY(1px);
 }
 
-/* An open door is stated by its edge, not its fill: a fill reads as a second commit on the
-   row and hides the plate underneath it. */
 .zmd-btn-door[aria-expanded='true'] {
   border-color: var(--zmd-ink);
   background: transparent;

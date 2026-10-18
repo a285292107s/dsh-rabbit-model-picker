@@ -1,4 +1,3 @@
-
 import type {
   ConfigurableProvider, CredentialInfo, DiscoveredModel, LlmProviderInfo, ModelConfigRow,
   ModelConfigSnapshot, ModelDiscoveryRequest, ProviderDirectoryEntry, RemoteCredentialsFace,
@@ -197,9 +196,6 @@ export class ModelConfigStore {
         }
   }
 
-  // Re-applying a handful of fields over a document that moved underneath (the official
-  // Models tab, say) is what the user asked for, so the first `settings/conflict` re-reads
-  // and retries. A SECOND conflict is reported verbatim: by then another writer is racing.
   async write(ns: string, ops: readonly SettingsOp[], expectedRevision: number | undefined): Promise<WriteOutcome> {
     const faces = this.faces()
     if (faces === null) return { ok: false, conflict: false, message: '设置服务不可用。' }

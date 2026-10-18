@@ -1,4 +1,3 @@
-
 import type {
   ConfigurableProvider, LlmProviderInfo, ModelCatalogEntry, ModelConfigRow,
   ProviderDirectoryEntry, SettingsNamespaceView, SettingsOp,
@@ -124,8 +123,6 @@ export function hasPath(value: unknown, path: readonly string[]): boolean {
   return last in parent
 }
 
-// Only fields that moved produce an op: a wholesale replace rebuilt from a redacted view
-// would delete fields this page cannot see, and a no-op write would still bump the revision.
 export function pathOps(
   base: readonly string[],
   before: unknown,
@@ -183,9 +180,6 @@ export function reasoningLevelChoices(
     .filter((value): value is string => typeof value === 'string')
 }
 
-// Coverage for the retry editor is a SCHEMA question, never a list of adapter names:
-// `settingsPath` is `['providers', <route>]` for one family and `[]` where the namespace
-// root IS the profile. An unreadable schema fails closed — no entry beats a rejected write.
 export function retryCapable(
   namespace: SettingsNamespaceView | undefined,
   settingsPath: readonly string[],
@@ -197,8 +191,6 @@ export function retryCapable(
   return stepDict(refs, profile, 'retryPolicy') !== undefined
 }
 
-// Schemas arrive as a numeric `{uid, refs}` table; a dict/array node consumes its step as a
-// KEY (continuing in `inner`), an object node as a field. Misreading either is silently undefined.
 function schemaNodeAt(
   refs: unknown,
   namespace: SettingsNamespaceView | undefined,

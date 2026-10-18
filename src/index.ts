@@ -1,4 +1,3 @@
-
 import { recoverRateLimitFailure } from './host/rateLimitRecovery.ts'
 import type { ProviderFailure } from './host/rateLimitRecovery.ts'
 
@@ -15,11 +14,6 @@ interface HostContext {
   ): unknown
 }
 
-/**
- * Registered with `prepend: true`, i.e. as the WATERFALL's outermost layer: the
- * promoted code has to be on the payload before the shipped retry executor reads it.
- * `next()` is always called, so the chain continues exactly as it would otherwise.
- */
 export function apply(ctx: HostContext): void {
   ctx.on(
     'agent/request-error',

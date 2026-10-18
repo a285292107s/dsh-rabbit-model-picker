@@ -1,4 +1,3 @@
-
 import type { RetryBackoff, RetryPolicyValue, RetryPolicyView } from './contract.ts'
 
 export const MIN_RETRIES = 0
@@ -99,9 +98,6 @@ export function formatDuration(ms: number): string {
   return seconds === 0 ? `${minutes}m` : `${minutes}m${seconds}s`
 }
 
-// Jitter is ±jitterRatio PER WAIT in the executor, so a total is the sum of per-wait bounds
-// rather than a scaled number. The summary's "longest total" shows `high`, the end that
-// answers "how long can this take".
 export function waitRange(waits: readonly number[], jitterRatio: number): { low: number; high: number } {
   const ratio = Number.isFinite(jitterRatio) ? Math.max(0, Math.min(jitterRatio, 1)) : 0
   let low = 0
@@ -147,8 +143,6 @@ export function retryPolicyDocument(
     mode: view.mode,
     maxRetries,
     ...(retryableCodes === undefined || retryableCodes.length === 0 ? {} : { retryableCodes }),
-    // `initialDelayMs` / `jitterRatio` are carried through from the resolved view because the
-    // write merges at `retryPolicy`: stating only the two edited fields would silently reset them.
     backoff: {
       initialDelayMs: Math.min(view.initialDelayMs, maxDelayMs),
       maxDelayMs,

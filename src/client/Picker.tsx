@@ -1,4 +1,3 @@
-
 import {
   IconCheckOutlineRegular, IconChevronDownOutlineRegular,
   IconDataOutlineRegular, IconSettingsOutlineRegular, IconWarningOutlineRegular, Input, MenuGroup, MenuSurface,
@@ -196,8 +195,6 @@ export function Picker(props: PickerProps) {
 
   const knownProviders = useMemo(() => new Set(providerOptions.map(option => option.id)), [providerOptions])
 
-  // Guarded on load: an unloaded catalog knows no providers, and "not read yet" must not be
-  // mistaken for "this provider no longer exists".
   useEffect(() => {
     if (providerFilter === null || state.status !== 'ready') return
     if (knownProviders.has(providerFilter)) return
@@ -237,9 +234,6 @@ export function Picker(props: PickerProps) {
     capabilities.ensure(catalogRows.map(row => row.provider))
   }, [capabilities, catalogRows, open])
 
-  // The Host can take the composer off the page without unmounting it — an overlay question
-  // card renders it `display: none` — which leaves this portal with no anchor at all. That is
-  // why this outside click and `observeSeatLoss` below dismiss together, restoring no focus.
   useEffect(() => {
     if (!open && !settingsAt) return
     const closeOutside = (event: MouseEvent): void => {
@@ -471,9 +465,6 @@ export function Picker(props: PickerProps) {
       || menuRef.current?.contains(target) === true
       || settingsMenuRef.current?.contains(target) === true
     )) return
-    // No destination is not a departure: React detaches a control that leaves the tree while
-    // a settings write is in flight (every such control disables), and that unmount fires
-    // focusout with a null relatedTarget. Treating it as departure closed the seat mid-write.
     if (event.currentTarget.contains(document.activeElement) || document.activeElement === document.body) return
     close()
   }
@@ -507,9 +498,6 @@ export function Picker(props: PickerProps) {
   const scopeName = providerFilter === null ? t('provider.all') : providerNameOf(providerFilter)
   const scopeSub = providerFilter === null ? t('card.subAll') : t('card.subScoped')
   const scopeCount = t('card.count', { count: String(rows.length) })
-  // The footer's job is to answer "is this all of it?", not only "how many". When a search or
-  // a scope hides rows, it says BOTH numbers; when nothing is hidden it states the total once
-  // rather than printing `4 / 4`, which reads as a page counter on a surface that has no pages.
   const hiddenRows = Math.max(0, catalogRows.length - rows.length)
   const footNote = hiddenRows === 0
     ? t('card.footTotal', { count: String(rows.length) })
@@ -517,9 +505,6 @@ export function Picker(props: PickerProps) {
   const footKeys = groups.length > 1
     ? t('card.footProviders', { count: String(groups.length) })
     : ''
-  // The rail's ordinals are live keys (`01`–`09` jump to that provider). A shortcut nobody is
-  // told about is one nobody uses, so the footer states it — but only when at least two rows
-  // are usable, because with one row there is nothing to jump between.
   const railKeys = providerOptions.filter(option => !option.failed).length > 1
     ? t('card.railKeys')
     : ''

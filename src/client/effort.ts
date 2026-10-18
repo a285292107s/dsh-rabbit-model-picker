@@ -1,4 +1,3 @@
-
 import type { ModelReasoning, Translate } from './contract.ts'
 
 export interface EffortChoice {

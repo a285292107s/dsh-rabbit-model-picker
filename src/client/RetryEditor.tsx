@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { ModelConfigRow, SettingsNamespaceView, SettingsOp, Translate } from './contract.ts'
@@ -121,8 +120,6 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
     setRetriesInvalid(retries === null)
     setCapInvalid(capMs === null)
     if (retries === null || capMs === null) return
-    // Writing an unchanged policy would still bump the revision and manufacture the very
-    // conflict `store.write`'s retry exists to absorb, so the no-op settles without writing.
     if (retries === view.maxRetries && capMs === view.maxDelayMs) {
       settle(null)
       return

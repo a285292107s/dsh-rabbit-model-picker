@@ -1,4 +1,3 @@
-
 import type { KeyboardEvent, MutableRefObject } from 'react'
 import type { Translate } from './contract.ts'
 
@@ -50,8 +49,6 @@ export function ProviderRail({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.nativeEvent.isComposing) return
-    // The margin ordinal is a promise: `01`–`09` jump to that row. Without this the
-    // number is a decoration that costs a gutter and delivers nothing.
     if (/^[1-9]$/.test(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey) {
       const target = options[Number(event.key) - 1]
       if (target === undefined || target.failed) return
@@ -115,9 +112,6 @@ export function ProviderRail({
           title={option.label}
           onClick={() => { onPick(option.id) }}
         >
-          {/* The ordinal is a live key: `01`-`09` jump here. It is drawn as the number it is,
-              and the card footer states the binding, so the gutter is an affordance and not
-              a decoration that promises a shortcut nobody implemented. */}
           <span className="dmp-rail-index" aria-hidden="true">{ordinalOf(index)}</span>
           <span className="dmp-rail-copy">
             <span className="dmp-rail-name">{option.label}</span>

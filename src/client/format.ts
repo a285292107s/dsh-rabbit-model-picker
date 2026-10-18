@@ -1,4 +1,3 @@
-
 export function formatWindow(tokens: number): string {
   if (!Number.isFinite(tokens) || tokens <= 0) return ''
   if (tokens < 1_000) return String(Math.round(tokens))

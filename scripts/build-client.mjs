@@ -1,21 +1,3 @@
-/**
- * Build script for an EXTERNAL DSH plugin (no published `clientBundle` preset).
- *
- * Produces two artifacts:
- *   lib/index.js   — host half, plain node ESM with every bare import external
- *   lib/client.js  — browser half, the lazy-CJS factory the loader expects:
- *                    window.__ModuleLoader__.load({ id, factory: (require) => { ... } })
- *
- * The external list is deliberately the set this client half ACTUALLY imports
- * from the DSH baseline (`packages/client/web/src/platform.ts`), not the whole
- * baseline: it doubles as a gate. Baseline externals are implicit for a dynamic
- * bundle (packages/client/AGENTS.md), so nothing here belongs in
- * `dsh.client.external` — and anything outside this list is a real defect that
- * must fail the build instead of failing at runtime inside the module table.
- *
- * @module dsh-rabbit-model-picker/build-client
- */
-
 import { build } from 'esbuild'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -23,7 +5,6 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** The baseline specifiers this client half imports (see the module note). */
 const BASELINE_EXTERNALS = [
   'react',
   'react/jsx-runtime',
@@ -31,44 +12,38 @@ const BASELINE_EXTERNALS = [
   '@deepseek-ai/dsh-client-ui-primitives',
 ]
 
-/** The seat this plugin shadows, and the rank that wins it (lowest renders). */
 const SEAT = 'conversation.input.model'
 const SEAT_PRIORITY = -10
 
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
-// The client entry id must equal the package name: client-modules requests the
-// entry by package name through `exports["./client"]`.
 const CLIENT_ID = String(pkg.name)
 
 async function main() {
   mkdirSync(resolve(root, 'lib'), { recursive: true })
 
-  // 1) Host half: node ESM, bare imports left external.
-  await build({
+  const host = await build({
     entryPoints: [resolve(root, 'src/index.ts')],
-    outfile: resolve(root, 'lib/index.js'),
     bundle: true,
     platform: 'node',
     format: 'esm',
     target: 'es2022',
     packages: 'external',
+    write: false,
   })
+  writeFileSync(resolve(root, 'lib/index.js'), withoutSourceMarkers(host.outputFiles[0].text))
 
-  // 2) Browser half: bundle to CJS (write:false), then wrap into the loader factory.
   const client = await build({
     entryPoints: [resolve(root, 'src/client/index.ts')],
     bundle: true,
     platform: 'browser',
     format: 'cjs',
     target: 'es2022',
-    // Keep CJK as literal UTF-8 so the shipped browser bundle stays readable.
     charset: 'utf8',
     external: BASELINE_EXTERNALS,
     write: false,
   })
-  const bundled = client.outputFiles[0].text
+  const bundled = withoutSourceMarkers(client.outputFiles[0].text)
   const factory = [
-    // The loader injects `require`; the plugin bundle uses it for baseline externals.
     'var module = { exports: {} }; var exports = module.exports;',
     bundled,
     'return module.exports;',
@@ -87,20 +62,10 @@ async function main() {
   console.log('built lib/index.js (host) and lib/client.js (lazy-CJS browser bundle)')
 }
 
-/**
- * Check the browser artifact against the wiring contract. None of these
- * mistakes fails the build on its own; each one only shows up as "the seat is
- * still the old one" or "the button does nothing", which has no other discovery
- * path:
- *   1. every `require(specifier)` in the bundle is in {@link BASELINE_EXTERNALS};
- *   2. the wrapper shape and entry id match the package name;
- *   3. the entry exports `apply` + `inject` and NO `default` (the Loader reads
- *      `exports.default ?? exports`, so a default export would hide `.inject`);
- *   4. the shadowing contract is present: the seat name and `priority: -10`.
- * A Proxy that returns only itself impersonates the baseline module table; the
- * bundle only requires and reads properties at module scope.
- * @param code - the written `lib/client.js`.
- */
+function withoutSourceMarkers(code) {
+  return code.replace(/^[ \t]*\/\/ [^\n]*\.(?:ts|tsx)[ \t]*\r?\n/gm, '')
+}
+
 function verifyClientBundle(code) {
   const problems = []
   if (!code.startsWith('window.__ModuleLoader__.load(')) problems.push('wrapper is not window.__ModuleLoader__.load(...)')
@@ -133,7 +98,6 @@ function verifyClientBundle(code) {
   }
 }
 
-/** Check the host artifact actually resolves and exports an `apply`. */
 async function verifyHostBundle() {
   const module = await import(pathToFileURL(resolve(root, 'lib/index.js')).href)
   if (typeof module.apply !== 'function') {
