@@ -23,6 +23,27 @@ dsh-rabbit-model-picker 是面向 DeepSeek Harness(DSH)的**外部插件**:brows
   「废弃叫法」里的词不得在代码、文案、文档里复活。汇报说清改了什么、为什么、怎么验、有哪些风险
   或限制;**没实测的写成"未验证 / 缺口",不要写成已解决**。
 
+## 注释与文档
+
+**注释是「失败」的信号,代码本身应该能自解释。** 解释性文字一律不进 `src/` 与 `scripts/`——代码里
+一句注释都不写,没有例外,文件头、字段说明、「为什么这么写」的那一句都不留。理想的代码像一篇
+结构清晰的文章,靠精准的命名(变量、函数、类名)与结构直接说清「做什么」和「为什么」,读者不需要
+旁白。一段逻辑要靠注释才读得懂,说明表达力不足:先改代码本身——换名字、拆函数、把约束写进类型
+或断言——而不是用注释打补丁。
+
+**注释是「谎言」的温床,维护成本极高。** 代码一直被修改,注释却常常被忘在原地;一条过时、甚至
+与逻辑相悖的注释,危害大于没有注释,因为它会主动误导后来的维护者。代码本身的逻辑才是唯一不会
+说谎的真相来源,所以宁可让代码自己说话。
+
+**有代码无法解释的决定,写进对应的领域文档。** 判据是「删掉这句说明,只看代码会不会做错事」——
+外部世界的事实(DSH 契约、第三方 API 行为)、违反后不报错只是悄悄错的不变量、非直觉取舍的理由、
+改 A 必须改 B 的跨文件耦合。放哪一份:术语、规范名与行为边界进 `CONTEXT.md`;方向级取舍与难逆转
+的决定进 `docs/adr/000N-*.md`;运行与验证纪律、踩过的坑进 `docs/agent-safety.md`;没有专属文档的
+工程契约补进本文件「改源码」的契约清单。同一条规则只写一处,别处引用、不复述。
+
+**新增或改动这些记录后,当次回复里告诉维护者记了什么。** 一两句说清:动了哪份文件、记了什么、
+为什么代码里放不下。别让记录悄悄沉进仓库。
+
 ## 构建与产物
 
 单个 npm 包(不是 pnpm workspace),Node 22,`npm install`。
@@ -31,8 +52,7 @@ dsh-rabbit-model-picker 是面向 DeepSeek Harness(DSH)的**外部插件**:brows
   `lib/client.js`(browser,lazy-CJS factory)。`src/` 是唯一真源,`lib/` 是**提交进仓库的构建
   产物**,只能由构建生成;改 `src/` 必须重建并把 `lib/` 与 `src/` **同一提交**——git 安装不构建,
   漏提交会让用户装到旧行为或 `failed to import`。
-- `npm run typecheck` 只查 `src/`。`npm run font:build` 需要 Python/网络,产物
-  `src/client/fontAsset.ts` 已提交,**不要手改 `fontAsset.ts`**。
+- `npm run typecheck` 只查 `src/`。
 - **没有自动化测试,也没有 src↔lib 漂移门。** 改完 `src/` 跑 `typecheck` + `build`,必要时对比
   产物哈希确认 `lib/` 确实重建过。构建脚本自带的接线自检(座位 key、`priority: -10`、无 `default`
   导出)是唯一的机器门。
@@ -43,9 +63,9 @@ dsh-rabbit-model-picker 是面向 DeepSeek Harness(DSH)的**外部插件**:brows
 - 生效方式:**host 改动要重启 `dsh web`** 才会加载新的 `lib/index.js`(插件目录不在 HMR 的 root
   面内),重启只由用户做;browser 改动重建后刷新页面生效(旧 bundle 可能被缓存——先
   `Network.setCacheDisabled` 再 reload,并在记录结论前确认 bundle 里确实有改动)。
-- **视觉改动落在既有语法里**,没有规范文档可依:令牌真源是 `designSystem.ts` 的 `--zmd-*` 块,
-  类名与状态钩子看 `src/` 现状。颜色字面量只许出现在令牌块;样式表只用 `var(--zmd-*)` 与宿主
-  `var(--dsw-*)`;字号守五档白名单(10/12/14/16/24,宿主 Tag 11 与图标字形 16 是既有例外);
+- **视觉改动落在既有语法里**:令牌真源是 `designSystem.ts` 的 `--zmd-*` 块,它只把宿主
+  `--dsw-*` 映射成语义角色,自己不造颜色。颜色字面量只许出现在令牌块;样式表只用 `var(--zmd-*)`
+  与宿主 `var(--dsw-*)`;字阶 11/12/13/14/16、边宽一律 0.5px、半径取宿主 `--dsw-radius-*` 档;
   类名前缀 `dmp-`(输入条三表面)/ `dmc-`(模型配置页)/ `zmd-`(共享原子);退役类名不得复活。
   **这些规则没有静态门兜底,由实现与我的确认遵守。**
 - 文案 zh/en 同键同序(`dictionary.ts`、`modelConfigCopy.ts`)。
@@ -53,7 +73,7 @@ dsh-rabbit-model-picker 是面向 DeepSeek Harness(DSH)的**外部插件**:brows
   配置写入只走 Host 服务(`settings/mutate` 带 revision 冲突重读、`credentials/set|unset`)、宽度
   预算。**改它们不是改代码,是改决定。**
 - 新逻辑放进单一职责的模块(既有形态是纯逻辑/纯函数与渲染分离);已经很大的文件不顺手重排
-  ——**拆分是独立一轮**,先修眼前的问题。`src/` 不留注释;读代码推不出来的理由写进 ADR 或提交说明。
+  ——**拆分是独立一轮**,先修眼前的问题。
 - 改「模型配置」页时,`docs/models-page-parity-checklist.md` 的 A–E 五组就是交付范围;
   查官方页行为看 `docs/official-models-page-notes.md` 与 `docs/settings-models-tab-feasibility.md`
   ——那是史料,不是现行契约。

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
-import type { ModelConfigRow, Translate } from './contract.ts'
+import type { ModelConfigRow, SettingsNamespaceView, Translate } from './contract.ts'
 import type { ModelConfigStore } from './modelConfigStore.ts'
 import type { ConfigKey } from './modelConfigCopy.ts'
 import { KEYS } from './modelConfigCopy.ts'
 import {
-  credentialRefFor, deriveKeyRef, isRemovable, keyConfigured, keyRefOf, keyWritable, modelsOf,
-  pathOps, protocolChoices, providerUsable, readPath, retryCapable,
+  credentialRefFor, customProviderHost, deriveKeyRef, isRemovable, keyConfigured, keyRefOf,
+  keyWritable, modelsOf, pathOps, protocolChoices, providerUsable, readPath, retryCapable,
 } from './modelConfigModel.ts'
+import { AddProviderCard } from './AddProviderCard.tsx'
 import { ModelCatalog } from './ModelCatalog.tsx'
 import { RetryEditor } from './RetryEditor.tsx'
 import { injectModelConfigStyles } from './modelConfigStyles.ts'
@@ -73,7 +74,6 @@ function protocolLabel(t: Translate, protocol: string): string {
 
 interface ProviderRowProps {
   readonly row: ModelConfigRow
-  readonly index: number
   readonly store: ModelConfigStore
   readonly t: Translate
   readonly writable: boolean
@@ -100,7 +100,6 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
   const session = isSessionRoute(row)
   const busy = props.pending !== undefined
   const editable = props.writable && !busy
-  const manifestIndex = String(props.index).padStart(2, '0')
 
   const namespace = row.entry.settingsNs === '' ? undefined : store.namespace(row.entry.settingsNs)
   const choices = namespace === undefined ? [] : protocolChoices(namespace)
@@ -109,6 +108,7 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
   const protocols = storedApi !== undefined && !choices.includes(storedApi)
     ? [storedApi, ...choices]
     : choices
+  const inheritedProtocol = inheritedProtocolOf(namespace, row)
 
   const keyRef = credentialRefFor(row)
   const keyPresent = keyConfigured(row)
@@ -119,23 +119,19 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
   const retryable = retryCapable(namespace, row.entry.settingsPath)
   const clearsKey = keyPresent && keyWritable(row) && keyRefOf(row) === deriveKeyRef(provider)
 
-  const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
-  const [retryOpen, setRetryOpen] = useState(false)
+  const [revealed, setRevealed] = useState(false)
   const [wellOpen, setWellOpen] = useState(false)
   const shown = reading.diagnostic
 
   useEffect(() => {
     if (!props.catalogOpen) return
-    setEditing(false)
     setDraft('')
-    setRetryOpen(false)
     setWellOpen(false)
   }, [props.catalogOpen])
 
   const commit = useCallback((explicit: boolean): void => {
     const value = draft
-    setEditing(false)
     setDraft('')
     if (!explicit && value.length === 0) return
     props.onSaveKey(value)
@@ -151,190 +147,231 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
   return (
     <li
       className="dmc-row"
-      data-state={reading.answer}
-      data-error={reading.diagnostic === undefined ? undefined : 'true'}
-      data-usable={reading.answer === 'unreachable' ? 'false' : 'true'}
-      data-catalog={props.catalogOpen ? 'true' : undefined}
-      data-well={wellOpen ? 'true' : undefined}
+      data-open={props.catalogOpen || wellOpen ? 'true' : undefined}
     >
-      <span className="dmc-ordinal zmd-ordinal" aria-hidden="true">{manifestIndex}</span>
+      <div className="dmc-rowhead">
+        <span className="dmc-name" title={t(reading.word)}>
+          <span
+            className="zmd-dot dmc-name-dot"
+            data-tone={reading.answer === 'ready' ? 'ok' : 'bad'}
+            role="img"
+            aria-label={t(reading.word)}
+          />
+          <span className="dmc-name-text">{displayName}</span>
+          <span className="dmc-route">{provider}</span>
+        </span>
 
-      <span className="dmc-name">
-        {displayName}
-        <span className="dmc-route">{provider}</span>
-      </span>
+        <button
+          type="button"
+          className="dmc-models"
+          id={`dmc-catalog-btn-${provider}`}
+          aria-expanded={props.catalogOpen}
+          aria-controls={`dmc-catalog-${provider}`}
+          aria-label={t(KEYS['config.models.openAria'], {
+            provider: displayName,
+            count: models > 0
+              ? t(KEYS['config.models.count'], { count: String(models) })
+              : t(KEYS['config.models.default']),
+          })}
+          title={models === 0 ? t(KEYS['config.models.inherited']) : undefined}
+          onClick={props.onOpenCatalog}
+        >
+          <span className="dmc-models-value">
+            {models > 0
+              ? t(KEYS['config.models.count'], { count: String(models) })
+              : t(KEYS['config.models.default'])}
+          </span>
+          <svg
+            className={props.catalogOpen ? 'dmc-chevron dmc-chevron-open' : 'dmc-chevron'}
+            width="12" height="12" viewBox="0 0 12 12" fill="none"
+            stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 4.5L6 7.5L9 4.5" />
+          </svg>
+        </button>
 
-      <button
-        type="button"
-        className="dmc-catalog zmd-btn-quiet"
-        id={`dmc-catalog-btn-${provider}`}
-        aria-expanded={props.catalogOpen}
-        aria-controls={`dmc-catalog-${provider}`}
-        title={models === 0 ? t(KEYS['config.models.inherited']) : undefined}
-        onClick={props.onOpenCatalog}
-      >
-        {models > 0
-          ? t(KEYS['config.models.count'], { count: String(models) })
-          : t(KEYS['config.models.default'])}
-      </button>
-
-      <span className="dmc-state" data-state={reading.answer} key={reading.answer}>
-        <span className="dmc-mark" data-state={reading.answer} aria-hidden="true" />
-        {t(reading.word)}
-      </span>
-
-      <button
-        type="button"
-        className="dmc-manage zmd-btn-door"
-        aria-expanded={wellOpen}
-        aria-controls={`dmc-well-${provider}`}
-        onClick={() => {
-          if (wellOpen) {
-            setEditing(false)
-            setDraft('')
-          }
-          setWellOpen(!wellOpen)
-        }}
-      >
-        {t(KEYS['config.manage'])}
-      </button>
+        <button
+          type="button"
+          className="dmc-manage zmd-btn-secondary"
+          aria-expanded={wellOpen}
+          aria-controls={`dmc-well-${provider}`}
+          aria-label={t(KEYS['config.manageAria'], { provider: displayName })}
+          onClick={() => {
+            if (wellOpen) setDraft('')
+            setWellOpen(!wellOpen)
+          }}
+        >
+          {t(KEYS['config.manage'])}
+        </button>
+      </div>
 
       {busy ? <span className="dmc-pending">{props.pending}</span> : null}
 
       {wellOpen
         ? (
-          <div className="dmc-well" id={`dmc-well-${provider}`}>
-            <div className="dmc-well-head">
-              <h2 className="dmc-well-name">{t(KEYS['config.well.title'])}</h2>
-              <span className="dmc-well-route">{provider}</span>
-            </div>
-
+          <div className="dmc-well zmd-well" id={`dmc-well-${provider}`}>
             {shown === undefined ? null : <p className="dmc-diagnostic">{shown}</p>}
 
             <dl className="dmc-fields">
               {session
                 ? (
-                  <>
-                    <dt className="dmc-field-label">{t(KEYS['config.credential.label'])}</dt>
+                  <div className="dmc-field">
+                    <dt className="dmc-field-label zmd-label">{t(KEYS['config.credential.label'])}</dt>
                     <dd className="dmc-field-value">
                       <span className="dmc-quiet">{t(KEYS['config.credential.session'])}</span>
                     </dd>
-                  </>
+                  </div>
                 )
                 : keyRef === undefined
                   ? null
                   : (
-                    <>
-                      <dt className="dmc-field-label">{t(KEYS['config.credential.label'])}</dt>
+                    <div className="dmc-field">
+                      <dt className="dmc-field-label zmd-label">{t(KEYS['config.credential.label'])}</dt>
                       <dd className="dmc-field-value">
-                        {editing
-                          ? (
-                            <input
-                              className="dmc-key-action"
-                              type="password"
-                              autoComplete="off"
-                              spellCheck={false}
-                              autoFocus
-                              value={draft}
-                              disabled={!editable}
-                              aria-label={t(KEYS['config.key.input'])}
-                              placeholder={keyPresent
-                                ? t(KEYS['config.key.placeholderSaved'])
-                                : t(KEYS['config.key.placeholderFallback'], { hint: keyRef })}
-                              onChange={(event) => { setDraft(event.target.value) }}
-                              onBlur={() => { commit(false) }}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault()
-                                  commit(true)
-                                }
-                                if (event.key === 'Escape') {
-                                  event.stopPropagation()
-                                  setEditing(false)
-                                  setDraft('')
-                                }
-                              }}
-                            />
-                          )
-                          : (
-                            <>
-                              <span className="dmc-quiet">
-                                {t(keyPresent
-                                  ? KEYS['config.credential.configuredShort']
-                                  : KEYS['config.credential.missingShort'])}
-                              </span>
+                        <div className="dmc-key-input">
+                          <input
+                            className="zmd-input"
+                            type={revealed ? 'text' : 'password'}
+                            autoComplete="new-password"
+                            spellCheck={false}
+                            value={draft}
+                            disabled={!editable}
+                            aria-label={t(KEYS['config.key.input'])}
+                            placeholder={keyPresent
+                              ? t(KEYS['config.key.placeholderSaved'])
+                              : t(KEYS['config.key.placeholderFallback'], { hint: keyRef })}
+                            onChange={(event) => {
+                              setRevealed(false)
+                              setDraft(event.target.value)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                commit(true)
+                              }
+                              if (event.key === 'Escape') {
+                                event.stopPropagation()
+                                setDraft('')
+                              }
+                            }}
+                          />
+                          {draft.length === 0
+                            ? null
+                            : (
                               <button
                                 type="button"
-                                className="dmc-key-action zmd-btn-quiet"
+                                className="dmc-key-reveal"
+                                aria-label={t(revealed ? KEYS['config.key.hide'] : KEYS['config.key.reveal'])}
+                                aria-pressed={revealed}
                                 disabled={!editable}
-                                onClick={() => { setEditing(true); setDraft('') }}
+                                onClick={() => { setRevealed(current => !current) }}
                               >
-                                {t(keyPresent ? KEYS['config.key.replaceShort'] : KEYS['config.key.add'])}
+                                <svg
+                                  width="16" height="16" viewBox="0 0 16 16" fill="none"
+                                  stroke="currentColor" strokeWidth="1.3"
+                                  strokeLinecap="round" strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M1.5 8C2.9 5.25 5.25 3.5 8 3.5C10.75 3.5 13.1 5.25 14.5 8C13.1 10.75 10.75 12.5 8 12.5C5.25 12.5 2.9 10.75 1.5 8Z" />
+                                  {revealed
+                                    ? <path d="M10 8C10 9.1 9.1 10 8 10C6.9 10 6 9.1 6 8C6 6.9 6.9 6 8 6C9.1 6 10 6.9 10 8Z" />
+                                    : <path d="M2.5 2.5L13.5 13.5" />}
+                                </svg>
                               </button>
-                              {keyPresent
-                                ? (
-                                  <button
-                                    type="button"
-                                    className="dmc-key-clear zmd-btn-quiet"
-                                    disabled={!editable || !keyWritable(row)}
-                                    aria-label={t(KEYS['config.removeProvider'], { provider: t(KEYS['config.key.input']) })}
-                                    onClick={props.onClearKey}
-                                  >
-                                    {t(KEYS['config.key.clearShort'])}
-                                  </button>
-                                )
-                                : null}
-                            </>
-                          )}
+                            )}
+                        </div>
+                        <div className="dmc-field-foot">
+                          <p className="dmc-field-fact">
+                            {keyPresent
+                              ? t(KEYS['config.key.stateSaved'])
+                              : t(KEYS['config.key.stateFallback'], { hint: keyRef })}
+                          </p>
+                          {keyPresent
+                            ? (
+                              <button
+                                type="button"
+                                className="zmd-btn-ghost"
+                                disabled={!editable || !keyWritable(row)}
+                                onClick={props.onClearKey}
+                              >
+                                {t(KEYS['config.key.clear'])}
+                              </button>
+                            )
+                            : null}
+                        </div>
                       </dd>
-                    </>
+                    </div>
                   )}
 
               {protocols.length === 0
                 ? null
                 : (
-                  <>
-                    <dt className="dmc-field-label">{t(KEYS['config.api.label'])}</dt>
+                  <div className="dmc-field">
+                    <dt className="dmc-field-label zmd-label">{t(KEYS['config.api.label'])}</dt>
                     <dd className="dmc-field-value">
-                      <select
-                        className="dmc-protocol"
-                        value={storedApi ?? ''}
-                        disabled={!editable}
-                        aria-label={t(KEYS['config.api.label'])}
-                        onChange={(event) => { props.onProtocol(event.target.value) }}
-                      >
-                        {storedApi === undefined || protocols.length === 0
-                          ? <option value="">{t(KEYS['config.api.unset'])}</option>
-                          : null}
-                        {protocols.map(protocol => (
-                          <option key={protocol} value={protocol}>{protocolLabel(t, protocol)}</option>
-                        ))}
-                      </select>
+                      {storedApi === undefined
+                        ? (
+                          <>
+                            <span className="dmc-locked" aria-label={t(KEYS['config.api.lockedAria'])}>
+                              <svg
+                                width="14" height="14" viewBox="0 0 16 16" fill="none"
+                                stroke="currentColor" strokeWidth="1.4"
+                                strokeLinecap="round" strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+                                <path d="M5.75 7V5.25a2.25 2.25 0 0 1 4.5 0V7" />
+                              </svg>
+                              <span>
+                                {inheritedProtocol === undefined
+                                  ? t(KEYS['config.api.followingDefault'])
+                                  : protocolLabel(t, inheritedProtocol)}
+                              </span>
+                            </span>
+                            <div className="dmc-field-foot">
+                              <p className="dmc-field-fact">{t(KEYS['config.api.inheritedNote'])}</p>
+                              <button
+                                type="button"
+                                className="zmd-btn-ghost dmc-api-override"
+                                disabled={!editable}
+                                onClick={() => { props.onProtocol(protocols[0] ?? '') }}
+                              >
+                                {t(KEYS['config.api.override'])}
+                              </button>
+                            </div>
+                          </>
+                        )
+                        : (
+                          <>
+                            <select
+                              className="zmd-select"
+                              value={storedApi}
+                              disabled={!editable}
+                              aria-label={t(KEYS['config.api.label'])}
+                              onChange={(event) => { props.onProtocol(event.target.value) }}
+                            >
+                              {protocols.map(protocol => (
+                                <option key={protocol} value={protocol}>{protocolLabel(t, protocol)}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="zmd-btn-ghost dmc-api-override"
+                              disabled={!editable}
+                              onClick={() => { props.onProtocol('') }}
+                            >
+                              {t(KEYS['config.api.inheritReset'])}
+                            </button>
+                          </>
+                        )}
                     </dd>
-                  </>
+                  </div>
                 )}
 
-              {retryable
-                ? (
-                  <>
-                    <dt className="dmc-field-label">{t(KEYS['config.retryPolicy.trigger'])}</dt>
-                    <dd className="dmc-field-value">
-                      <button
-                        type="button"
-                        className="dmc-retry-action zmd-btn-quiet"
-                        aria-expanded={retryOpen}
-                        aria-controls={`dmc-retry-${provider}`}
-                        onClick={() => { setRetryOpen(current => !current) }}
-                      >
-                        {t(KEYS['config.retryPolicy.edit'])}
-                      </button>
-                    </dd>
-                  </>
-                )
-                : null}
             </dl>
 
-            {retryable && retryOpen && namespace !== undefined
+            {retryable && namespace !== undefined
               ? (
                 <RetryEditor
                   row={row}
@@ -350,6 +387,7 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
               ? null
               : (
                 <div className="dmc-well-foot">
+                  <span className="dmc-well-foot-hint">{lifecycleHint}</span>
                   <button
                     type="button"
                     className="dmc-danger zmd-btn-danger"
@@ -357,19 +395,17 @@ function ProviderRow(props: ProviderRowProps): ReactElement {
                     aria-label={row.configured
                       ? t(KEYS['config.removeProvider'], { provider: displayName })
                       : t(KEYS['config.add'])}
-                    title={lifecycleHint}
                     onClick={props.onLifecycle}
                   >
                     {t(row.configured
                       ? KEYS['config.removeProvider']
-                      : KEYS['config.add'])}
+                      : KEYS['config.add'], { provider: displayName })}
                   </button>
                 </div>
               )}
           </div>
         )
         : null}
-
       {props.catalogOpen
         ? (
           <ModelCatalog
@@ -400,7 +436,8 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
   const [catalogGuard, setCatalogGuard] = useState<
     { readonly kind: 'close' } | { readonly kind: 'switch'; readonly provider: string } | null
   >(null)
-  const [picker, setPicker] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [mode, setMode] = useState<'catalog' | 'custom'>('catalog')
 
   useEffect(() => {
     mounted.current = true
@@ -558,6 +595,7 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
     return message === undefined ? [] : [{ row, message }]
   })
   const readOnly = !snapshot.writable
+  const customHost = customProviderHost(snapshot.namespaces)
 
   const readings = listed.map(row => readingOf(row, failures[row.entry.provider]))
   const readyCount = readings.filter(reading => reading.answer === 'ready').length
@@ -573,7 +611,7 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
 
   return (
     <section
-      className="dmc-page zmd-plate zmd-grain"
+      className="dmc-page"
       aria-label={t(KEYS['config.title'])}
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
@@ -585,21 +623,109 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
           requestCloseCatalog()
           return
         }
-        if (picker) {
-          setPicker(false)
+        if (adding) {
+          setAdding(false)
           return
         }
         close()
       }}
     >
       <header className="dmc-head">
-        <div className="dmc-masthead zmd-masthead">
-          <h1 className="dmc-readout zmd-masthead-name">{t(KEYS['config.title'])}</h1>
-          <div className="dmc-meta zmd-masthead-meta">
-            <span>{summary}</span>
-          </div>
-        </div>
+        <h1 className="zmd-title">{t(KEYS['config.title'])}</h1>
+        <p className="zmd-lede">{summary}</p>
       </header>
+
+      <div className="dmc-toolbar">
+        <button
+          type="button"
+          className="dmc-add-top"
+          aria-expanded={adding}
+          aria-controls="dmc-add-panel"
+          disabled={readOnly || snapshot.status !== 'ready'}
+          onClick={() => { setAdding(current => !current) }}
+        >
+          {adding ? t(KEYS['config.add.close']) : t(KEYS['config.add'])}
+        </button>
+        {adding
+          ? (
+            <div className="dmc-add-choices">
+              <button
+                type="button"
+                className="dmc-add-choice"
+                data-active={mode === 'catalog' ? 'true' : undefined}
+                disabled={candidates.length === 0}
+                title={candidates.length === 0 ? t(KEYS['config.add.catalogExhausted']) : undefined}
+                onClick={() => { setMode('catalog') }}
+              >
+                {t(KEYS['config.add.fromCatalog'])}
+              </button>
+              <button
+                type="button"
+                className="dmc-add-choice"
+                data-active={mode === 'custom' ? 'true' : undefined}
+                disabled={customHost === undefined}
+                title={customHost === undefined ? t(KEYS['config.add.customUnavailable']) : undefined}
+                onClick={() => { setMode('custom') }}
+              >
+                {t(KEYS['config.add.custom'])}
+              </button>
+            </div>
+          )
+          : null}
+      </div>
+
+      {adding && snapshot.status === 'ready'
+        ? (
+          <div className="dmc-add-panel" id="dmc-add-panel">
+            {mode === 'catalog'
+              ? (
+                <div className="dmc-picker zmd-card">
+                  <p className="dmc-notice">{t(KEYS['config.add.catalogHint'])}</p>
+                  <ul className="dmc-picker-list">
+                    {candidates.map(row => (
+                      <li key={row.entry.provider}>
+                        <button
+                          type="button"
+                          className="dmc-picker-item"
+                          disabled={readOnly || pending[row.entry.provider] !== undefined}
+                          onClick={() => { lifecycle(row) }}
+                        >
+                          <span className="dmc-name">
+                            <span className="dmc-name-text">{row.entry.displayName}</span>
+                            <span className="dmc-route">{row.entry.provider}</span>
+                          </span>
+                          {pending[row.entry.provider] === undefined
+                            ? null
+                            : <span className="dmc-pending">{pending[row.entry.provider]}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {pickerFailures.map(({ row, message }) => (
+                    <p className="dmc-notice" key={row.entry.provider}>
+                      {row.entry.displayName}：{message}
+                    </p>
+                  ))}
+                </div>
+              )
+              : null}
+
+            {mode === 'custom' && customHost !== undefined
+              ? (
+                <AddProviderCard
+                  rows={snapshot.rows}
+                  namespaces={snapshot.namespaces}
+                  host={customHost}
+                  store={store}
+                  t={t}
+                  writable={snapshot.writable}
+                  onDone={() => { setAdding(false) }}
+                />
+              )
+              : null}
+          </div>
+        )
+        : null}
 
       {snapshot.error === null
         ? null
@@ -625,7 +751,7 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
       {empty
         ? (
           <div className="dmc-empty">
-            <p className="dmc-empty-copy">{t(KEYS['config.empty.description'])}</p>
+            <p className="zmd-lede">{t(KEYS['config.empty.description'])}</p>
           </div>
         )
         : null}
@@ -633,92 +759,42 @@ export function ModelConfigPage(props: ModelConfigPageProps): ReactElement {
       {listed.length === 0
         ? null
         : (
-          <div className="dmc-listhead" aria-hidden="true">
-            <span className="dmc-listhead-name">{t(KEYS['config.provider.label'])}</span>
-            <span className="dmc-listhead-col">{t(KEYS['config.models.label'])}</span>
-            <span className="dmc-listhead-col">{t(KEYS['config.listheadState'])}</span>
-            <span className="dmc-listhead-col">{t(KEYS['config.listheadAction'])}</span>
-          </div>
+          <ul className="dmc-ledger zmd-card">
+            <li className="dmc-listhead" aria-hidden="true">
+              <span>{t(KEYS['config.provider.label'])}</span>
+              <span className="dmc-listhead-models">{t(KEYS['config.listheadModels'])}</span>
+              <span className="dmc-listhead-action">{t(KEYS['config.listheadAction'])}</span>
+            </li>
+            {listed.map(row => (
+              <ProviderRow
+                key={row.entry.provider}
+                row={row}
+                store={store}
+                t={t}
+                writable={snapshot.writable}
+                pending={pending[row.entry.provider]}
+                failure={failures[row.entry.provider]}
+                catalogOpen={catalog === row.entry.provider}
+                catalogConfirming={catalogGuard !== null && catalog === row.entry.provider}
+                onOpenCatalog={() => { openCatalog(row.entry.provider) }}
+                onRequestCloseCatalog={requestCloseCatalog}
+                onKeepEditingCatalog={keepEditingCatalog}
+                onDiscardCatalog={discardCatalogDraft}
+                onCatalogDirty={setCatalogDirty}
+                onSaveKey={(value) => { saveKey(row, value) }}
+                onClearKey={() => { clearKey(row) }}
+                onProtocol={(protocol) => { setProtocol(row, protocol) }}
+                onLifecycle={() => { lifecycle(row) }}
+              />
+            ))}
+          </ul>
         )}
 
-      <ul className="dmc-list">
-        {listed.map((row, index) => (
-          <ProviderRow
-            key={row.entry.provider}
-            row={row}
-            index={index + 1}
-            store={store}
-            t={t}
-            writable={snapshot.writable}
-            pending={pending[row.entry.provider]}
-            failure={failures[row.entry.provider]}
-            catalogOpen={catalog === row.entry.provider}
-            catalogConfirming={catalogGuard !== null && catalog === row.entry.provider}
-            onOpenCatalog={() => { openCatalog(row.entry.provider) }}
-            onRequestCloseCatalog={requestCloseCatalog}
-            onKeepEditingCatalog={keepEditingCatalog}
-            onDiscardCatalog={discardCatalogDraft}
-            onCatalogDirty={setCatalogDirty}
-            onSaveKey={(value) => { saveKey(row, value) }}
-            onClearKey={() => { clearKey(row) }}
-            onProtocol={(protocol) => { setProtocol(row, protocol) }}
-            onLifecycle={() => { lifecycle(row) }}
-          />
-        ))}
-      </ul>
-
-      <div className="dmc-actions zmd-footing">
-        <span className="zmd-footing-note">
-          {listed.length === 0
-            ? t(KEYS['config.footCount'], { count: '0' })
-            : candidates.length === 0
-              ? t(KEYS['config.add.catalogExhausted'])
-              : t(KEYS['config.footCount'], { count: String(listed.length) })}
-        </span>
-        <button
-          type="button"
-          className="dmc-add"
-          data-emphasis={empty ? 'primary' : undefined}
-          aria-expanded={picker && candidates.length > 0}
-          disabled={readOnly || candidates.length === 0}
-          onClick={() => { setPicker(current => !current) }}
-        >
-          {t(KEYS['config.add'])}
-        </button>
+      <div className="dmc-actions">
+        {candidates.length === 0
+          ? <span className="dmc-notice">{t(KEYS['config.add.catalogExhausted'])}</span>
+          : null}
       </div>
-      {picker && candidates.length > 0
-        ? (
-          <div className="dmc-picker">
-            <p className="dmc-notice">{t(KEYS['config.add.catalogHint'])}</p>
-            <ul className="dmc-picker-list">
-              {candidates.map(row => (
-                <li key={row.entry.provider}>
-                  <button
-                    type="button"
-                    className="dmc-picker-item"
-                    data-state="dormant"
-                    disabled={readOnly || pending[row.entry.provider] !== undefined}
-                    onClick={() => { lifecycle(row) }}
-                  >
-                    <span className="dmc-name">
-                      {row.entry.displayName}
-                      <span className="dmc-route">{row.entry.provider}</span>
-                    </span>
-                    {pending[row.entry.provider] === undefined
-                      ? null
-                      : <span className="dmc-pending">{pending[row.entry.provider]}</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {pickerFailures.map(({ row, message }) => (
-              <p className="dmc-notice" key={row.entry.provider}>
-                {row.entry.displayName}：{message}
-              </p>
-            ))}
-          </div>
-        )
-        : null}
     </section>
   )
 }
@@ -727,4 +803,14 @@ function protocolsOf(store: ModelConfigStore, ns: string): readonly string[] {
   const view = store.namespace(ns)
   if (view === undefined) return []
   return protocolChoices(view)
+}
+
+function inheritedProtocolOf(
+  namespace: SettingsNamespaceView | undefined,
+  row: ModelConfigRow,
+): string | undefined {
+  const base = readPath(namespace?.base, row.entry.settingsPath)
+  if (!isRecord(base)) return undefined
+  const api = base.api
+  return typeof api === 'string' && api !== '' ? api : undefined
 }

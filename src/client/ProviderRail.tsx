@@ -1,8 +1,6 @@
 import type { KeyboardEvent, MutableRefObject } from 'react'
 import type { Translate } from './contract.ts'
 
-const ordinalOf = (index: number): string => `${index + 1}`.padStart(2, '0')
-
 export interface ProviderOption {
   readonly id: string | null
   readonly label: string
@@ -112,7 +110,6 @@ export function ProviderRail({
           title={option.label}
           onClick={() => { onPick(option.id) }}
         >
-          <span className="dmp-rail-index" aria-hidden="true">{ordinalOf(index)}</span>
           <span className="dmp-rail-copy">
             <span className="dmp-rail-name">{option.label}</span>
           </span>

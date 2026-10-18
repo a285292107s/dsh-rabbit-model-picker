@@ -110,7 +110,7 @@ export function SettingsMenu({
       ...panel.querySelectorAll<HTMLElement>('[role="switch"]'),
       panel.querySelector<HTMLElement>('.dmp-settings-input input'),
       ...panel.querySelectorAll<HTMLElement>('.dmp-effort-item'),
-      panel.querySelector<HTMLElement>('.dmp-settings-reset'),
+      panel.querySelector<HTMLElement>('.dmp-settings-foot .zmd-btn-ghost'),
     ].filter((item): item is HTMLElement => item !== null && !item.hasAttribute('disabled'))
   }
 
@@ -256,7 +256,7 @@ export function SettingsMenu({
     <MenuSurface
       ref={panelRef}
       id={`${idPrefix}-settings`}
-      className="dmp-menu dmp-settings zmd-plate zmd-grain"
+      className="dmp-menu dmp-settings"
       style={position === null ? MEASURE_STYLE : { ...position, maxHeight }}
       role="group"
       aria-label={t('settings.aria', { model: modelLabel })}
@@ -272,10 +272,7 @@ export function SettingsMenu({
       <div className="dmp-settings-body">
         {showsInputSection(address, capability) && (
           <div className="dmp-settings-section">
-            <div className="dmp-settings-label zmd-runhead">
-              <span>{t('settings.input.title')}</span>
-              <span className="zmd-rule" aria-hidden="true" />
-            </div>
+            <span className="zmd-label">{t('settings.input.title')}</span>
             <div className="dmp-settings-row">
               <span className="dmp-settings-name">{t('settings.input.text')}</span>
               <Switch
@@ -302,10 +299,7 @@ export function SettingsMenu({
 
         {showsContextField(address, capability) && (
           <div className="dmp-settings-section">
-            <div className="dmp-settings-label zmd-runhead">
-              <span>{t('settings.context.title')}</span>
-              <span className="zmd-rule" aria-hidden="true" />
-            </div>
+            <span className="zmd-label">{t('settings.context.title')}</span>
             <div className="dmp-settings-row">
               <Input
                 className={capacityError ? 'dmp-settings-input dmp-settings-input-bad' : 'dmp-settings-input'}
@@ -335,10 +329,7 @@ export function SettingsMenu({
 
         {reasoning !== undefined && (
           <div className="dmp-settings-section">
-            <div className="dmp-settings-label zmd-runhead">
-              <span>{t('settings.effort.title')}</span>
-              <span className="zmd-rule" aria-hidden="true" />
-            </div>
+            <span className="zmd-label">{t('settings.effort.title')}</span>
             <div className="dmp-effort-list" role="radiogroup" aria-label={t('settings.effort.title')}>
               {choices.map(choice => (
                 <button
@@ -378,11 +369,11 @@ export function SettingsMenu({
         </div>
       </div>
 
-      <div className="dmp-settings-foot zmd-footing">
-        <span className="zmd-footing-note">{t('settings.scope')}</span>
+      <div className="dmp-settings-foot">
+        <span className="dmp-settings-hint">{t('settings.scope')}</span>
         <button
           type="button"
-          className="dmp-settings-reset"
+          className="zmd-btn-ghost"
           aria-label={t('settings.resetAria', { model: modelLabel })}
           disabled={!editable || address === null || !address.declared}
           onClick={restoreDefaults}

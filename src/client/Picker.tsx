@@ -470,10 +470,10 @@ export function Picker(props: PickerProps) {
   }
 
   const legend: readonly { fact: BadgeFact; label: string }[] = [
-    { fact: 'text', label: t('badge.key.text') },
-    { fact: 'image', label: t('badge.key.image') },
-    { fact: 'effort', label: t('badge.key.effort') },
-    { fact: 'context', label: t('badge.key.context') },
+    { fact: 'text', label: t('badge.head.text') },
+    { fact: 'image', label: t('badge.head.image') },
+    { fact: 'effort', label: t('badge.head.effort') },
+    { fact: 'context', label: t('badge.head.context') },
   ]
 
   const waiting = state.current === null && state.status === 'loading'
@@ -495,8 +495,6 @@ export function Picker(props: PickerProps) {
       ? `${t('settings.open')} · ${t('settings.openDeclared')}`
       : t('settings.open')
 
-  const scopeName = providerFilter === null ? t('provider.all') : providerNameOf(providerFilter)
-  const scopeSub = providerFilter === null ? t('card.subAll') : t('card.subScoped')
   const scopeCount = t('card.count', { count: String(rows.length) })
   const hiddenRows = Math.max(0, catalogRows.length - rows.length)
   const footNote = hiddenRows === 0
@@ -575,7 +573,7 @@ export function Picker(props: PickerProps) {
         <MenuSurface
           ref={menuRef}
           id={`${id}-menu`}
-          className="dmp-menu dmp-card zmd-plate zmd-grain"
+          className="dmp-menu dmp-card"
           data-scope={providerFilter === null ? 'all' : 'one'}
           style={menuPos ?? MEASURE_STYLE}
           role="group"
@@ -583,11 +581,37 @@ export function Picker(props: PickerProps) {
           aria-busy={state.status === 'loading' || busy}
         >
           <div className="dmp-card-head">
-            <div className="dmp-card-identity">
-              <p className="dmp-card-name">{scopeName}</p>
-              <span className="dmp-card-sub">{scopeSub}</span>
-            </div>
             <span className="dmp-card-count zmd-num">{scopeCount}</span>
+            <Input
+              ref={searchRef}
+              className="dmp-search"
+              type="text"
+              role="searchbox"
+              aria-label={t('search.placeholder')}
+              aria-controls={`${id}-models`}
+              aria-activedescendant={activeIndex < 0 ? undefined : `${id}-row-${activeIndex}`}
+              placeholder={t('search.placeholder')}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setHighlight(0)
+              }}
+            />
+            {query !== '' && (
+              <button
+                type="button"
+                className="dmp-search-clear"
+                aria-label={t('search.clear')}
+                disabled={busy}
+                onClick={() => {
+                  setQuery('')
+                  setHighlight(null)
+                  searchRef.current?.focus()
+                }}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            )}
           </div>
 
           <div className="dmp-card-body">
@@ -603,39 +627,6 @@ export function Picker(props: PickerProps) {
           />
 
           <div className="dmp-models">
-            <div className="dmp-search-row">
-              <Input
-                ref={searchRef}
-                className={query === '' ? 'dmp-search' : 'dmp-search dmp-search-with-query'}
-                type="text"
-                role="searchbox"
-                aria-label={t('search.placeholder')}
-                aria-controls={`${id}-models`}
-                aria-activedescendant={activeIndex < 0 ? undefined : `${id}-row-${activeIndex}`}
-                placeholder={t('search.placeholder')}
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value)
-                  setHighlight(0)
-                }}
-              />
-              {query !== '' && (
-                <button
-                  type="button"
-                  className="dmp-search-clear"
-                  aria-label={t('search.clear')}
-                  disabled={busy}
-                  onClick={() => {
-                    setQuery('')
-                    setHighlight(null)
-                    searchRef.current?.focus()
-                  }}
-                >
-                  <span aria-hidden="true">×</span>
-                </button>
-              )}
-            </div>
-
             {state.status === 'loading' && (
               <div className="dmp-status" role="status">
                 <StateDot state="ongoing" />
@@ -673,6 +664,12 @@ export function Picker(props: PickerProps) {
                 <button type="button" className="dmp-retry" onClick={reload}>{t('action.reload')}</button>
               </div>
             ))}
+
+            <div className="dmp-legend" role="note" aria-label={t('badge.headAria')}>
+              {legend.map(item => (
+                <span key={item.fact}>{item.label}</span>
+              ))}
+            </div>
 
             <div
               ref={groupsRef}
@@ -765,14 +762,6 @@ export function Picker(props: PickerProps) {
             <span className="dmp-card-foot-note zmd-num">{footNote}</span>
             <span className="dmp-card-foot-providers zmd-num">{footKeys}</span>
             {railKeys === '' ? null : <span className="dmp-card-foot-keys">{railKeys}</span>}
-            <span className="dmp-card-key" role="note" aria-label={t('badge.keyAria')}>
-              {legend.map(item => (
-                <span className="dmp-card-key-item" key={item.fact}>
-                  <BadgeIcon fact={item.fact} className="dmp-card-key-icon" />
-                  {item.label}
-                </span>
-              ))}
-            </span>
           </div>
         </MenuSurface>,
         document.body,

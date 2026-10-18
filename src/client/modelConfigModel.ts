@@ -166,18 +166,71 @@ export function reasoningLevelChoices(
   const modelShape = valueShapeOf(refs, models)
   if (modelShape === undefined) return []
   const efforts = stepDict(refs, modelShape, 'reasoningEfforts')
-  const levels = unionMembers(refs, efforts).find(member => member.type === 'dict')
-  if (levels === undefined) return []
-  const keyShape = deref(refs, levels.sKey)
-  if (keyShape === undefined) return []
-  const list = keyShape.list
-  if (!Array.isArray(list)) return []
-  return list
-    .flatMap(id => {
-      const member = deref(refs, id)
-      return member === undefined ? [] : [member.value]
-    })
+  const levelMap = unionMembers(refs, efforts).find(member => member.type === 'dict')
+  if (levelMap === undefined) return []
+  return unionMembers(refs, deref(refs, levelMap.sKey))
+    .map(member => member.value)
     .filter((value): value is string => typeof value === 'string')
+}
+
+export interface CustomProviderHost {
+  readonly ns: string
+  readonly protocols: readonly string[]
+}
+
+export function customProviderHost(
+  namespaces: ReadonlyMap<string, SettingsNamespaceView>,
+): CustomProviderHost | undefined {
+  for (const [ns, view] of namespaces) {
+    const protocols = protocolChoices(view)
+    if (protocols.length > 0) return { ns, protocols }
+  }
+  return undefined
+}
+
+export function customProviderOps(
+  route: string,
+  draft: {
+    readonly displayName: string
+    readonly baseURL: string
+    readonly api: string
+    readonly keyRef: string | undefined
+    readonly models: readonly string[]
+  },
+): readonly SettingsOp[] {
+  const id = route.trim()
+  const name = draft.displayName.trim()
+  const base = draft.baseURL.trim()
+  const profile: Record<string, unknown> = {
+    ...name === '' ? {} : { displayName: name },
+    ...draft.keyRef === undefined ? {} : { apiKeyEnv: draft.keyRef },
+    api: draft.api,
+    ...base === '' ? {} : { baseURL: base },
+    models: draft.models.map(model => ({ id: model })),
+  }
+  return [{ op: 'set', path: ['providers', id], value: profile }]
+}
+
+export function routeProblemOf(
+  route: string,
+  taken: readonly string[],
+): 'empty' | 'invalid' | 'taken' | undefined {
+  const id = route.trim()
+  if (id === '') return 'empty'
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return 'invalid'
+  return taken.includes(id) ? 'taken' : undefined
+}
+
+export function modelIdsOf(text: string): readonly string[] {
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const line of text.split('\n')) {
+    const id = line.trim()
+    if (id === '' || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
 }
 
 export function retryCapable(

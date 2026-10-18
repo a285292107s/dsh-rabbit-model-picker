@@ -30,11 +30,11 @@ function RetryField(props: {
 }): ReactElement {
   return (
     <div className="dmc-retry-field">
-      <label className="dmc-retry-label" htmlFor={props.id}>{props.label}</label>
+      <label className="zmd-label" htmlFor={props.id}>{props.label}</label>
       <div className="dmc-retry-row">
         <input
           id={props.id}
-          className="dmc-retry-input"
+          className="zmd-input dmc-retry-input"
           type="text"
           inputMode="decimal"
           autoComplete="off"
@@ -98,15 +98,8 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
       jitterRatio: view.jitterRatio,
     }
     const waits = retryWaitCurve(backoff, retries)
-    return { retries, first: backoff.initialDelayMs, longest: waitRange(waits, view.jitterRatio).high, waits }
+    return { retries, first: backoff.initialDelayMs, longest: waitRange(waits, view.jitterRatio).high }
   }, [parsedCap, parsedRetries, view.initialDelayMs, view.jitterRatio, view.maxDelayMs, view.maxRetries])
-
-  const backoffTicks = useMemo(() => {
-    const shown = preview.waits.slice(0, 5)
-    if (shown.length === 0) return []
-    const peak = Math.max(...shown, 1)
-    return shown.map(wait => Math.min(4, Math.max(1, Math.ceil((wait / peak) * 4))))
-  }, [preview.waits])
 
   const settle = useCallback((message: string | null): void => {
     setRetriesDraft(null)
@@ -160,15 +153,29 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
   const always = view.mode === 'always'
   const dirty = retriesText !== String(view.maxRetries)
     || capText !== formatMaxDelaySeconds(view.maxDelayMs)
-  const firstWait = t(KEYS['config.retryPolicy.first'], { count: formatDuration(preview.first) })
-  const longestTotal = t(KEYS['config.retryPolicy.total'], { count: formatDuration(preview.longest) })
+  const silent = always || preview.retries === 0
+
+  const line = preview.retries === 0
+    ? t(KEYS['config.retryPolicy.zero'])
+    : t(KEYS['config.retryPolicy.preview'], {
+      first: formatDuration(preview.first),
+      total: formatDuration(preview.longest),
+    })
+
+  const problem = retriesInvalid
+    ? t(KEYS['config.retryPolicy.badRetries'], { count: String(MAX_RETRIES) })
+    : capInvalid
+      ? t(KEYS['config.retryPolicy.badCap'], { count: String(MAX_MAX_DELAY_MS / 1000) })
+      : null
 
   return (
     <div className="dmc-retry" id={`dmc-retry-${provider}`}>
-      <p className="dmc-retry-state zmd-runhead">
-        {t(view.declared ? KEYS['config.retryPolicy.declared'] : KEYS['config.retryPolicy.inherits'])}
-        <span className="zmd-rule" aria-hidden="true" />
-      </p>
+      <div className="dmc-retry-head">
+        <span className="zmd-label">{t(KEYS['config.retryPolicy.trigger'])}</span>
+        <span className="dmc-retry-state">
+          {t(view.declared ? KEYS['config.retryPolicy.declared'] : KEYS['config.retryPolicy.inherits'])}
+        </span>
+      </div>
 
       <div className="dmc-retry-fields">
         <RetryField
@@ -195,33 +202,18 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
         />
       </div>
 
-      <p className="dmc-notice">{t(KEYS['config.retryPolicy.doubling'])}</p>
+      {problem === null ? null : <p className="dmc-alert">{problem}</p>}
 
-      <p className="dmc-notice">{t(KEYS['config.retryPolicy.recovery'])}</p>
+      {always ? null : <p className="dmc-retry-line zmd-num">{line}</p>}
 
-      <p className="dmc-retry-summary">
-        <span className="dmc-retry-tally">{preview.retries}</span>
-        <span className="dmc-retry-tally-unit">{t(KEYS['config.retryPolicy.retriesUnit'])}</span>
-        <span className="dmc-retry-detail">{firstWait} · {longestTotal}</span>
-      </p>
-
-      <span className="dmc-backoff" aria-hidden="true">
-        {Array.from({ length: 5 }, (_, index) => {
-          const level = backoffTicks[index]
-          return (
-            <span
-              className="dmc-backoff-cell"
-              data-level={level === undefined ? '0' : String(level)}
-              key={String(index)}
-            />
-          )
-        })}
-      </span>
+      {always ? <p className="dmc-notice">{t(KEYS['config.retryPolicy.always'])}</p> : null}
+      {silent || always ? null : <p className="dmc-notice">{t(KEYS['config.retryPolicy.rateLimit'])}</p>}
+      {writable ? null : <p className="dmc-notice">{t(KEYS['config.retryPolicy.unavailable'])}</p>}
 
       <div className="dmc-retry-actions">
         <button
           type="button"
-          className="zmd-btn-door zmd-btn-commit"
+          className="zmd-btn-primary"
           disabled={!editable || !dirty}
           onClick={() => { void commit() }}
         >
@@ -229,7 +221,7 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
         </button>
         <button
           type="button"
-          className="zmd-btn-quiet"
+          className="zmd-btn-ghost"
           disabled={!editable || !view.declared}
           onClick={() => { void reset() }}
         >
@@ -237,15 +229,6 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
         </button>
         {note === null ? null : <span className="dmc-notice">{note}</span>}
       </div>
-
-      {retriesInvalid
-        ? <p className="dmc-notice">{t(KEYS['config.retryPolicy.badRetries'], { count: String(MAX_RETRIES) })}</p>
-        : null}
-      {capInvalid
-        ? <p className="dmc-notice">{t(KEYS['config.retryPolicy.badCap'], { count: String(MAX_MAX_DELAY_MS / 1000) })}</p>
-        : null}
-      {always ? <p className="dmc-notice">{t(KEYS['config.retryPolicy.always'])}</p> : null}
-      {writable ? null : <p className="dmc-notice">{t(KEYS['config.retryPolicy.unavailable'])}</p>}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   DiscoveredModel, ModelCatalogEntry, ModelConfigRow, ModelDiscoveryRequest, Translate,
 } from './contract.ts'
@@ -14,6 +15,7 @@ import { formatWindowStatement } from './format.ts'
 import { injectCatalogStyles } from './catalogStyles.ts'
 
 const OFF_LEVEL = 'off'
+const INITIAL_LEVELS: readonly string[] = [OFF_LEVEL, 'low', 'medium', 'high']
 
 const EDITED_FIELDS: readonly string[] = ['id', 'name', 'contextWindow', 'maxTokens', 'reasoningEfforts']
 
@@ -37,6 +39,8 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 interface DraftReasoning {
   readonly level: string
   readonly value: string
+  readonly bad: boolean
+  readonly raw: unknown
 }
 
 interface DraftModel {
@@ -47,7 +51,7 @@ interface DraftModel {
   readonly maxTokens: string
   readonly storedWindow: number | undefined
   readonly storedTokens: number | undefined
-  readonly reasoning: readonly DraftReasoning[]
+  readonly reasoning: readonly DraftReasoning[] | undefined
   readonly extra: Readonly<Record<string, unknown>>
   readonly open: boolean
 }
@@ -57,7 +61,7 @@ interface ModelEdit {
   readonly name?: string
   readonly contextWindow?: string
   readonly maxTokens?: string
-  readonly reasoning?: readonly DraftReasoning[]
+  readonly reasoning?: readonly DraftReasoning[] | null
   readonly open?: boolean
 }
 
@@ -80,13 +84,26 @@ function rawModelsOf(value: unknown, settingsPath: readonly string[]): readonly 
   return Array.isArray(list) ? list : []
 }
 
-function reasoningRowsOf(value: unknown): readonly DraftReasoning[] {
-  const record = asRecord(value)
-  if (record === undefined) return []
-  return Object.entries(record).map(([level, raw]) => ({
+function reasoningRowsOf(value: unknown): readonly DraftReasoning[] | undefined {
+  if (value === null) return []
+  if (!isRecordValue(value)) return undefined
+  return Object.entries(value).map(([level, wire]) => ({
     level,
-    value: typeof raw === 'string' ? raw : '',
+    value: typeof wire === 'string' ? wire : '',
+    bad: typeof wire === 'string'
+      ? wire.length === 0
+      : !(wire === null && level === OFF_LEVEL),
+    raw: wire,
   }))
+}
+
+function withoutReasoningField(
+  extra: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  if (!('reasoningEfforts' in extra)) return extra
+  const next = { ...extra }
+  delete next.reasoningEfforts
+  return next
 }
 
 function seedModel(raw: Record<string, unknown>, key: string): DraftModel {
@@ -94,6 +111,11 @@ function seedModel(raw: Record<string, unknown>, key: string): DraftModel {
   for (const [field, value] of Object.entries(raw)) {
     if (EDITED_FIELDS.includes(field)) continue
     extra[field] = value
+  }
+  const rawReasoning = raw.reasoningEfforts
+  const reasoning = reasoningRowsOf(rawReasoning)
+  if (reasoning === undefined && rawReasoning !== undefined) {
+    extra.reasoningEfforts = rawReasoning
   }
   return {
     key,
@@ -103,7 +125,7 @@ function seedModel(raw: Record<string, unknown>, key: string): DraftModel {
     maxTokens: typeof raw.maxTokens === 'number' ? formatContext(raw.maxTokens) : '',
     storedWindow: typeof raw.contextWindow === 'number' ? raw.contextWindow : undefined,
     storedTokens: typeof raw.maxTokens === 'number' ? raw.maxTokens : undefined,
-    reasoning: reasoningRowsOf(raw.reasoningEfforts),
+    reasoning,
     extra,
     open: false,
   }
@@ -127,7 +149,7 @@ function seedCandidate(candidate: DiscoveredModel): DraftModel {
     maxTokens: candidate.maxTokens === undefined ? '' : formatContext(candidate.maxTokens),
     storedWindow: candidate.contextWindow,
     storedTokens: candidate.maxTokens,
-    reasoning: [],
+    reasoning: undefined,
     extra: {},
     open: false,
   }
@@ -173,13 +195,6 @@ function capacitiesOf(model: DraftModel): { readonly contextWindow: number | und
   }
 }
 
-function reasoningValueOf(rows: readonly DraftReasoning[]): Record<string, string> | undefined {
-  if (rows.length === 0) return undefined
-  const table: Record<string, string> = {}
-  for (const row of rows) table[row.level] = row.value
-  return table
-}
-
 function entryOf(model: DraftModel): ModelCatalogEntry {
   const { contextWindow, maxTokens } = capacitiesOf(model)
   const name = model.name.trim()
@@ -191,9 +206,26 @@ function entryOf(model: DraftModel): ModelCatalogEntry {
   }
 }
 
+function reasoningEntriesOf(
+  rows: readonly DraftReasoning[] | undefined,
+): Record<string, unknown> | undefined {
+  if (rows === undefined) return undefined
+  const entries: Record<string, unknown> = {}
+  for (const row of rows) {
+    if (row.raw !== undefined) {
+      entries[row.level] = row.raw
+      continue
+    }
+    entries[row.level] = row.level === OFF_LEVEL
+      ? row.value === '' ? null : row.value
+      : row.value === '' ? row.level : row.value
+  }
+  return entries
+}
+
 function storedValueOf(model: DraftModel): Record<string, unknown> {
   const { contextWindow, maxTokens } = capacitiesOf(model)
-  const reasoning = reasoningValueOf(model.reasoning)
+  const reasoning = reasoningEntriesOf(model.reasoning)
   const name = model.name.trim()
   return {
     ...model.extra,
@@ -214,15 +246,20 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined'
 }
 
-function reasoningProblemOf(rows: readonly DraftReasoning[]): ConfigKey | undefined {
-  if (rows.length === 0) return undefined
-  const decisive = rows.filter(row => row.level !== OFF_LEVEL)
-  if (decisive.length === 0) return KEYS['config.reasoning.needsLevel']
-  if (decisive.some(row => row.value.trim() === '')) return KEYS['config.reasoning.valueRequired']
+function reasoningProblemOf(
+  rows: readonly DraftReasoning[] | undefined,
+): ConfigKey | undefined {
+  if (rows === undefined) return undefined
+  if (rows.some(row => row.bad)) return KEYS['config.reasoning.valueRequired']
+  if (!rows.some(row => row.level !== OFF_LEVEL)) return KEYS['config.reasoning.needsLevel']
   return undefined
 }
 
-function problemsOf(models: readonly DraftModel[], t: Translate): ReadonlyMap<string, string> {
+function problemsOf(
+  models: readonly DraftModel[],
+  t: Translate,
+  editsReasoning: boolean,
+): ReadonlyMap<string, string> {
   const messages = new Map<string, string>()
   const structural = validateModels(models.map(entryOf))
   if (structural !== undefined) {
@@ -240,6 +277,7 @@ function problemsOf(models: readonly DraftModel[], t: Translate): ReadonlyMap<st
       messages.set(model.key, t(KEYS['config.model.maxTokensInvalid']))
       continue
     }
+    if (!editsReasoning) continue
     const reasoning = reasoningProblemOf(model.reasoning)
     if (reasoning !== undefined) messages.set(model.key, t(reasoning))
   }
@@ -277,8 +315,8 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const levelChoices = useMemo(
-    () => reasoningLevelChoices(namespace),
-    [namespace],
+    () => row.entry.declared === true ? reasoningLevelChoices(namespace) : [],
+    [namespace, row.entry.declared],
   )
 
   const raw = useMemo(() => rawModelsOf(namespace?.value, settingsPath), [namespace, settingsPath])
@@ -293,7 +331,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
 
   const baseline = useMemo(() => canonical(raw.filter(isRecordValue)), [raw])
   const dirty = canonical(models.map(storedValueOf)) !== baseline
-  const problems = useMemo(() => problemsOf(models, t), [models, t])
+  const problems = useMemo(
+    () => problemsOf(models, t, levelChoices.length > 0),
+    [models, t, levelChoices],
+  )
   const invalid = problems.size > 0
 
   useEffect(() => { props.onDirtyChange(dirty) }, [dirty, props.onDirtyChange])
@@ -339,6 +380,9 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   }
 
   const updateModel = (model: DraftModel, edit: ModelEdit): void => {
+    const extra = edit.reasoning === null
+      ? withoutReasoningField(model.extra)
+      : model.extra
     const next: DraftModel = {
       key: model.key,
       id: edit.id ?? model.id,
@@ -347,8 +391,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       maxTokens: edit.maxTokens ?? model.maxTokens,
       storedWindow: model.storedWindow,
       storedTokens: model.storedTokens,
-      reasoning: edit.reasoning ?? model.reasoning,
-      extra: model.extra,
+      reasoning: edit.reasoning === undefined
+        ? model.reasoning
+        : edit.reasoning === null ? undefined : edit.reasoning,
+      extra,
       open: edit.open ?? model.open,
     }
     patch(rows => rows.map(row => row.key === next.key ? next : row))
@@ -363,7 +409,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       maxTokens: '',
       storedWindow: undefined,
       storedTokens: undefined,
-      reasoning: [],
+      reasoning: undefined,
       extra: {},
       open: false,
     }
@@ -374,28 +420,95 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     patch(rows => rows.filter(row => row.key !== key))
   }
 
-  const addReasoning = (model: DraftModel): void => {
-    const used = new Set(model.reasoning.map(row => row.level))
-    const next = levelChoices.find(choice => choice !== OFF_LEVEL && !used.has(choice)) ?? OFF_LEVEL
-    updateModel(model, { reasoning: [...model.reasoning, { level: next, value: '' }] })
+  const initialReasoning = (): readonly DraftReasoning[] => {
+    const levels = INITIAL_LEVELS.filter(level => levelChoices.includes(level))
+    if (!levels.some(level => level !== OFF_LEVEL)) {
+      const first = levelChoices.find(level => level !== OFF_LEVEL)
+      if (first !== undefined) levels.push(first)
+    }
+    return levels.map(level => ({
+      level,
+      value: level === OFF_LEVEL ? '' : level,
+      bad: false,
+      raw: undefined,
+    }))
   }
 
-  const removeReasoning = (model: DraftModel, index: number): void => {
-    updateModel(model, { reasoning: model.reasoning.filter((_, position) => position !== index) })
-  }
-
-  const updateReasoning = (model: DraftModel, index: number, change: { level?: string; value?: string }): void => {
-    const reasoning = model.reasoning.map((row, position) => position === index
-      ? { level: change.level ?? row.level, value: change.value ?? row.value }
-      : row)
-    updateModel(model, { reasoning })
+  const nextReasoningLevel = (used: ReadonlySet<string>): string | undefined => {
+    const highest = levelChoices.reduce(
+      (position, level, index) => used.has(level) ? index : position,
+      -1,
+    )
+    return levelChoices.find((level, index) => index > highest && !used.has(level))
+      ?? levelChoices.find(level => !used.has(level))
   }
 
   const levelOptionsFor = (current: string, used: ReadonlySet<string>): readonly string[] => {
     const options = [...levelChoices]
-    if (current !== OFF_LEVEL && !options.includes(current)) options.push(current)
-    if (!options.includes(OFF_LEVEL)) options.push(OFF_LEVEL)
+    if (!options.includes(current)) options.unshift(current)
     return options.filter(level => level === current || !used.has(level))
+  }
+
+  const toggleReasoning = (model: DraftModel, on: boolean): void => {
+    updateModel(model, { reasoning: on ? initialReasoning() : null })
+  }
+
+  const addReasoning = (model: DraftModel): void => {
+    const used = new Set((model.reasoning ?? []).map(entry => entry.level))
+    const level = nextReasoningLevel(used)
+    if (level === undefined) return
+    updateModel(model, {
+      reasoning: [
+        ...(model.reasoning ?? []),
+        { level, value: level === OFF_LEVEL ? '' : level, bad: false, raw: undefined },
+      ],
+    })
+  }
+
+  const removeReasoning = (model: DraftModel, index: number): void => {
+    const rows = model.reasoning ?? []
+    updateModel(model, { reasoning: rows.filter((_, position) => position !== index) })
+  }
+
+  const changeReasoningLevel = (model: DraftModel, index: number, level: string): void => {
+    const rows = model.reasoning ?? []
+    const row = rows[index]
+    if (row === undefined || row.level === level) return
+    const keep = row.level !== OFF_LEVEL
+      && level !== OFF_LEVEL
+      && row.value !== ''
+      && row.value !== row.level
+    updateModel(model, {
+      reasoning: rows.map((entry, position) => position === index
+        ? {
+          level,
+          value: level === OFF_LEVEL ? '' : keep ? row.value : level,
+          bad: false,
+          raw: undefined,
+        }
+        : entry),
+    })
+  }
+
+  const changeReasoningValue = (model: DraftModel, index: number, value: string): void => {
+    const rows = model.reasoning ?? []
+    updateModel(model, {
+      reasoning: rows.map((entry, position) => position === index
+        ? { level: entry.level, value, bad: false, raw: undefined }
+        : entry),
+    })
+  }
+
+  const settleReasoningValue = (model: DraftModel, index: number): void => {
+    const rows = model.reasoning ?? []
+    const row = rows[index]
+    if (row === undefined || row.level === OFF_LEVEL) return
+    if (row.value.trim() !== '') return
+    updateModel(model, {
+      reasoning: rows.map((entry, position) => position === index
+        ? { level: entry.level, value: entry.level, bad: false, raw: undefined }
+        : entry),
+    })
   }
 
   const writeModels = async (next: readonly DraftModel[]): Promise<boolean> => {
@@ -491,7 +604,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     }
     if (additions.length === 0) return
     const merged = [...models, ...additions]
-    const firstProblem = [...problemsOf(merged, t).values()][0]
+    const firstProblem = [...problemsOf(merged, t, levelChoices.length > 0).values()][0]
     if (firstProblem !== undefined) {
       setDiscovery({ ...discovery, note: firstProblem })
       return
@@ -501,18 +614,17 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   }
 
   const catalogHead = (
-    <div className="dmc-catalog-head zmd-runhead">
+    <div className="dmc-catalog-head">
       <h2 className="dmc-catalog-title">{t(KEYS['config.models.label'])}</h2>
       <span className="dmc-catalog-status">
         {storedModels.length > 0
           ? t(KEYS['config.models.customized'])
           : t(KEYS['config.models.inherited'])}
       </span>
-      <span className="zmd-rule" aria-hidden="true" />
-      <span className="dmc-roster-count zmd-num">
+      <span className="dmc-catalog-count zmd-num">
         {t(KEYS['config.models.count'], { count: String(models.length) })}
       </span>
-      <button type="button" className="dmc-btn dmc-catalog-close" onClick={onRequestClose}>
+      <button type="button" className="zmd-btn-ghost dmc-catalog-close" onClick={onRequestClose}>
         {t(KEYS['config.catalog.collapse'])}
       </button>
     </div>
@@ -523,10 +635,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       <div className="dmc-catalog-guard" role="alert">
         <p className="dmc-catalog-notice">{t(KEYS['config.catalog.unsaved'])}</p>
         <div className="dmc-catalog-guard-actions">
-          <button type="button" className="dmc-btn" onClick={props.onKeepEditing}>
+          <button type="button" className="zmd-btn-secondary" onClick={props.onKeepEditing}>
             {t(KEYS['config.catalog.keepEditing'])}
           </button>
-          <button type="button" className="dmc-btn" onClick={props.onDiscard}>
+          <button type="button" className="zmd-btn-danger" onClick={props.onDiscard}>
             {t(KEYS['config.catalog.discard'])}
           </button>
         </div>
@@ -536,7 +648,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
 
   const panel = (body: ReactNode, foot: ReactNode): ReactElement => (
     <div
-      className="dmc-catalog-panel"
+      className="dmc-catalog-panel zmd-well"
       id={`dmc-catalog-${row.entry.provider}`}
       ref={panelRef}
     >
@@ -592,15 +704,14 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     setDiscovery({ ...discovery, selected, note: null })
   }
 
-  const modelRow = (model: DraftModel, position: number): ReactElement => {
+  const modelRow = (model: DraftModel): ReactElement => {
     const message = problems.get(model.key)
     const wellId = `dmc-model-well-${model.key}`
-    const used = new Set(model.reasoning.map(entry => entry.level))
     const disabled = !writable || busy
     const alias = model.name.trim()
     const context = formatWindowStatement(model.contextWindow, model.storedWindow)
     const output = formatWindowStatement(model.maxTokens, model.storedTokens)
-    const manifestIndex = String(position).padStart(2, '0')
+    const reasoningUsed = new Set((model.reasoning ?? []).map(entry => entry.level))
     return (
       <li
         key={model.key}
@@ -609,21 +720,31 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
         data-invalid={message === undefined ? undefined : 'true'}
         data-well={model.open ? 'true' : undefined}
       >
-        <span className="dmc-model-index zmd-ordinal" aria-hidden="true">{manifestIndex}</span>
         <span className="dmc-model-ref" title={model.id === '' ? undefined : model.id}>
           {model.id === '' ? t(KEYS['config.model.newLabel']) : model.id}
         </span>
-        <button
-          type="button"
-          className="dmc-model-edit zmd-btn-quiet"
-          aria-expanded={model.open}
-          aria-controls={wellId}
-          onClick={() => { updateModel(model, { open: !model.open }) }}
-        >
-          {t(KEYS['config.edit'])}
-        </button>
+        <span className="dmc-model-actions">
+          <button
+            type="button"
+            className="dmc-model-delete zmd-btn-danger"
+            disabled={disabled}
+            aria-label={t(KEYS['config.model.removeAria'], { model: model.id === '' ? t(KEYS['config.model.newLabel']) : model.id })}
+            onClick={() => { removeModel(model.key) }}
+          >
+            {t(KEYS['config.model.remove'])}
+          </button>
+          <button
+            type="button"
+            className="dmc-model-edit zmd-btn-ghost"
+            aria-expanded={model.open}
+            aria-controls={wellId}
+            onClick={() => { updateModel(model, { open: !model.open }) }}
+          >
+            {t(model.open ? KEYS['config.catalog.collapse'] : KEYS['config.edit'])}
+          </button>
+        </span>
         <span className="dmc-model-sub">
-          {alias === '' ? null : <span className="dmc-model-alias">{alias}</span>}
+          {alias === '' || alias === model.id ? null : <span className="dmc-model-alias">{alias}</span>}
           <span className="dmc-model-facts">
             {context === '' ? null : (
               <span className="dmc-model-fact">
@@ -644,12 +765,12 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
           <div className="dmc-model-well" id={wellId}>
             {message === undefined ? null : <p className="dmc-model-error">{message}</p>}
             <div className="dmc-model-fields">
-              <div className="dmc-model-id">
-                <label className="dmc-model-label" htmlFor={`dmc-model-id-${model.key}`}>
+              <div className="dmc-model-field">
+                <label className="zmd-label" htmlFor={`dmc-model-id-${model.key}`}>
                   {t(KEYS['config.model.id'])}
                 </label>
                 <input
-                  className="dmc-model-input"
+                  className="dmc-model-input zmd-input"
                   id={`dmc-model-id-${model.key}`}
                   type="text"
                   autoComplete="off"
@@ -660,12 +781,12 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
                   onChange={(event) => { updateModel(model, { id: event.target.value }) }}
                 />
               </div>
-              <div className="dmc-model-name">
-                <label className="dmc-model-label" htmlFor={`dmc-model-name-${model.key}`}>
+              <div className="dmc-model-field">
+                <label className="zmd-label" htmlFor={`dmc-model-name-${model.key}`}>
                   {t(KEYS['config.model.name'])}
                 </label>
                 <input
-                  className="dmc-model-input"
+                  className="dmc-model-input zmd-input"
                   id={`dmc-model-name-${model.key}`}
                   type="text"
                   autoComplete="off"
@@ -676,12 +797,12 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
                   onChange={(event) => { updateModel(model, { name: event.target.value }) }}
                 />
               </div>
-              <div className="dmc-model-window">
-                <label className="dmc-model-label" htmlFor={`dmc-model-window-${model.key}`}>
+              <div className="dmc-model-field">
+                <label className="zmd-label" htmlFor={`dmc-model-window-${model.key}`}>
                   {t(KEYS['config.model.contextWindow'])}
                 </label>
                 <input
-                  className="dmc-model-input"
+                  className="dmc-model-input zmd-input"
                   id={`dmc-model-window-${model.key}`}
                   type="text"
                   inputMode="decimal"
@@ -693,12 +814,12 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
                   onChange={(event) => { updateModel(model, { contextWindow: event.target.value }) }}
                 />
               </div>
-              <div className="dmc-model-tokens">
-                <label className="dmc-model-label" htmlFor={`dmc-model-tokens-${model.key}`}>
+              <div className="dmc-model-field">
+                <label className="zmd-label" htmlFor={`dmc-model-tokens-${model.key}`}>
                   {t(KEYS['config.model.maxTokens'])}
                 </label>
                 <input
-                  className="dmc-model-input"
+                  className="dmc-model-input zmd-input"
                   id={`dmc-model-tokens-${model.key}`}
                   type="text"
                   inputMode="decimal"
@@ -711,71 +832,87 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
                 />
               </div>
             </div>
-            <div className="dmc-reasoning">
-              <span className="dmc-model-label">{t(KEYS['config.reasoning.label'])}</span>
-              {model.reasoning.length === 0 ? null : (
+
+            {levelChoices.length === 0 ? null : (
+              <div className="dmc-reasoning">
                 <div className="dmc-reasoning-head">
-                  <span className="dmc-model-label">{t(KEYS['config.reasoning.level'])}</span>
-                  <span className="dmc-model-label">{t(KEYS['config.reasoning.value'])}</span>
-                  <span />
-                </div>
-              )}
-              {model.reasoning.map((entry, index) => (
-                <div className="dmc-reasoning-row" key={`${entry.level}-${index}`}>
-                  <select
-                    className="dmc-reasoning-level"
-                    aria-label={t(KEYS['config.reasoning.level'])}
-                    value={entry.level}
+                  <span className="zmd-label">{t(KEYS['config.reasoning.label'])}</span>
+                  <Switch
+                    className="dmc-reasoning-switch"
+                    checked={model.reasoning !== undefined}
+                    label={t(KEYS['config.reasoning.label'])}
                     disabled={disabled}
-                    onChange={(event) => { updateReasoning(model, index, { level: event.target.value }) }}
-                  >
-                    {levelOptionsFor(entry.level, used).map(level => (
-                      <option key={level} value={level}>
-                        {level === OFF_LEVEL ? t(KEYS['config.reasoning.off']) : level}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="dmc-reasoning-value"
-                    type="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    aria-label={t(KEYS['config.reasoning.value'])}
-                    value={entry.value}
-                    disabled={disabled || entry.level === OFF_LEVEL}
-                    placeholder={entry.level === OFF_LEVEL ? t(KEYS['config.reasoning.offPlaceholder']) : ''}
-                    onChange={(event) => { updateReasoning(model, index, { value: event.target.value }) }}
+                    onChange={(on) => { toggleReasoning(model, on) }}
                   />
-                  <button
-                    type="button"
-                    className="zmd-btn-danger dmc-reasoning-remove"
-                    disabled={disabled}
-                    onClick={() => { removeReasoning(model, index) }}
-                  >
-                    {t(KEYS['config.reasoning.remove'])}
-                  </button>
                 </div>
-              ))}
-              <button
-                type="button"
-                className="dmc-btn dmc-reasoning-add zmd-btn-quiet"
-                disabled={disabled}
-                onClick={() => { addReasoning(model) }}
-              >
-                {t(KEYS['config.reasoning.add'])}
-              </button>
-              {model.reasoning.length === 0
-                ? null
-                : <p className="dmc-reasoning-help">{t(KEYS['config.reasoning.helpText'])}</p>}
-            </div>
-            <button
-              type="button"
-              className="dmc-model-danger zmd-btn-danger"
-              disabled={disabled}
-              onClick={() => { removeModel(model.key) }}
-            >
-              {t(KEYS['config.model.remove'])}
-            </button>
+                {model.reasoning === undefined ? null : (
+                  <>
+                    {model.reasoning.length === 0 ? null : (
+                      <div className="dmc-reasoning-columns" aria-hidden="true">
+                        <span>{t(KEYS['config.reasoning.level'])}</span>
+                        <span>{t(KEYS['config.reasoning.value'])}</span>
+                        <span />
+                      </div>
+                    )}
+                    <div
+                      className="dmc-reasoning-rows"
+                      role="group"
+                      aria-label={t(KEYS['config.reasoning.label'])}
+                    >
+                      {model.reasoning.map((entry, index) => (
+                        <div className="dmc-reasoning-row" key={`${entry.level}-${index}`}>
+                          <select
+                            className="zmd-select dmc-reasoning-select"
+                            value={entry.level}
+                            disabled={disabled}
+                            aria-label={`${t(KEYS['config.reasoning.level'])} ${index + 1}`}
+                            onChange={(event) => { changeReasoningLevel(model, index, event.target.value) }}
+                          >
+                            {levelOptionsFor(entry.level, reasoningUsed).map(level => (
+                              <option key={level} value={level}>{level}</option>
+                            ))}
+                          </select>
+                          <input
+                            className="zmd-input dmc-reasoning-value"
+                            type="text"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={entry.value}
+                            disabled={disabled || entry.level === OFF_LEVEL}
+                            aria-invalid={entry.bad ? true : undefined}
+                            aria-label={`${entry.level} ${t(KEYS['config.reasoning.value'])}`}
+                            placeholder={entry.level === OFF_LEVEL
+                              ? t(KEYS['config.reasoning.offPlaceholder'])
+                              : entry.level}
+                            onChange={(event) => { changeReasoningValue(model, index, event.target.value) }}
+                            onBlur={() => { settleReasoningValue(model, index) }}
+                          />
+                          <button
+                            type="button"
+                            className="zmd-btn-danger dmc-reasoning-remove"
+                            disabled={disabled}
+                            aria-label={`${t(KEYS['config.reasoning.remove'])} ${entry.level}`}
+                            onClick={() => { removeReasoning(model, index) }}
+                          >
+                            {t(KEYS['config.reasoning.remove'])}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="zmd-btn-ghost dmc-reasoning-add"
+                      disabled={disabled || levelChoices.every(level => reasoningUsed.has(level))}
+                      onClick={() => { addReasoning(model) }}
+                    >
+                      {t(KEYS['config.reasoning.add'])}
+                    </button>
+                    <p className="dmc-reasoning-help">{t(KEYS['config.reasoning.helpText'])}</p>
+                  </>
+                )}
+              </div>
+            )}
+
           </div>
         ) : null}
       </li>
@@ -788,15 +925,15 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       {storedModels.length === 0 && models.length === 0
         ? <p className="dmc-catalog-notice">{t(KEYS['config.models.empty'])}</p>
         : null}
-      <ul className="dmc-model-list">{models.map((model, index) => modelRow(model, index + 1))}</ul>
-      <button type="button" className="dmc-btn dmc-model-add" disabled={!writable || busy} onClick={addModel}>
-        {t(KEYS['config.model.add'])}
-      </button>
+      <ul className="dmc-model-list">{models.map(model => modelRow(model))}</ul>
 
-      <div className="dmc-discover-actions">
+      <div className="dmc-catalog-tools">
+        <button type="button" className="zmd-btn-ghost dmc-model-add" disabled={!writable || busy} onClick={addModel}>
+          {t(KEYS['config.model.add'])}
+        </button>
         <button
           type="button"
-          className="zmd-btn-door dmc-discover"
+          className="zmd-btn-ghost dmc-discover"
           disabled={busy || discovery.kind === 'fetching'}
           onClick={() => { void fetchModels() }}
         >
@@ -810,13 +947,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
 
       {discovery.kind === 'ready' ? (
         <div className="dmc-discover-panel">
-          <h3 className="dmc-catalog-section zmd-runhead">
-            {t(KEYS['config.fetch.title'])}
-            <span className="zmd-rule" aria-hidden="true" />
-          </h3>
+          <h3 className="dmc-catalog-section">{t(KEYS['config.fetch.title'])}</h3>
           <p className="dmc-catalog-notice">{t(KEYS['config.fetch.description'])}</p>
           <input
-            className="dmc-discover-search"
+            className="zmd-input dmc-discover-search"
             type="search"
             autoComplete="off"
             spellCheck={false}
@@ -834,7 +968,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
             </span>
             <button
               type="button"
-              className="dmc-btn dmc-discover-tool zmd-btn-quiet"
+              className="zmd-btn-ghost"
               disabled={addable.length === 0 || allSelected}
               onClick={() => { selectAll(true) }}
             >
@@ -842,7 +976,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
             </button>
             <button
               type="button"
-              className="dmc-btn dmc-discover-tool zmd-btn-quiet"
+              className="zmd-btn-ghost"
               disabled={selectedAddable.length === 0}
               onClick={() => { selectAll(false) }}
             >
@@ -890,10 +1024,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
             </ul>
           )}
           {discovery.note === null ? null : <p className="dmc-catalog-error">{discovery.note}</p>}
-          <div className="dmc-discover-actions">
+          <div className="dmc-catalog-tools">
             <button
               type="button"
-              className="dmc-btn dmc-discover-adopt zmd-btn-door"
+              className="zmd-btn-primary"
               disabled={!writable || busy || selectedAddable.length === 0}
               onClick={() => { void adopt() }}
             >
@@ -906,14 +1040,14 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   )
 
   const foot = (
-    <div className="dmc-catalog-foot zmd-footing">
-      <span className="zmd-footing-note">
+    <div className="dmc-catalog-foot">
+      <span className="dmc-catalog-foot-note">
         {t(KEYS['config.models.count'], { count: String(models.length) })}
       </span>
       <span className="dmc-catalog-foot-actions">
         <button
           type="button"
-          className="dmc-btn zmd-btn-quiet"
+          className="zmd-btn-ghost"
           disabled={!writable || busy || !canReset}
           onClick={() => { void reset() }}
         >

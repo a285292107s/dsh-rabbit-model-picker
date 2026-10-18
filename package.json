@@ -31,12 +31,10 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
-    "cordis.patch.yml",
-    "docs/fonts/Archivo-OFL.txt"
+    "cordis.patch.yml"
   ],
   "scripts": {
     "build": "node scripts/build-client.mjs",
-    "font:build": "node scripts/build-font-asset.mjs",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
