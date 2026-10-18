@@ -1,27 +1,14 @@
-/**
- * Copy for this plugin's own surfaces.
- *
- * The dictionaries register into the Client locale service under this plugin's
- * own namespace, so the seat follows the active language like every other
- * surface. A local lookup is kept as well: an external plugin must still render
- * readable copy if the locale face is unavailable, and the registration then
- * simply omits its `locale` seat.
- *
- * @module dsh-rabbit-model-picker/client/dictionary
- */
 
 import type { Translate } from './contract.ts'
 
-/** Locale namespace owned by this plugin. */
 export const NS = 'dsh-rabbit-model-picker'
 
-/** Simplified Chinese dictionary (the key-set source of truth). */
+// zh is the key-set source of truth; en must mirror it key-for-key in the same ORDER, with
+// every `{name}` placeholder present on both sides, and the copy gate fails on any drift.
 export const zh: Record<string, string> = {
   'provider.account': 'DeepSeek 账号',
   'provider.all': '全部',
   'provider.group': '模型提供商',
-  // The rail scopes the LIST, never the search: a query that hits models under
-  // another provider says how many instead of reading as "no such model".
   'provider.elsewhere': '其他提供商还有 {count} 个匹配',
   'provider.showAll': '显示全部',
   'provider.failed': '加载失败',
@@ -30,13 +17,17 @@ export const zh: Record<string, string> = {
   'trigger.fallback': '请选择模型',
   'trigger.loading': '正在加载模型…',
   'trigger.selectAria': '请选择模型',
-  // The trigger shows `provider/model` (§5.26), so the sentence names both: the
-  // provider is what tells two same-named models apart, and a screen reader user
-  // gets the same two-part identity the visible label carries.
   'trigger.aria': '选择模型，当前 {provider}/{model}',
   'trigger.ariaEffort': '选择模型，当前 {provider}/{model}，推理等级 {effort}',
   'menu.aria': '模型与推理等级',
   'menu.model': '模型',
+  'card.subAll': '按提供商分组',
+  'card.subScoped': '这个提供商的全部模型',
+  'card.count': '{count} 个',
+  'card.footTotal': '共 {count} 个模型',
+  'card.footPart': '显示 {shown} / {total} 个模型',
+  'card.footProviders': '{count} 个提供商',
+  'card.railKeys': '数字键跳提供商',
   'search.placeholder': '搜索模型…',
   'search.clear': '清除搜索',
   'effort.providerDefault': 'Default',
@@ -44,17 +35,10 @@ export const zh: Record<string, string> = {
   'badge.text.off': '不支持文字输入',
   'badge.image.on': '图片输入',
   'badge.image.off': '不支持图片输入',
-  // "推理" is the verb form of the fact the column states, and the stem of the
-  // panel's "推理等级" — the strip's key and the section title therefore call
-  // the same concept by the same word (CONTEXT.md: 推理等级, matching the host's
-  // own zh copy for `reasoning effort`).
   'badge.effort.on': '支持推理',
   'badge.effort.off': '不支持推理',
   'badge.context': '上下文窗口 {value}',
   'badge.rowAria': '{model}，{facts}',
-  // The key to the strip's four columns, read once per card (see §5.24). One
-  // short noun per fact, in the same order the columns are drawn: the words name
-  // the columns so the row's glyphs do not have to be learned by hovering.
   'badge.key.text': '文字',
   'badge.key.image': '图片',
   'badge.key.effort': '推理',
@@ -72,6 +56,7 @@ export const zh: Record<string, string> = {
   'settings.openNoModel': '先选择模型，再编辑它的参数',
   'settings.openAria': '编辑 {model} 的模型参数',
   'settings.aria': '{model} 的模型参数',
+  'settings.scope': '只改这一个模型的参数',
   'settings.reset': '恢复默认',
   'settings.resetAria': '把 {model} 的参数恢复为适配器默认',
   'settings.resetNothing': '这条模型声明里没有可恢复的改动',
@@ -83,7 +68,8 @@ export const zh: Record<string, string> = {
   'settings.unaddressable': '这个模型来自适配器内置目录，没有可编辑的声明，只能查看。',
   'settings.readonly': '当前配置不接受表单修改，参数面板只能查看。',
   'settings.writeFailed': '设置服务拒绝了这次修改：{message}',
-  'settings.target': '写入位置：{ns} · {path}',
+  'settings.targetLabel': '写入位置',
+  'settings.target': '{ns} · {path}',
   'settings.input.title': '输入类型',
   'settings.input.text': '文字',
   'settings.input.image': '图片',
@@ -105,7 +91,6 @@ export const zh: Record<string, string> = {
   'settings.note': '输入类型与上下文窗口会直接写进适配器对这个模型的声明，立即生效，与「设置 → 模型」页改的是同一处；推理等级是会话级设置，不写进声明。',
 }
 
-/** English dictionary, complete against the zh key set. */
 export const en: Record<string, string> = {
   'provider.account': 'DeepSeek Account',
   'provider.all': 'All',
@@ -122,6 +107,13 @@ export const en: Record<string, string> = {
   'trigger.ariaEffort': 'Select model, current {provider}/{model}, reasoning effort {effort}',
   'menu.aria': 'Model and reasoning effort',
   'menu.model': 'Model',
+  'card.subAll': 'grouped by provider',
+  'card.subScoped': 'every model this provider offers',
+  'card.count': '{count}',
+  'card.footTotal': '{count} models in total',
+  'card.footPart': 'showing {shown} of {total} models',
+  'card.footProviders': '{count} providers',
+  'card.railKeys': 'number keys jump providers',
   'search.placeholder': 'Search models…',
   'search.clear': 'Clear search',
   'effort.providerDefault': 'Default',
@@ -150,6 +142,7 @@ export const en: Record<string, string> = {
   'settings.openNoModel': 'Select a model first, then edit its parameters',
   'settings.openAria': 'Edit parameters of {model}',
   'settings.aria': 'Model parameters for {model}',
+  'settings.scope': 'This model only',
   'settings.reset': 'Restore defaults',
   'settings.resetAria': 'Restore the adapter defaults for {model}',
   'settings.resetNothing': 'This model has no declared change to restore',
@@ -161,7 +154,8 @@ export const en: Record<string, string> = {
   'settings.unaddressable': 'This model comes from the adapter’s installed catalog and has no declaration to edit, so it is view-only.',
   'settings.readonly': 'This configuration does not accept changes; the parameters are view-only.',
   'settings.writeFailed': 'The settings service refused this change: {message}',
-  'settings.target': 'Written to: {ns} · {path}',
+  'settings.targetLabel': 'Written to',
+  'settings.target': '{ns} · {path}',
   'settings.input.title': 'Input types',
   'settings.input.text': 'Text',
   'settings.input.image': 'Image',
@@ -183,31 +177,15 @@ export const en: Record<string, string> = {
   'settings.note': 'Input types and the context window are written straight into the adapter’s declaration for this model and take effect immediately — the same place Settings → Models edits. The reasoning effort is a session setting and is not written into the declaration.',
 }
 
-/**
- * Substitute `{name}` placeholders in one template.
- *
- * Exported so the unit gate can build a translator out of this dictionary and
- * assert the real copy rather than a stub of it.
- * @param template - the dictionary entry.
- * @param params - placeholder values.
- * @returns the resolved text.
- */
 export function interpolate(template: string, params?: Record<string, string>): string {
   if (params === undefined) return template
   return template.replace(/\{(\w+)\}/g, (match, name: string) => params[name] ?? match)
 }
 
-/**
- * Pick a dictionary without the locale service: the locale plugin keeps
- * `<html lang>` in sync with the active language, so it is the one signal a
- * plugin can read here.
- * @returns the local translator.
- */
 export function localTranslate(): Translate {
   const language = typeof document === 'undefined' ? '' : document.documentElement.lang
   const dictionary = language.toLowerCase().startsWith('zh') ? zh : en
   return (key, params) => interpolate(dictionary[key] ?? en[key] ?? key, params)
 }
 
-/** Dictionaries in the shape `locale.register(ns, { zh, en })` expects. */
 export const dictionaries: Record<string, Record<string, string>> = { zh, en }

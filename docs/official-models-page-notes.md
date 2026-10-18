@@ -8,7 +8,7 @@
 > **来源与口径**
 > - `MODELS` = `C:\Users\28529\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-client-ui-settings-models\lib\client.js`，包版本 `0.2.1-alpha.4`，共 4527 行（读于 2026-10-16）。
 > - `PIAI` = `…\@deepseek-ai\dsh-llm-pi-ai\lib\index.js`（2968 行）；`UISET` = `…\dsh-client-ui-settings\lib\client.js`（1511 行）。
-> - 我们的实现以 `src/client/modelConfigModel.ts`（469 行，核查时未变动）为准；`scripts/test-model-config.mjs`（335 行）是门。
+> - 我们的实现以 `src/client/modelConfigModel.ts`（469 行，核查时未变动）为准；`scripts/test-model-config.mjs`（335 行）当时是门（脚本已于 2026-10-18 删除，见 `DESIGN.md` §5.43）。
 > - 标注约定：**【事实】**= 在当前版本源码里直接读到；**【推断】**= 由多个事实推出，未运行验证；**【未确认】**= 需要一次运行时读数或另一份证据。
 > - ⚠️ `src/client/ModelConfigPage.tsx` 在核查期间正被 `page-builder` 修改，其行号会漂移；引用该文件时同时给出符号名。
 

@@ -1,36 +1,3 @@
-/**
- * Model parameters that really reach the Host, and the address they live at.
- *
- * WHY THIS REPLACED THE LOCAL RECORD. An earlier revision of this plugin kept
- * the parameters of a route in its own `localStorage`, because the composer
- * seat's catalog (`session/modelCatalog`) publishes only `{ provider, model,
- * reasoning }`. That catalog is still that narrow — but it is not the only way
- * in. The Host exposes the *configuration* surfaces over two Remote namespaces,
- * and both LLM adapters declare the model parameters as VOLATILE config fields,
- * which are exactly the fields the settings service accepts live edits for:
- *
- *   - `llm/listConfigurableProviders` maps a provider route to the settings
- *     namespace and path that declare it (`llm-pi-ai` →
- *     `providers.<provider>`, `llm-deepseek` → the namespace root).
- *   - `settings/describe` answers with the effective value, the user layer (the
- *     profile patch) and the revision of every namespace.
- *   - `settings/mutate` applies path-addressed edits, rejecting anything
- *     outside a volatile branch (`settings/rejected`) or written against a
- *     stale revision (`settings/conflict`).
- *
- * So a `contextWindow` / `input` (`inputModalities` on the official adapter)
- * edit is a REAL edit: the adapter re-resolves its catalog and the new value is
- * what the Host sends. Reasoning effort is live a third way — through the
- * shared session selection, which is the seat's own `select()`.
- *
- * WHAT IS STILL NOT POSSIBLE. A route that the adapter serves straight from its
- * installed catalog has no declaration entry to edit, and `modelOverrides`
- * (the pi-ai escape hatch for those routes) is rejected beside a `models` list,
- * so such a route can only be read here. {@link resolveRoute} returns null for
- * it and the panel says so instead of pretending.
- *
- * @module dsh-rabbit-model-picker/client/params
- */
 
 import type {
   ConfigurableProvider, ModelRoute, ParamsFace, ParamsSnapshot, RemoteFace, RemoteResult, RouteAddress,
@@ -38,33 +5,24 @@ import type {
 } from './contract.ts'
 import { sameSnapshot } from './snapshotEq.ts'
 
-/** Smallest accepted context window (a smaller "window" is never meaningful). */
 export const MIN_CONTEXT = 1_024
 
-/** Largest accepted context window — a typo guard, not a model claim. */
 export const MAX_CONTEXT = 10_485_760
 
-/** The capacity the field suggests while the route declares none. */
 export const CONTEXT_PLACEHOLDER = '128K'
 
-/** The modalities the panel exposes, in display order. */
 export const PANEL_MODALITIES = ['text', 'image'] as const
 
-/**
- * The schema field each known adapter declares its input modalities in. The
- * value actually present on the entry wins over this table (see
- * {@link inputFieldOf}), so a renamed field degrades to a read-only panel
- * instead of writing into a name the adapter ignores.
- */
+// The schema field each known adapter declares input modalities in. The value actually
+// present on the entry wins (see inputFieldOf), so a renamed field degrades to a
+// read-only panel instead of writing into a name the adapter ignores.
 const INPUT_FIELD_BY_NS: Record<string, string> = {
   'llm-pi-ai': 'input',
   'llm-deepseek': 'inputModalities',
 }
 
-/** Field names probed on the entry itself, in order. */
 const INPUT_FIELD_CANDIDATES = ['input', 'inputModalities'] as const
 
-/** The snapshot before the first read: nothing known, nothing claimed. */
 const INITIAL_SNAPSHOT: ParamsSnapshot = {
   status: 'idle',
   error: null,
@@ -73,12 +31,6 @@ const INITIAL_SNAPSHOT: ParamsSnapshot = {
   namespaces: {},
 }
 
-/**
- * Parse a human capacity into tokens: a bare integer or a `K`/`M` suffix
- * (`128K`, `1M`). Deliberately narrow — no arithmetic, no compound units.
- * @param raw - the typed text.
- * @returns the token count, or null when the text is not a valid capacity.
- */
 export function parseContext(raw: string): number | null {
   const text = raw.trim().replace(/[\s_]/g, '').toUpperCase()
   const match = /^(\d+(?:\.\d+)?)([KM])?$/.exec(text)
@@ -89,33 +41,16 @@ export function parseContext(raw: string): number | null {
   return tokens
 }
 
-/**
- * Render a token count the way {@link parseContext} reads it back.
- * @param tokens - the stored token count.
- * @returns the display text (`256K`, `1M`, or the plain number).
- */
 export function formatContext(tokens: number): string {
   if (tokens >= 1_000_000 && tokens % 100_000 === 0) return `${tokens / 1_000_000}M`
   if (tokens >= 1_000 && tokens % 1_000 === 0) return `${tokens / 1_000}K`
   return String(tokens)
 }
 
-/**
- * Whether a value is a plain record (not an array, not null).
- * @param value - the value to test.
- * @returns whether it can be read by key.
- */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/**
- * Read one path out of an unknown settings value.
- * @param value - the root value.
- * @param path - keys to walk; array indices are numeric keys, as the settings
- *   service itself addresses them.
- * @returns the value at the path, or undefined when any step is missing.
- */
 export function getPath(value: unknown, path: readonly string[]): unknown {
   let node: unknown = value
   for (const key of path) {
@@ -130,30 +65,14 @@ export function getPath(value: unknown, path: readonly string[]): unknown {
   return node
 }
 
-/**
- * Coerce a stored value into a list of modality ids.
- * @param value - the field's value.
- * @returns its strings, or an empty list when it is not a string array.
- */
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
-/**
- * Coerce a stored value into a positive integer.
- * @param value - the field's value.
- * @returns the number, or undefined when it is not a finite positive integer.
- */
 function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined
 }
 
-/**
- * Which field one route's declared modalities live in.
- * @param entry - the effective declaration entry.
- * @param ns - the settings namespace that owns it.
- * @returns the field name, preferring a field the entry actually carries.
- */
 function inputFieldOf(entry: Record<string, unknown>, ns: string): string {
   for (const candidate of INPUT_FIELD_CANDIDATES) {
     if (entry[candidate] !== undefined) return candidate
@@ -161,17 +80,6 @@ function inputFieldOf(entry: Record<string, unknown>, ns: string): string {
   return INPUT_FIELD_BY_NS[ns] ?? INPUT_FIELD_CANDIDATES[0]
 }
 
-/**
- * Locate one route's declaration entry.
- *
- * Two shapes exist in the wild and both are addressed the same way: a `models`
- * list under the provider's settings path (both adapters) and a `modelOverrides`
- * dict keyed by model id (pi-ai, only valid while no `models` list is declared).
- * @param value - the namespace's effective value.
- * @param scope - the provider's settings path inside that namespace.
- * @param model - the model id.
- * @returns the path to the entry, or null when the route declares none.
- */
 function entryPathOf(value: unknown, scope: readonly string[], model: string): string[] | null {
   const models = getPath(value, [...scope, 'models'])
   if (Array.isArray(models)) {
@@ -183,16 +91,6 @@ function entryPathOf(value: unknown, scope: readonly string[], model: string): s
   return null
 }
 
-/**
- * Resolve the settings address and every declared fact for one route.
- *
- * Pure over a {@link ParamsSnapshot}: the panel and the gear both call it, and
- * neither keeps a copy of what it returns.
- * @param snapshot - the last settings read.
- * @param route - the selected provider + model, or null before a selection.
- * @returns the address and its declaration, or null when the route cannot be
- *   addressed (unknown provider, no namespace, or no declaration entry).
- */
 export function resolveRoute(snapshot: ParamsSnapshot, route: ModelRoute | null): RouteAddress | null {
   if (route === null) return null
   const provider: ConfigurableProvider | undefined =
@@ -212,8 +110,6 @@ export function resolveRoute(snapshot: ParamsSnapshot, route: ModelRoute | null)
   const maxTokens = numberOrUndefined(entry.maxTokens)
   const defaultContextWindow = numberOrUndefined(getPath(view.value, [...scope, 'defaultContextWindow']))
   const defaultInput = stringList(getPath(view.value, [...scope, 'defaultInput']))
-  // The user layer is what this panel may clear: a value inherited from the
-  // deployment profile is not this route's own recorded choice.
   const userEntry = getPath(view.user, entryPath)
   const declared = isRecord(userEntry)
     && (userEntry.contextWindow !== undefined || userEntry[inputField] !== undefined)
@@ -232,78 +128,30 @@ export function resolveRoute(snapshot: ParamsSnapshot, route: ModelRoute | null)
   }
 }
 
-/**
- * The parameters of every route this plugin has read, kept as one immutable
- * snapshot for `useSyncExternalStore`.
- *
- * One instance is created per plugin activation and shared by every seat, so
- * two composer instances read one settings answer instead of racing two.
- */
 export class ParamsStore implements ParamsFace {
   private readonly listeners = new Set<() => void>()
   private snapshot: ParamsSnapshot = INITIAL_SNAPSHOT
   private inflight: Promise<void> | null = null
 
-  /**
-   * @param face - RESOLVES the Host settings + provider directory faces, or
-   *   returns null when this deployment mounts neither (the panel then stays
-   *   read-only).
-   *
-   *   A RESOLVER rather than the faces themselves, for the reason DESIGN §2.2
-   *   gives and `CapabilityStore` already follows: Remote namespaces are mounted
-   *   by their owners when those owners activate, so `ctx.get('remote.settings')`
-   *   answered at THIS plugin's activation can legitimately be "not yet". Captured
-   *   once, that one unlucky ordering became permanent: the panel claimed
-   *   "this deployment mounts no settings service" — a statement about the
-   *   deployment made from a race — and every write refused with
-   *   `settings are unavailable` for the rest of the page. Resolving per read
-   *   makes the answer depend on what is mounted NOW, which is the only thing the
-   *   claim was ever about.
-   */
   constructor(private readonly face: () => RemoteFace | null) {}
 
-  /** Subscribe to snapshot changes. @param listener - called after any change. */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
     return () => { this.listeners.delete(listener) }
   }
 
-  /**
-   * The current snapshot, stable until something changes.
-   * @returns the snapshot handed to React.
-   */
   getSnapshot(): ParamsSnapshot {
     return this.snapshot
   }
 
-  /**
-   * Read the Host once. Repeated calls while a read is in flight join it, and a
-   * snapshot already in hand is never refetched by this method.
-   */
   ensure(): void {
     if (this.snapshot.status === 'idle') void this.read()
   }
 
-  /**
-   * Re-read the Host, keeping the last good values while the answer is in
-   * flight so an open panel does not blank out on a refresh.
-   * @returns a promise settling when the snapshot has been updated.
-   */
   refresh(): Promise<void> {
     return this.read()
   }
 
-  /**
-   * Apply one write and keep the snapshot in step with the Host's answer.
-   *
-   * A `settings/conflict` is retried once against a freshly read revision: the
-   * panel's edit is a single field, so re-applying it over the newer document is
-   * what the person asked for, while a second conflict is reported as-is.
-   * @param ns - the settings namespace to write.
-   * @param ops - the path-addressed edits.
-   * @param expectedRevision - the revision the caller read.
-   * @returns whether the Host accepted the write, and why not when it did not.
-   */
   async write(
     ns: string, ops: readonly SettingsOp[], expectedRevision: number | undefined,
   ): Promise<WriteOutcome> {
@@ -317,10 +165,6 @@ export class ParamsStore implements ParamsFace {
         response = await face.settings.mutate(ns, ops, this.snapshot.namespaces[ns]?.revision)
       }
     } catch (error: unknown) {
-      // A transport failure REJECTS instead of answering { ok: false }, and an
-      // unhandled rejection here would leave `writing` set forever: every
-      // control of the panel stays disabled with no refusal message and no way
-      // out. Fail the write through the same door a refused write takes.
       return {
         ok: false,
         conflict: false,
@@ -339,12 +183,8 @@ export class ParamsStore implements ParamsFace {
     return { ok: true }
   }
 
-  /** Read the provider directory and every namespace, then publish one snapshot. */
   private read(): Promise<void> {
     if (this.inflight !== null) return this.inflight
-    // Resolved per READ, not captured at construction: a namespace that was not
-    // mounted yet must not turn into "this deployment mounts no settings service"
-    // for the rest of the page (see the constructor).
     const face = this.face()
     if (face === null) {
       this.publish({ ...this.snapshot, status: 'unavailable' })
@@ -382,25 +222,6 @@ export class ParamsStore implements ParamsFace {
     return this.inflight
   }
 
-  /**
-   * Replace the snapshot and wake every subscriber — but only when the answer
-   * actually differs from the one in hand.
-   *
-   * WHY THE GUARD. `useSyncExternalStore` re-renders when the snapshot stops
-   * being `Object.is`-equal to the last one, and this store BUILDS that snapshot,
-   * so comparing references can never help: every publish would hand React a new
-   * object. Comparing the content is therefore the only way to skip the render,
-   * and there is a lot to skip — the menu and the panel both call `refresh()` on
-   * EVERY open, and a refresh that finds the same values (the ordinary case, an
-   * unchanged settings document) used to re-render the panel twice: once for the
-   * "reading" status it never actually left, and once for the identical answer.
-   * Measured on a settled store: 3 opens produced 6 wakeups and exactly 1 content
-   * change.
-   *
-   * A publish that differs is unaffected, including the "reading" one that really
-   * does move `status` — that is a change a subscriber can see, so it still goes
-   * out.
-   */
   private publish(snapshot: ParamsSnapshot): void {
     if (sameSnapshot(this.snapshot, snapshot)) return
     this.snapshot = snapshot

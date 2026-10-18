@@ -2049,7 +2049,7 @@ the second look does dismiss — {"lost":0}`——**弹窗永远不关**，一�
 
 §5.24–§5.26 那几轮做的是**模型卡**（座位上的弹层）。这一轮做的是**另一个表面**——
 设置里的平行 tab「模型配置」（ADR 0003）。它此前只有一份视觉方向稿
-（[docs/design-model-config-tab.md](docs/design-model-config-tab.md)）和一次真机审计，
+（`docs/design-model-config-tab.md`，该文档已于 2026-10-17 随 UI 文档一并删除，本节保留当时的结论）和一次真机审计，
 审计自己给出了结论：**它的 idea 句与数据层不符**（§9.6），**那一栏的 4px 竖条在真机上 0 次出现**，
 **`data-usable` 这个布尔既不表示「缺 key」、筛选后又恒为 true**（§10.3），
 **所有断点都在测视口而可用宽度来自容器**（§9.2）。所以这一轮不是「打磨」，是重做。
@@ -2156,7 +2156,7 @@ the second look does dismiss — {"lost":0}`——**弹窗永远不关**，一�
 两件事同时成立：座位按 key 派发，**一个座位只能点名一个适配器家族**，所以它能覆盖的只有 pi-ai 一家；
 而这个座位在**别人的页面**里——本插件的重试策略长在官方「模型」页的提供商卡片中间。
 （旧卡本来没有自己的小节：**本轮之前** DESIGN 全文只有一处 `drc-`，就是 §5.32 方法论第 3 条；它的实测记录在
-`docs/design-model-config-tab.md` §9.3。）
+`docs/design-model-config-tab.md` §9.3，该文档已于 2026-10-17 删除。）
 
 **决定**
 
@@ -2180,7 +2180,7 @@ the second look does dismiss — {"lost":0}`——**弹窗永远不关**，一�
 搬进 `dmc-` 域后这三条**随设计一起消失**（保存／恢复按钮改用 `.dmc-key-action` 的墨色阶梯，摘要行与来源词只用
 primary / secondary），并且从此被门永久守住：`dmc-` 的每一处画字规则都要在 `STYLES` 里登记，登记项必须自陈
 ink 与 size，且只有 primary / secondary 可作文字。
-`docs/design-model-config-tab.md` §9.3 的表末行把这三条记为「本轮新增、不在任务 scope」的现存违反；按「不删别人的
+`docs/design-model-config-tab.md` §9.3（该文档已删除）的表末行把这三条记为「本轮新增、不在任务 scope」的现存违反；按「不删别人的
 记录」，那条记录原样保留，**本节就是它的结果**：`drc-` 规则在仓库源文件里已归零，只剩注释与门自己的历史说明里还
 提到这个名字。
 
@@ -2246,7 +2246,7 @@ ink 与 size，且只有 primary / secondary 可作文字。
 | 项 | 决定 |
 |---|---|
 | 落点 | **本插件的 Host 侧**（`src/host/rateLimitRecovery.ts` + `src/index.ts`），挂在 `agent/request-error` 瀑布上。不改宿主安装目录（升级不丢），不改 `node_modules` |
-| 手段 | **不自己等、不自己计数、不自己写事件**：按 `RATE_LIMIT` 重新提交这条失败，**等待节奏、重试次数、每会话计数、界面上「等待重试模型请求 (n/N) · Xs」行全部仍由 `dsh-llm-retry` 出**，因而全部仍由重试编辑器上的两个数字决定 |
+| 手段 | **不自己等、不自己计数、不自己写事件**：按 `RATE_LIMIT` 重新提交这条失败，**等待节奏、重试次数、重试计数（执行器自己的，每个 step 重置）、界面上「等待重试模型请求 (n/N) · Xs」行全部仍由 `dsh-llm-retry` 出**，因而全部仍由重试编辑器上的两个数字决定 |
 | 注册序 | `ctx.on('agent/request-error', …, { prepend: true })`。瀑布是**最外层先跑、不调 `next()` 即否决其余链**；内建重试也在同一事件上，晚于它注册就会在决策之后才轮到，救不回来 |
 | 判定 | 五个条件**全部**成立才提升：① 该请求有已解析的 `retryPolicy`（没有时内建重试自己也不工作）；② 该策略的 `retryableCodes` **仍含 `RATE_LIMIT`**；③ 本次 `code` **不**在其中（否则归内建，预算不得被重复花）；④ 没有「确定的非限流」状态码（非 429/408/5xx 的数字状态）；⑤ 文案命中文案表 |
 | 文案表 | 收录**内建分类器认不出**的措辞（`请求过于频繁`、`当前并发已达上限`、`请求数限制`、`访问过于频繁`、`操作过于频繁`、`请求过于密集`、`速率限制`、`触发限流`、`too many requests`、`requests are too frequent`）。**内建已认的拼写（`rate limit` / `rate_limit` / `429` …）刻意不收**：它们不可能走到这里，收了只会读成覆盖面而实际断言不了任何东西 |
@@ -2321,8 +2321,8 @@ ink 与 size，且只有 primary / secondary 可作文字。
 | 破坏性动作 | `删除` 与 `模型目录` 同为 12px、相距 20px |
 
 **方向：沿用 quiet-instrument，把构图升级为「账本」。** 没有重跑 `draw.mjs`：这一轮的判断不是「换一种艺术方向」，
-而是「同一个方向落到了一个读不下去的构图上」；`docs/design-model-config-tab.md` 那段方向书仍然成立。
-语言写进了 `docs/ui-language.md`（诊断、令牌、组件语法、响应式、动效、扩展规则），本节只记实现契约与证据。
+而是「同一个方向落到了一个读不下去的构图上」；`docs/design-model-config-tab.md` 那段方向书仍然成立（该文档已删除）。
+语言写进了 `docs/ui-language.md`（该文档已删除），本节只记实现契约与证据。
 
 **idea 句**（skill 第 4 步）：
 
@@ -2546,8 +2546,9 @@ ink 与 size，且只有 primary / secondary 可作文字。
 应以黑、灰、水墨质感的背景色为准」**；三选一里选定：单色 + 宿主蓝、移除 HUD 元素只留线与序号、
 局部墨晕 + 细微噪点。HUD 版的字段码、大数字、切角、扫光、信号黄全部退役（`CONTEXT.md` 废弃表有记录）。
 
-**现行方向：墨色语言。** 规范落盘为 `docs/ink-design-language.md`，取舍记录为
-[ADR 0005](docs/adr/0005-ink-language.md)。一句话：**界面是一张墨与纸**——底色有极淡的墨晕与纸纹，
+**现行方向：墨色语言。** 规范落盘为 `docs/ink-design-language.md`，取舍记录为 ADR 0005。
+两份文档均已于 2026-10-17 删除，本节保留当时的决定。
+一句话：**界面是一张墨与纸**——底色有极淡的墨晕与纸纹，
 字是墨，线是淡墨；唯一会「跳出来」的是宿主自己的蓝色，只出现在「你正在这里 / 点这里」的地方。
 秩序来自线与字，不来自色块。
 
@@ -2628,8 +2629,110 @@ ink 与 size，且只有 primary / secondary 可作文字。
 5. **不改交互形态**：不新增弹层、不搬运控件、不改键盘链与宽度预算。
 6. **不做全屏噪点/纹理铺满**：墨晕与纸纹只在有边界的表面上，文字永远可读。
 
-> 决策记录：[ADR 0005](docs/adr/0005-ink-language.md)。规范正文：
-> [`docs/ink-design-language.md`](docs/ink-design-language.md)。
+> 决策记录：ADR 0005。规范正文：`docs/ink-design-language.md`。两份文档均已删除。
+
+### 5.39 设计语言迭代（2026-10-17，v1.0 墨色 → v1.1 目录页式精修）
+
+**动因。** 用户指令：**「分析、迭代本项目的设计语言」**。v1.0 墨色语言在同日交付后，先做了
+一遍 render-level 分析与批评（`.taste-skill/ink-critique-before.md`），再用 Playwright 对三张
+fixture 做量化审计（`.taste-skill/ink-audit/findings.md`，48 张审计图、15 表面 × 双主题、
+`audit.json` 2.5 MB）。审计确认 v1.0 的**规范**成立，但**实现**没兑现三件事：
+
+| 诊断（实测数字） | 证据 |
+|---|---|
+| 字阶名存实亡 | 规范写五档，代码实际 8 个字号（10/11/12/13/14/16/18/20）；卡 5 档、面板 4 档、560 页 6 档；13px 以下文本占 36–67%；最大/最小字比 1.4–2.0 |
+| 没有动作语法 | 141 个可点元素里**填充 CTA = 0**；77 个纯文字动作（54.6%）；28 处/18 种文字动作静止态无底无边无下划线；含 3 个删除动作 |
+| 表格化过重 | 配置页 1px 边 141 条（560 面 103 条，其中 56 条是表单控件边）；井/模型井/目录区/输入框全为 1px 四边形 |
+| 一个事实两种写法 | `1M`×9 与裸字节 `1048576`×2 同列并存；placeholder `128K / 1M / 262144` 一串三格式；计数补零 `04` 与「4 个模型」「9 个提供商可用」互斥 |
+| 材质在亮色不成立 | wash 两端 1.074:1；grain 亮色 mean 0.94–1.57/255、max 3、≥4 级像素 0%（暗色 mean 2.2–3.6/max 8） |
+| 两套次级墨 + 字体回退 | 卡片用宿主 label 令牌（#61666b），配置页用 zmd 墨（#4c4c48）；参数面板 5 个推理等级名整段渲染 Arial（button 未声明字体） |
+
+**方向：不换方向，把 v1.0 已写、但没实现的东西做出来。** 取舍记录 ADR 0006，规范正文升为
+`docs/ink-design-language.md` v1.1。两份文档均已删除（见 git 历史）。
+一句话：**从「单色、正确、但平」到「有字阶、有纸面、有墨印」**。
+
+**实现契约（逐条都已落进门）**
+
+| 项 | v1.1 决定 |
+|---|---|
+| 字阶 | **五档白名单**：statement 24/32/500（只给页首陈述）、heading 16/24/600、body 14/22/400（动作词 14/500）、micro 12/18/400（标签 600）、ordinal 10/12/500。代码里出现 11/13/18/20 或 >24px 即 FAIL；窄档（≤360）陈述降 16/24/600、名称 14/20，仍在五档内 |
+| 字体 | 仍只有 ZMD Archivo + 宿主中文栈；**所有 button/input 显式 `font-family: var(--zmd-font-latin)` 或 `font: inherit`**（修掉 Arial 回退）；`--dsw-alias-label-primary/secondary` 从 dmp 表面清零，只留 disabled 的 `-dimmed`（一种次级墨） |
+| 令牌 | 中性角色各开一档：亮 `#f7f7f5/#ececea/#e5e5e1/#d9d9d4/#b0b0a9/#7d7d77`，wash `#fdfdfc→#eeeee9`；暗 `#1c1c1a/#121211/#232322/#35352f/#5c5c55/#8a8a83`，wash `#242422→#151514`；墨梯不变；新增 **`--zmd-on-ink: var(--zmd-panel)`**（body 别名块）；grain alpha 5%→**8%** |
+| 标题 | 共享原子 **`.zmd-runhead`**（标题 + `flex:1` 的 1px 尾线）：参数面板三分区、目录区头、目录区小节、井内小标题四处统一；标题下不再画下划线 |
+| 动作 | **两种语法**：`.zmd-btn-primary`（墨印，`--zmd-ink` 填充 + `--zmd-on-ink` 反白 17.17/15.08:1，32px/14/500）只给真写操作——目录 footer「保存」、重试「保存」；其余全部 14/500 文字动作（有内边距的 hover 底色，紧排标题旁的用 hover 蓝下划线）；每区域至多一个启用墨印；`.dmc-btn-commit` 退役 |
+| 分界 | 井 / 模型井 / 目录区**去 1px 外框**（tone step 分界）；表单控件改**底线字段**（恰一条 1px `--zmd-line-control` 底边、32 高、≤360 可回 40）；复选框保留方框；卡片/参数面板保留 1px `--zmd-line-strong` |
+| 布局 | 页首 padding 24/16/20（≤360 12/6/10）；井/目录区 padding 16、区块间距 24；目录模型行 44→48；账本行 48 与卡 38/331/175/113 预算不变 |
+| 事实写法 | 新增 `formatWindowStatement(raw, stored)`：陈述态统一 K/M 口径（`1048576→1M`、`262144→262K`、`65536→66K`）；编辑字段仍 `formatContext` 精确回写；目录头计数改 copy key `config.models.count`（`4 个模型`），不再补零；花名册容量事实走新函数 |
+| 交互 | **零改变**：座位 shadowing、单层卡、唯一 modal、行内展开、键盘链/ARIA/宽度预算全部原样 |
+
+**门的修订（不是放宽，逐条留了改坏证明）**
+
+1. `selfcheck-static`：v1.0 的「无 >20px display 档」替换为**五档字阶白名单**；新增 runhead 四处、
+   墨印按钮语法（fill=ink / 色=on-ink / `.dmc-btn-commit` 不存在 / 每区域至多一个）、tone-only 三面、
+   底线字段（边必须落在 border-bottom）、计数不补零、事实口径、button 字体、一种次级墨；
+   修了 4 处因令牌/字体改变而失效的旧断言（trigger-effort、settings-alert、host-token 计数、
+   dmc-catalog-head 的 frozen 类判定），每处都在注释里写明理由。
+2. `check-contrast`：注册 `.zmd-btn-primary` 三态；`--zmd-on-ink` 特判地面（墨底 / hover 的
+   ink-secondary / disabled 的 hover）并加入文字角色白名单；移除 `.dmc-btn-commit`；
+   tightest 更新为弱墨（亮 4.58 / 暗 4.54）。
+3. `mutate-ink-gates`：24 条 v1.0 ink 改坏证明全部保留（失效的 from 等价更新为 v1.1 文本），
+   新增字阶 / runhead / 墨印 / tone-only / 底线字段 / 计数 / 事实口径 / 字体回退 / 一种次级墨的
+   改坏证明；`mutate-anchor-loss` 22 条不动（Picker 逻辑未改）。
+4. 静态预览脚本：`_preview-ink.mjs` 镜像同步 TSX 新结构（runhead span、墨印按钮、`4 个模型`、
+   陈述口径容量）；pinned 几何断言全部保留（卡 520 / 窗格 331 / 名字 175 / 徽章 113 / 行 38 /
+   账本行 48 / 面板 280 / 106 档无溢出 / 40px 可点）。
+
+**验证（v1.1 终局，静态验收，未碰运行中的 GUI）**
+
+- `npm run typecheck`：绿。
+- `scripts/selfcheck-static.mjs`：**（回填：断言总数全绿）**；taste-skill lint 0 FAIL（仅保留
+  已批准语言的 numbering/outlined-box/em-dash WARN）。
+- `scripts/check-contrast.mjs`：全绿；tightest = 弱墨亮 4.58 / 暗 4.54；on-ink 对墨底 **17.17 / 15.08**。
+- 5 个单元门（params / retry / recovery / model-config / model-config-copy）：全绿；
+  `test-params` 新增 **12 条 `formatWindowStatement` 断言**。
+- mutation：旧 behavior **22/22** caught；ink **（回填：总数）/ 全 caught**，基线绿前置生效。
+- `npm run build`：`lib/client.js` **（回填字节数）**；字体资产 46,728 B 不变。
+- 截图：`shots/ink-*.png` 24 张重生成（浅/深、宽/窄、座位行、参数面板、井/目录区/重试/空态），
+  README 图与说明同步；静态预览非真机。
+- 必看量的 v1.1 数字（Playwright 对 fixture 的 computed style）：可见 font-size 集合 ⊆
+  {24,16,14,12,10}（宿主 Tag 徽章 11 例外）；井/模型井/目录区 border = 0；7 类底线控件仅
+  border-bottom 1px control；目录区填充按钮 1 个（footer 保存）；目录头 `4 个模型`；
+  花名册 `1M/262K/66K`；106 档 readout 2 行、无横向溢出；40px 可点。
+- 独立复核：`.taste-skill/verify/report.md`（独立跑门 + 重拍 + 批评）。
+
+**验收反馈（设计仍未定型，检查暂停）**
+
+- **2026-10-17 反馈 1：删除参数面板的高亮外边框。** 用户原话：「把模型参数功能那个高亮的外边框删除」。
+  该外框是面板打开即持有初始焦点时 `.dmp-settings:focus-visible` 画的 2px `--zmd-focus` 内描边
+  （v1.0 §5.10 的 "the focused panel paints a ring of its own"）。v1.1 改为
+  `.dmp-settings:focus-visible { outline: none }`：面板自身不再有框，面板内控件各自的
+  focus-visible 环保留，键盘位置仍可见。对应静态门断言由 "panel paints a ring" 改为
+  "panel paints no highlighted outer frame"（§5.10 + 验收）；`_shoot-trigger.cjs` 全绿、
+  selfcheck 仍绿。若用户所指是面板的 1px 墨色边界（而不是焦点蓝环），需再删除
+  `.dmp-menu::before` 画在 `.dmp-settings` 上的那条线——已记录为待确认。
+
+**已知边界（如实记，不算已解决）**
+
+- 行高与字号整体上调（body 13→14、heading 14→16、目录模型行 44→48），同样长度的设置页更高，
+  宿主窗格需要滚更多——换来一眼可读的层级，这是本轮有意的取舍。
+- 亮色纸纹 alpha 8% 在 1x 截图上仍只是"能感知"，不是明显纹理；再高会开始像噪点。
+- 106px 档仍是"有序降级"：陈述 2 行、协议 select 文本被原生截断为 `Ope`+箭头（无溢出）。
+- 参数面板在 fixture 里高 508 CSS px（v1.0 485），live 仍是 max-height 460 + 内部滚动契约不变。
+- `--zmd-on-ink` 的暗色形态是"浅墨底 + 深字"，墨印按钮在暗色里是一个亮块；这是墨/纸语义的
+  正确反相，不是默认按钮样式，但在高对比屏幕上有存在感——用户可在真机里判断是否要压暗一档。
+- 静态验收的缺口：键盘链、滚动、焦点陷阱、Esc 分层仍只能在真机验证。
+
+**有意不做的事**
+
+1. 不换视觉方向（用户要的是"迭代设计语言"，不是推倒重来；HUD 同日刚被否）。
+2. 不引入第二字体（中文衬线等另案评估；本轮证据不足以承担语气与包体变化）。
+3. 不用宿主蓝做填充主按钮（亮色蓝上文字 3.95–4.03:1，低于 body AA，违背 v1.0 已立的"蓝不作字"）。
+4. 不删细线与序号（用户明确选定保留，且是这套密集界面的扫读结构）。
+5. 不为了"更丰富"加装饰、假数据或入场动画；工具表面保持安静。
+
+> 决策记录：ADR 0006（已删除，见 git 历史）。规范：`docs/ink-design-language.md` v1.1（已删除）。
+> 工作稿与审计：`.taste-skill/ink-v1.1-spec.md`、`.taste-skill/ink-critique-before.md`、
+> `.taste-skill/ink-audit/findings.md`、`.taste-skill/gate-report.md`、`.taste-skill/verify/report.md`。
 
 ## 8.7 §5.18 实测记录：锚点消失时到底发生了什么
 
@@ -3021,3 +3124,221 @@ protocol 完整显示 `OpenAI Chat Completions`、无竖条、无铺底。
 - R9 的禁用墨来自「隐藏克隆 + 过渡稳定后读色」，本轮无真机禁用实例。
 - 106px 仍是**降级**而非构图（协议标签必然截断）；根因是宿主面板宽度，不是本页。
 - 2 条 lint WARN 保留并每轮打印（真表单字段边 / 注释里的 em dash）。
+
+### 5.40 删除 UI 样式相关的测试（2026-10-17，用户决定）
+
+**决定。** 用户要求：收到任务先实现功能、等用户确认无误后再做必要的验证；用户没有主动要求时
+不准写测试；删除 UI 样式相关的所有测试。据此把 UI 样式相关的测试与静态门整体移除，其余
+逻辑 / 行为 / 文案 / 产物门保留。
+
+**删除清单。**
+- `scripts/selfcheck-static.mjs`：整份删除（静态样式禁令 + 令牌层 + 材质原语 + 字体资产 +
+  宽度预算，外加混在里面的行为/契约断言）。
+- `scripts/check-contrast.mjs`：亮/暗两主题逐样式的 WCAG AA 对比度门。
+- `scripts/mutate-ink-gates.mjs`：墨色样式门的改坏证明。
+- 浏览器视觉验收：`_verify-settings-layout.cjs` / `_verify-badge-frame.cjs` /
+  `_measure-badge-ink.cjs` / `_audit-shots.cjs`。
+- 对比度门的配套数据：`_dump-theme-fixture.mjs` 与 `theme-tokens.json`（`theme:fixture` 脚本
+  一并移除；需要宿主令牌原值时用保留下来的 `_dump-tokens.cjs` 现场打印）。
+
+**保留的测试。** `test:params` / `test:retry` / `test:recovery` / `test:model-config` /
+`test:model-config-copy` / `test:mutations`，外加 `typecheck` / `build` / `test:fresh`。
+`test:mutations` 收窄为仍被门驱动的 **17 条**改坏（锚点消失逻辑 10 条 + 限流恢复/接线 7 条）：
+原先只有静态门能抓住的 5 条 Picker 接线改坏随门一起删除，套件里不再有无人守护的条目
+（实测 `17/17 caught`）。
+
+**同步。** `package.json` 的 `test` 链与 `.github/workflows/test.yml` 的步骤注释删掉
+selfcheck / contrast / mutations:ink；README 的开发命令、结构清单与质量门叙述更新；
+`docs/ink-design-language.md` §10 与 `docs/ui-language.md` §7 标记为已退役（两份文档后来整体删除）；`AGENTS.md`
+增加「测试纪律」并把「先实现功能、用户确认后再验证」写成常设偏好。本文 §4 / §5 历史章节里
+对 selfcheck / contrast 的提及**保留**——它们是当时的记录，不再可运行。
+
+**后果（如实记）。**
+- 令牌字面量、五档字阶、AA 对比度、宽度预算等规则不再有机器门；设计规范文档也已删除，
+  这些约束改由代码现状（`designSystem.ts` 的 `--zmd-*` 块）与用户确认遵守。
+- 视觉判断改为静态预览证据 + 用户确认；预览/截图脚本保留（`_preview-ink.mjs`、
+  `_shoot-*.cjs`、`_shot-page.cjs` 等）。
+- 验证时机改为「功能落地 → 用户确认 → 必要的验证」；不再把 `npm test` 当每次改动的仪式。
+- `verify-model-config-tab.cjs`（§5.35 之前 DOM 的过期验收脚本）按「保留行为验收」留下，
+  仍标记为待重写，不在本次删除范围内。
+
+**验证。** 删除后 `npm test` 全绿：typecheck / build / test:fresh / 五组逻辑门 /
+`test:mutations`（17/17 caught）。
+
+### 5.41 删除 UI 文档与代码注释（2026-10-17）
+
+**指令。**「删除代码中的注释，只有代码中推断不出来的内容，才有写注释的价值。所有和 UI 设计相关的
+注释一律删除，UI 样式容易改动，不影响功能正常运作，没有写注释的价值。删除所有和 UI 有关的文档。」
+用户选定的删除范围是**纯 UI 规范与视觉决策**加**UI 重构过程文档**两组；截图与静态预览资产
+（`shots/`）、页面能力清单与官方页研究**按用户决定保留**。
+
+**删除了什么。**
+
+- 文档 6 份：`docs/ink-design-language.md`、`docs/ui-language.md`、`docs/design-model-config-tab.md`、
+  `docs/model-config-redesign-brief.md`、`docs/adr/0005-ink-language.md`、`docs/adr/0006-ink-language-v1.1.md`。
+  保留：`docs/agent-safety.md`、`docs/fonts/Archivo-OFL.txt`（OFL 正本，随包提交）、
+  `docs/models-page-parity-checklist.md`、`docs/official-models-page-notes.md`、
+  `docs/settings-models-tab-feasibility.md`、ADR 0001–0004，以及 `shots/` 全部预览图与 fixture。
+  本文与 README / CONTEXT / AGENTS 里对这些文档的引用改成明写「该文档已删除」，而不是删掉整段记录
+  ——旧章节是证据。
+- `src/` 注释：1311 条一次性清除。定位由 TypeScript 解析器完成（字符串、模板块、正则与 JSX 文本
+  都是受保护区间；样式表的 CSS 注释在模板字符串里单独处理）；`src/client/fontAsset.ts` 是生成产物，
+  按 AGENTS.md 不手改，只随生成脚本同步了其中一处指向已删文档的注释。
+
+**回填的判据**（也是以后加注释的判据）：只留 DSH / 宿主 / 适配器的外部契约及其代码表达不出来的后果、
+实测到的宿主行为、类型上看不出的数据契约，和一句话的「为什么不用那个显然的写法」。凡是外观
+（颜色 / 令牌 / 字号 / 间距 / 宽度 / 材质 / 主题 / 对比度 / 动效 / 类名的视觉角色）与复述代码的叙述，
+一律不留。回填后 `src/`（除 `fontAsset.ts`）约 214 行注释、8358 行代码。
+
+**验证。** `npm test` 全绿（typecheck / build / test:fresh / 五组逻辑门 / `test:mutations` 17/17）。
+另有一条机械证据：用 TypeScript printer 把每个 `src/` 文件与删除前的副本各自 `removeComments` 后
+对比 emit 结果，32 个文件全部一致（四张样式表只剩 CSS 注释删除留下的空白差异）——本轮改动确实只是
+注释与空白，没有触碰任何代码。同一条脚本化的比对放在 `.cache/`（git 忽略），下次改注释可以复用。
+
+**不做的事。** 不重新引入 UI 样式测试；不删 `shots/`；不改 `lib/` 的构建方式——`lib/` 随 `src/`
+重建，注释同步消失，`src/` 与重建后的 `lib/` 必须同一提交。
+
+**独立审计（只读、逐条 214/214）。** 0 条属于 UI 设计类，0 条 `@param`/`@returns`；修掉三条**理由
+写错**的注释——错理由比没有注释更糟：
+
+- `modelConfigStore.ts` 原写「订阅只在页面挂载期间存在，关闭的面板不会被别的写入者唤醒成一次读」。
+  事实相反：`start()` 的唯一调用点在 `apply` 顶层（`src/client/index.ts`），订阅随插件存活，
+  `settings/document-updated` 一类事件会把关闭中的面板唤醒做一次完整远端读。该断言在 README/DESIGN
+  里没有记录，属既存错误，现按事实改写。**顺带记下两个待决问题**（本轮不改行为）：实现与原本意图
+  不一致；`start()` 在 `remote.$on` 不可用时静默返回空 disposer，这条生命周期没有任何门覆盖。
+- `index.ts` 原写「重复注册 locale 会让后一次只剩它可见」。宿主实际是**抛错**（同一 `(ns, locale)`
+  只能有一个 owner）；结论（一次注册带两份字典）不变，理由改写。
+- `rateLimitRecovery.ts` 原写「per-session counter」。执行器的计数在 `step/start` 与 `turn/end`
+  重置，是按 step 的；`DESIGN.md` §5.34 的同一措辞一并改正。
+
+另有两处措辞收紧：`retryPolicy.ts` 的「最长合计」不再断言 low 与名义和「从不被花掉」（`high` 在等待
+触顶时同样是上界，不是精确花费）；`rateLimitRecovery.ts` 文案表里 5 条没有 provenance 的措辞改标为
+「预防性收录」。
+
+**未验证（如实记）。** `anchorLoss.ts` 的 rAF / `display:none` 机制与 `ModelCatalog.tsx` 的 Escape
+分层，只有 2026-10-17 当时（dsh 0.2.0-rc.2）的实测记录，没有在本机现装的 0.2.1-rc.2 上复验；真机
+复验需要用户许可，本轮没做。这次审计的全部结论来自读代码与读宿主安装目录，没有跑任何运行时实验。
+
+### 5.42 整体 UI 换代（2026-10-18）：v2「铭牌」
+
+**动因。** 用户要求把 UI 提到 awwwards / Webby / FWA 能获奖的品质，并以自我检查反复提升。为此先把
+v1.1 交给**独立评审**按 Awwwards 口径打分：设计 6.0 / 可用性 6.0 / 创意 6.5 / 内容 6.0，加权 **6.1**，
+并附 12 条缺陷（D1–D12）与 3 条 keeper（K1–K3）。评审的基本判断不是「颜色不对」，而是**没有构图**：
+设置页是数据结构的忠实渲染；材质只是一条 100px 页首带（主体实测 sd 0.0）；动作用一种权重量级；
+模型卡以空白收尾；24px 给了每次加载都会变的计数句；1px 细线只有 1.38/1.32:1。
+证据：`.taste-skill/v2-audit/baseline-critique.md`（该目录为工作稿，不进仓库）。
+
+**方向：铭牌（ADR 0007）。** 一句话：**每个表面是一块牌**——以自己的名字（24px）开场、以脚注收尾，
+左侧有一个 26px 的边距列记录序号；1px 线标记录、色阶标选择；动作分四档、互不混用。
+
+| 项 | v2 决定 |
+|---|---|
+| 卡片高度 | **固定**：宽卡恒为 `min(420px, 100vh - 96px)`，与内容无关——切提供商（4 个模型 vs 13 个）不会让面板在指针下改变尺寸，脚注也永远在同一位置；溢出交给两栏各自滚动。窄卡（≤536px）两栏堆叠，改按内容贴合、上限 `min(560px, 100vh - 96px)`，否则短列表下面会留一块空白。实测：宽卡两范围均 420px；窄卡 394px、void 0px |
+| 牌头 / 脚注 | 模型卡、参数面板、模型配置页、目录区都以自身名字开场并收尾。卡片：`opencode-go` 24px + 来由 + `4 个`，脚注 `共 4 个模型` / `1 个提供商` + 四事实图例；参数面板：模型名 24px，脚注 `只改这一个模型的参数` + 恢复默认；页面：`模型配置` 24px + 就绪陈述，脚注 `共 N 个提供商` + 添加入口（空态升为墨印）；目录区：`模型目录` 16px + 尾线 + `4 个模型`，脚注 `4 个模型` + 恢复默认 + 墨印保存 |
+| 边距列 | 26px（≤240px 收 16px）。账本、花名册、提供商栏同一列；提供商栏的 `01`–`09` 是**真快捷键**（`ProviderRail` 的数字键处理器，v1.1 没有任何处理器，序号是装饰冒充快捷键）。模型卡的模型行不编号——它没有可跳的数字语义 |
+| 线 / 色阶 | `--zmd-line` 提到 **3.13:1 亮 / 3.18:1 暗**（悬停底上 2.81 / 2.86），`--zmd-line-strong` 3.83 / 4.32，控件底边 ≥4.17，细线终于越过非文本边界的 3:1。密集的模型列表**不画逐行线**；账本行、目录花名册改用 `border-bottom` 并内缩到内容盒，收尾线不再比记录线重 |
+| 动作四档 | `.zmd-btn-primary` 墨印（每表面一个：目录 footer 保存）／`.zmd-btn-door` 描边门（`管理`、`编辑`、`获取可用模型`、页面添加入口）／`.zmd-btn-quiet` 文字（替换、清除、修改、收起、全选、恢复默认）／`.zmd-btn-danger` 危险（**静止即 `--zmd-danger`**，悬停加深底色，永不填充）。重试编辑器的提交降为描边 `zmd-btn-commit`，因为页面级的唯一提交是目录保存 |
+| 开关 | 「开」不再是蓝也不是墨块：1px 墨色轨道 + 墨色滑块。蓝只留「你在这里」（选中 / 当前 / 焦点）。此前「选中」与「开」两种意思共用一个颜色 |
+| 状态 | 4px 行首彩条退役。状态是**状态列里的一个词** + 6px 方块（`可用` / `缺密钥` / `不可用` / `已登录`），彩条不再伪装成滚动条 |
+| 展开区 | 设置井 / 模型井 / 目录区：**透明**（让页面牌面的墨晕透出来）、左侧 1px 书脊、自己的 16px 小标题（`设置` / `模型目录`），不再整块涂 `--zmd-panel-deep`（那会把材质在产品最大的表面上打出洞），也不再涂成 hover 色（打开 ≠ 悬停） |
+| 材质 | `.zmd-plate` 画在整块有边界的表面上；纸纹改令牌 `--zmd-grain-tile`，**两套主题各一张**（亮 11% / 暗 7.5%），因为单张 8% 在亮底量到 3.1/255、暗底 9.2/255——那是两种材质 |
+| 字阶 | 五档不变（10/12/14/16/24），但 24 只给**稳定的名字**；计数句降到 12px 次级墨，并删掉它的重挂载入场动画 |
+| 窄档 | 560 / 484 / ≤360 / **≤240**（宿主真机 106px 列）。≤240 行改单列、页首名字保持 24px 一行（`word-break: keep-all`）、协议下拉省略号化、危险动作独占一行；不再是把 ≤360 网格拉长 |
+| 空态 | 只留一句后果 + 一个问题解决动作：`模型配置` + `尚未添加任何提供商`、两行说明、脚注 `共 0 个提供商` + **墨印**「添加模型提供商」。以前三种字号说同一件事，且 `目录中的提供商都已添加。` 会在零提供商页面说反话（已修） |
+| 交互 | **零改变**：座位 shadowing、单层卡、唯一 modal、行内展开、键盘链 / ARIA / 宽度预算全部原样。数字键只在提供商栏内部生效 |
+
+**评审轮次与分数（同一口径、同一权重 40/30/15/15）。**
+
+| 轮 | 设计 | 可用性 | 创意 | 内容 | 加权 | 备注 |
+|---|---|---|---|---|---|---|
+| 1 基线 | 6.0 | 6.0 | 6.5 | 6.0 | **6.1** | 12 缺陷 / 3 keeper |
+| 2 | 6.5 | 6.4 | 6.5 | 6.4 | **6.46** | 4 解决 / 6 部分 / 2 未解决；新增 N1–N8 |
+| 3 | 6.7 | 6.6 | 6.5 | 6.4 | **6.60** | F1–F9：3 确认 / 5 部分 / 1 未做；评审测得证据来自比源码旧一档的 fixture |
+
+第三轮之后按该轮末的四条 N 项继续修改（**评审后改动，未再送评**；下面每条都附了实测数字）：
+
+- **N1 展开记录是不透明色块**：`[data-well]` / `[data-catalog]` 不再涂 `--zmd-hover`，改为透明 + 书脊；实测 11 行背景全部 `rgba(0,0,0,0)`。
+- **N3 细线未达标 + 收尾线翻倍**：令牌提到 3.13/3.18（见上表）；`.dmc-list` 去掉 `border-bottom`（行自己收边），收尾线不再 2px。
+- **N4 事实带仍是密码**：**未改**。四枚方框字形 + 混合单位的读写方式保留（改成散文会牺牲行内可比性，与「四个事实是一张表」的既有决定冲突）。这一条**没有解决**，是本文开头 6.60 之后仍存在的最大内容缺陷。
+- **创意维度的封顶没有动**：第 3 轮评审给创意 6.5 封顶，理由不是样式而是「这套论点没有行为」。本轮只让已有的一个行为**可见**（提供商栏 `01`–`09` 是真快捷键，卡片脚注现在把它说出来），并没有新增第二种行为。要突破这一档需要新的交互层，不是配色或构图能解决的。
+- **N2 卡片空白：已解决（0px）**。根因不是 `max-height`，而是两栏各自独立撑高容器：十行的提供商栏把卡片撑到比模型列表高约 100px，多出来的就是末行与脚注之间的未绘制区。改成**载荷定高**——`.dmp-rail` 绝对定位（`top:0;bottom:0;width:176px`），`.dmp-models` 用 `margin-left:176px` 让位——卡片高度只由模型列表决定，提供商栏在自己的高度里滚动。实测默认卡：卡高 649→**349**，末行底 364 = 脚注顶 364，**void 0px**。副作用是提供商栏会被截断，因此加了 `scroll-snap-type: y proximity` 与底部 18px 的 `mask-image` 渐隐，让截断读作「还有更多」而不是画坏。≤536 窄档回到 `position: static`（横条在列表上方）。
+- **纸纹两主题一致性：已核实为一致**。此前评审测到亮色只有暗色的 62%，那是**内容压测的假象**：在无内容的纯牌面上实测 sd **3.004（亮）/ 3.069（暗）**，即 98%。两张令牌不变。
+
+**验证（静态验收，未碰运行中的 GUI）。**
+
+- `npm run typecheck`：绿。
+- `npm run build` + 5 个逻辑门（params / retry / recovery / model-config / model-config-copy）：全绿。
+- `npm run test:mutations`：**17/17 caught**。
+- 静态预览脚本（三个截图脚本 exit 0，几何断言 "all pinned numbers match"）：
+  卡 520 / 模型窗格 **343** / 名字列 **167** / 徽章条 113 / 行高 38 / 边距列 26；
+  账本行 48、状态列与操作门右沿 spread 0、井**无底色**且有 1px 书脊、106 档零横向溢出；
+  参数面板 280、标题 24px、开关**无填充**、分区尾线 3 条。
+- 字体字号集合：`{10, 12, 14, 16, 24}`。
+- 细线对比度（亮 / 暗）：弱线 3.13 / 3.18，强线 3.83 / 4.32，控件底边 4.17 / 4.83。
+- 截图：`shots/ink-*.png` 24 张重生成（双主题、宽/窄、座位、面板、106、空态、井、目录、重试），README 图与说明同步；静态预览非真机。
+
+**已知边界（如实记）。**
+
+- **卡片仍以空白收尾**（N2）：脚注把框架闭合了，但默认卡在最后一行与脚注之间仍有约 96 CSS px 未绘制内容；
+  根因是卡片高度由 `max-height` 而非内容决定。这一条本轮**没有解决**。
+- **事实带仍是码**（D7 / N4）：四枚方框字形 + 混合单位（`1M` / `128K` / `262K`）+ 需要读图例。改成散文会
+  牺牲行内可比性，而与「四个事实是一张表」的既有决定冲突，因此**未改**；这是有意的取舍，不是遗漏。
+- ~~两套主题的纸纹仍未完全对齐~~ → **已核实一致**（纯牌面 sd 3.004 / 3.069，98%）。旧的 62% 说法来自在带内容的窗口上取样，是测量假象，不是令牌问题。
+- **106px 仍是降级**：名字与 route 仍会断行，协议下拉显示 `Ope…`。
+- **静态验收的缺口不变**：键盘链、滚动、焦点陷阱、Esc 分层、hover / focus 环只能在真机验证。本轮新增的一个缺口：数字键跳提供商的处理器**已确认编译进 `lib/client.js`**（在产物里命中 2 处），但静态 fixture 没有 React，事件无法在那里触发——真机行为未验证。
+
+**有意不做的事。**
+
+1. 不换掉 v1 的几何：全直角、1px 线、单色墨阶、内嵌 Archivo 是评审点名的 keeper（K2），动它是净损失。
+2. 不加第二字体、不加圆角、不加阴影、不加渐变当深度。
+3. 不做入场编排；会变的句子不再有动画。
+4. 不把「开」画成蓝（蓝只表示「你在这里」）。
+5. 不为了分数造假数据或假控件（序号、退避刻度、计数全部来自真实数据）。
+
+> 决策记录：ADR 0007。评审工作稿：`.taste-skill/v2-audit*/`（git 忽略）。
+
+### 5.43 精简仓库：删掉测试、截图与 README（2026-10-18，用户决定）
+
+**指令。**「精简 agents.md，然后提交工作区改动。」配套选择：只保留构建脚本，其余测试与脚手架全部删除
+（用户在选项里选定「只保留 build」）。
+
+**删除了什么。**
+
+- **测试脚本 37 份**：`test-params` / `test-retry-policy` / `test-rate-limit-recovery` /
+  `test-model-config` / `test-model-config-copy` / `mutate-anchor-loss` / `check-build-fresh`，
+  以及 2026-10-17 那一轮漏删的 `verify-model-config-tab.cjs`、全部 `_accept-*` / `_shoot-*` /
+  `_preview-*` / `_shot-*` / `_dump-*` 静态预览与截图脚手架、`theme-tokens.json`、
+  `mutate-anchor-loss.md`、`mutate-ink-gates.mjs`、`selfcheck-static.mjs`、`check-contrast.mjs`。
+- **截图 102 张**：整个 `shots/` 目录（`ink-*`、`model-config-*`、`panel-*`、`row-*`、`audit-*`、
+  `accept-*` 等）。
+- **`README.md`**：连同它嵌入的全部预览图一起删除。
+- **文档 5 份**：`docs/ui-language.md`、`docs/ink-design-language.md`、
+  `docs/design-model-config-tab.md`、`docs/model-config-redesign-brief.md`、`docs/adr/0005-ink-language.md`
+  （§5.40/§5.41 已点名要删、当时被保留下来的那几份）。
+- **保留**：`scripts/build-client.mjs`、`scripts/build-font-asset.mjs`（构建产物 `lib/` 的生成器），
+  `docs/agent-safety.md`、`docs/fonts/Archivo-OFL.txt`、`docs/models-page-parity-checklist.md`、
+  `docs/official-models-page-notes.md`、`docs/settings-models-tab-feasibility.md`、ADR 0001–0004 与
+  0007，以及 `src/` + `lib/`（v2 铭牌语言的实现）。
+
+**同步的改动。**
+
+- `package.json`：`scripts` 只剩 `build` / `font:build` / `typecheck`，加一条
+  `prepublishOnly: npm run typecheck && npm run build`。
+- `.github/workflows/test.yml`：`npm test` 改为 `npm run typecheck` + `npm run build`。
+- `.gitignore`：`npm test` 的说法改成 `npm run build`；删掉 `shots/_*`、
+  `shots/page-preview-*.png`、`shots/drawer-preview-*.png` 三条——`shots/` 已不存在。
+- `CONTEXT.md` 废弃表两条、`docs/agent-safety.md` 一处 R3 例外，补上「脚本已删除」的说明。
+- `AGENTS.md`：116 行压到 79 行，删掉「测试纪律」「视觉证据与 README 截图」两节与整张命令表，
+  只留协作偏好、写作风格、文档地图、构建与源码修改规则；构建一节改为「没有自动化测试，也没有
+  src↔lib 漂移门」。
+
+**后果（如实记）。**
+
+- **没有任何自动化验证了**：`typecheck` 是唯一还能自动跑的一致性检查；`lib/` 是否与 `src/` 对得上
+  只能靠手动对比哈希（本轮 `npm run build` 前后 `lib/client.js` 与 `lib/index.js` 哈希完全一致，
+  说明提交进仓库的产物确实来自当前 `src/`）。
+- `scripts/build-client.mjs` 里的座位冻结断言（`SEAT` / `SEAT_PRIORITY`）仍在构建期守卫
+  shadowing 契约；其余契约（唯一 modal、宽度预算、文案键序、五档字阶、令牌字面量位置）只剩
+  代码现状与人工确认。
+- 历史章节（§4、§5.x、§8.x）里对已删脚本与截图的引用**原样保留**——它们是当时的记录，不再可运行。
+

@@ -66,6 +66,7 @@ date: 2026-10-17
   同一条账本行因此可能很长，这是有意的取舍。
 - 旧的抽屉截图（`model-config-37/38`）与旧的抽屉预览脚本退役；新形态以真机截图
   `model-config-39-catalog-inline-dark.png` 与 `shots/page-preview-*.png` 为证。
+  （`shots/` 与预览脚本已于 2026-10-18 整体删除，见 `DESIGN.md` §5.43；这里保留当时的证据指向。）
 
 ## 替代方案
 
@@ -80,6 +81,5 @@ date: 2026-10-17
 
 - [DESIGN §5.37](../../DESIGN.md)（实现记录、门修订、真机手测）
 - [CONTEXT.md](../../CONTEXT.md) → 模型目录区 / 废弃叫法「模型抽屉」
-- [docs/ui-language.md](../ui-language.md) §4.6 / §4.7（当前语法与类名清单）
 - [docs/models-page-parity-checklist.md](../models-page-parity-checklist.md)（Q27 的取代）
 - [ADR 0003](./0003-parallel-tab-with-full-parity.md)（并存 + 对等，未变）

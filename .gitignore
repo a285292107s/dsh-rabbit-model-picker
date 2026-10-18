@@ -2,7 +2,7 @@
 # (`github:a285292107s/dsh-rabbit-model-picker`) receive the repository verbatim — they
 # run no build step, so an uncommitted lib/ makes every such install fail with
 # "failed to import" (no entry point). Keep lib/ in sync with src/ on every
-# change to src/: run `npm test` (build + gates) and commit both together.
+# change to src/: run `npm run build` and commit both together.
 # Source maps stay out; they are large and resolve nothing for a git install.
 lib/*.map
 
@@ -17,21 +17,6 @@ node_modules/
 .playwright-cli/
 
 # Design-iteration working files (tasteskill v2): probe scripts, notes and the
-# before/after screenshots the pass looked at. The record that ships is
-# DESIGN.md §5.24 plus the refreshed shots/ images; this folder is scratch.
+# screenshots the pass looked at. The record that ships is DESIGN.md; this folder
+# is scratch.
 .taste-skill/
-
-# Scratch under shots/, never authored: the extracted sheet (`_extract-css.cjs`),
-# the two HTML harnesses the row/trigger scripts render and then screenshot, and
-# the one-off probes and pixel-diff images written beside them. All of it rebuilds
-# from `src/` on demand, so committing it only adds weight to every git install.
-# The surfaces a reviewer is meant to open are the plain and `accept-*` / `audit-*`
-# shots; anything named `_…` is an intermediate.
-shots/_*
-
-# Static-preview intermediates written by `scripts/_page-preview.mjs` /
-# `scripts/_drawer-preview.mjs` while checking the §5.35/§5.36 layouts. The
-# committed evidence is the four authored panels (`model-config-35..38`); these
-# rebuild from the real sheets and the host token fixture on demand.
-shots/page-preview-*.png
-shots/drawer-preview-*.png
