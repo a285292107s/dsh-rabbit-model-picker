@@ -110,14 +110,14 @@ const CSS = `
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid var(--zmd-line);
+  border: 0;
   border-radius: 0;
   outline: none;
   background: transparent;
   color: var(--zmd-ink-secondary);
   font-family: var(--zmd-font-latin);
   cursor: pointer;
-  transition: background-color 120ms var(--dmp-ease), color 120ms var(--dmp-ease), border-color 120ms var(--dmp-ease), transform 80ms var(--dmp-ease);
+  transition: background-color 120ms var(--dmp-ease), color 120ms var(--dmp-ease), transform 80ms var(--dmp-ease);
 }
 
 .dmp-settings-button:active:not(:disabled) {
@@ -125,7 +125,6 @@ const CSS = `
 }
 
 .dmp-settings-button:hover:not(:disabled) {
-  border-color: var(--zmd-line-strong);
   background: var(--zmd-hover);
   color: var(--zmd-ink);
 }
@@ -141,7 +140,6 @@ const CSS = `
 }
 
 .dmp-settings-open {
-  border-color: var(--zmd-line-strong);
   background: var(--zmd-panel-deep);
   color: var(--zmd-ink);
 }
