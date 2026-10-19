@@ -923,13 +923,38 @@ const CSS = `
   white-space: nowrap;
 }
 
-.dmp-effort-list,
+.dmp-effort-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dmp-effort-scale,
 .dmp-context-presets {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
+}
+
+.dmp-effort-scale {
+  row-gap: 4px;
+}
+
+.dmp-effort-default {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.dmp-effort-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--zmd-ink-mute);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .dmp-effort-item,

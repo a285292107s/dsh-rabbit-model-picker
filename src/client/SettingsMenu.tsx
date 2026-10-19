@@ -11,7 +11,7 @@ import {
   type ModelSelection, type ParamsFace, type ParamsSnapshot, type RouteAddress, type RouteCapability,
   type SettingsOp, type Translate,
 } from './contract.ts'
-import { effortChoicesOf } from './effort.ts'
+import { effortChoicesOf, type EffortChoice, type EffortChoices } from './effort.ts'
 import { formatWindow } from './format.ts'
 import {
   capacityAction, contextFactOf, contextFieldOf, FACT_SOURCE_KEYS, inputSourceOf, modalityLabel,
@@ -95,8 +95,8 @@ export function SettingsMenu({
   }, [capabilities, route?.provider])
   const model = route === null ? null : modelOf(directory, route)
   const reasoning = model?.reasoning
-  const choices = useMemo(
-    () => reasoning === undefined ? [] : effortChoicesOf(reasoning, t),
+  const choices = useMemo<EffortChoices>(
+    () => reasoning === undefined ? { scale: [] } : effortChoicesOf(reasoning, t),
     [reasoning, t],
   )
   const activeEffort = current?.reasoningEffort ?? reasoning?.defaultEffort
@@ -105,6 +105,7 @@ export function SettingsMenu({
   const inputLabelId = `${idPrefix}-settings-input-label`
   const contextLabelId = `${idPrefix}-settings-context-label`
   const effortLabelId = `${idPrefix}-settings-effort-label`
+  const effortDefaultHintId = `${idPrefix}-settings-effort-default-hint`
 
   const copyState = { address, capability, snapshot, capacityError } as const
   const noticeLine = noticeOf(copyState)
@@ -318,6 +319,21 @@ export function SettingsMenu({
     })
   }
 
+  const effortOption = (choice: EffortChoice, describedBy?: string): ReactNode => (
+    <button
+      key={choice.key}
+      type="button"
+      role="radio"
+      aria-checked={choice.effort === activeEffort}
+      aria-describedby={describedBy}
+      className="dmp-effort-item"
+      aria-disabled={busy || undefined}
+      onClick={() => { pickEffort(choice.effort) }}
+    >
+      {choice.label}
+    </button>
+  )
+
   if (route === null) return null
 
   const notice: ReactNode = writeError !== null
@@ -465,20 +481,20 @@ export function SettingsMenu({
               <span className="zmd-label" id={effortLabelId}>{t('settings.effort.title')}</span>
               <span className="dmp-settings-source">{t('settings.source.session')}</span>
             </div>
-            <div className="dmp-effort-list" role="radiogroup" aria-labelledby={effortLabelId}>
-              {choices.map(choice => (
-                <button
-                  key={choice.key}
-                  type="button"
-                  role="radio"
-                  aria-checked={choice.effort === activeEffort}
-                  className="dmp-effort-item"
-                  aria-disabled={busy || undefined}
-                  onClick={() => { pickEffort(choice.effort) }}
-                >
-                  {choice.label}
-                </button>
-              ))}
+            <div className="dmp-effort-rows" role="radiogroup" aria-labelledby={effortLabelId}>
+              {choices.scale.length > 0 && (
+                <div className="dmp-effort-scale">
+                  {choices.scale.map(choice => effortOption(choice))}
+                </div>
+              )}
+              {choices.providerDefault !== undefined && (
+                <div className="dmp-effort-default">
+                  {effortOption(choices.providerDefault, effortDefaultHintId)}
+                  <span className="dmp-effort-hint" id={effortDefaultHintId}>
+                    {t('settings.effort.providerDefaultHint')}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
