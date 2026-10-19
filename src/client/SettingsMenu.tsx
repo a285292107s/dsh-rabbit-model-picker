@@ -1,6 +1,5 @@
 import {
-  IconCheckOutlineRegular, IconInfoOutlineRegular, IconWarningOutlineRegular, Input, MenuSurface, Switch,
-  useAnchoredPosition,
+  IconWarningOutlineRegular, Input, MenuSurface, Switch, useAnchoredPosition,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
@@ -13,13 +12,21 @@ import {
   type SettingsOp, type Translate,
 } from './contract.ts'
 import { effortChoicesOf } from './effort.ts'
+import { formatWindow } from './format.ts'
 import {
-  capacityAction, contextFieldOf, contextHintOf, inputHintOf, noticeOf, restoreIsEmpty, shownInputOf,
-  showsContextField, showsInputSection,
+  capacityAction, contextFactOf, contextFieldOf, FACT_SOURCE_KEYS, inputSourceOf, modalityLabel,
+  noticeOf, shownInputOf, showsContextField, showsInputSection,
 } from './panelCopy.ts'
 import { formatContext, PANEL_MODALITIES, parseContext, resolveRoute } from './params.ts'
 
 const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
+
+const CONTEXT_PRESETS = [
+  { value: 128_000, label: '128K' },
+  { value: 256_000, label: '256K' },
+  { value: 512_000, label: '512K' },
+  { value: 1_000_000, label: '1M' },
+] as const
 
 export interface SettingsMenuProps {
   readonly anchorRef: RefObject<HTMLElement | null>
@@ -41,13 +48,23 @@ function modelOf(store: DirectoryStore, route: ModelRoute) {
   return group?.models.find(candidate => candidate.id === route.model) ?? null
 }
 
+function providerNameOf(store: DirectoryStore, providerId: string, t: Translate): string {
+  if (providerId === 'deepseek-account') return t('provider.account')
+  const group = store.getSnapshot().groups.find(candidate => candidate.id === providerId)
+  return group?.name ?? providerId
+}
+
 export function SettingsMenu({
   anchorRef, panelRef, idPrefix, side, directory, params, capabilities, busy, maxHeight, t, onSelect, onClose,
 }: SettingsMenuProps) {
   const [capacityDraft, setCapacityDraft] = useState<string | null>(null)
   const [capacityError, setCapacityError] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
   const [writing, setWriting] = useState(false)
   const [writeError, setWriteError] = useState<string | null>(null)
+  const capacityRef = useRef<HTMLInputElement | null>(null)
+  const skipCapacityCommit = useRef(false)
+  const focusCustom = useRef(false)
 
   const current = useSyncExternalStore(
     subscribe => directory.subscribe(subscribe),
@@ -84,23 +101,37 @@ export function SettingsMenu({
   )
   const activeEffort = current?.reasoningEffort ?? reasoning?.defaultEffort
   const modelLabel = model?.name ?? (route === null ? '' : `${route.provider}/${route.model}`)
+  const providerName = route === null ? '' : providerNameOf(directory, route.provider, t)
+  const inputLabelId = `${idPrefix}-settings-input-label`
+  const contextLabelId = `${idPrefix}-settings-context-label`
+  const effortLabelId = `${idPrefix}-settings-effort-label`
 
-  const copyState = { address, capability, snapshot, busy, capacityError } as const
+  const copyState = { address, capability, snapshot, capacityError } as const
   const noticeLine = noticeOf(copyState)
   const sectionNotice = noticeLine === null ? null : t(noticeLine.key, noticeLine.params)
-  const inputHintLine = inputHintOf(copyState, t)
-  const inputHint = inputHintLine === null
-    ? null
-    : [
-        t(inputHintLine.key, inputHintLine.params),
-        restoreIsEmpty(copyState) ? t('settings.resetNothing') : null,
-      ].filter(part => part !== null).join(' ')
-  const contextHintLine = contextHintOf(copyState)
-  const contextHint = contextHintLine === null ? null : t(contextHintLine.key, contextHintLine.params)
 
   const shownInput = shownInputOf(address, capability)
-  const contextField = contextFieldOf(address, capability)
-  const editable = address !== null && snapshot.writable && !busy && !writing
+  const inputSource = inputSourceOf(address, capability)
+  const inputExtras = shownInput.filter(modality => !(PANEL_MODALITIES as readonly string[]).includes(modality))
+  const inputValue = inputExtras.length === 0 ? null : modalityLabel(shownInput, t)
+  const contextFact = contextFactOf(address, capability)
+  const declaredContext = address?.contextWindow
+  const contextPreset = declaredContext === undefined
+    ? undefined
+    : CONTEXT_PRESETS.find(preset => preset.value === declaredContext)
+  const customMode = customOpen || (declaredContext !== undefined && contextPreset === undefined)
+  const contextValue = declaredContext !== undefined
+    ? null
+    : contextFact.value === undefined
+      ? t('settings.value.notSet')
+      : formatWindow(contextFact.value)
+  const contextPlaceholder = declaredContext !== undefined
+    ? t('settings.context.placeholderDeclared')
+    : contextFact.value === undefined
+      ? t('settings.context.placeholderExample')
+      : t('settings.context.placeholderInherited')
+  const contextField = contextFieldOf(address)
+  const editable = address !== null && snapshot.writable && !writing
   const capacity = capacityDraft ?? contextField.value
 
   const chain = (): HTMLElement[] => {
@@ -108,7 +139,8 @@ export function SettingsMenu({
     if (panel === null) return []
     return [
       ...panel.querySelectorAll<HTMLElement>('[role="switch"]'),
-      panel.querySelector<HTMLElement>('.dmp-settings-input input'),
+      ...panel.querySelectorAll<HTMLElement>('.dmp-context-preset'),
+      panel.querySelector<HTMLElement>('.dmp-settings-field input'),
       ...panel.querySelectorAll<HTMLElement>('.dmp-effort-item'),
       panel.querySelector<HTMLElement>('.dmp-settings-foot .zmd-btn-ghost'),
     ].filter((item): item is HTMLElement => item !== null && !item.hasAttribute('disabled'))
@@ -124,10 +156,17 @@ export function SettingsMenu({
 
   const addressId = address === null ? '' : `${address.ns}#${address.entryPath.join('.')}`
   useEffect(() => {
+    setCustomOpen(false)
     setCapacityDraft(null)
     setCapacityError(false)
     setWriteError(null)
   }, [addressId, contextField.value])
+
+  useEffect(() => {
+    if (!customMode || !focusCustom.current) return
+    focusCustom.current = false
+    capacityRef.current?.focus()
+  }, [customMode])
 
   const move = (delta: number): void => {
     const items = chain()
@@ -170,7 +209,47 @@ export function SettingsMenu({
     })
   }
 
+  const presetPointerDown = (): void => {
+    const active = document.activeElement
+    if (active instanceof HTMLInputElement && active.closest('.dmp-settings-field') !== null) {
+      skipCapacityCommit.current = true
+    }
+  }
+
+  const choosePreset = (value: number): void => {
+    if (address === null || !editable) return
+    setCustomOpen(false)
+    setCapacityDraft(null)
+    setCapacityError(false)
+    if (address.contextWindow === value) return
+    write([{ op: 'set', path: [...address.entryPath, 'contextWindow'], value }])
+  }
+
+  const toggleCustom = (): void => {
+    if (address === null || !editable) return
+    if (!customMode) {
+      focusCustom.current = true
+      setCustomOpen(true)
+      return
+    }
+    if (declaredContext !== undefined && contextPreset === undefined) {
+      capacityRef.current?.focus()
+      return
+    }
+    if (capacityDraft !== null && capacityDraft !== contextField.value) {
+      capacityRef.current?.focus()
+      return
+    }
+    setCustomOpen(false)
+    setCapacityDraft(null)
+    setCapacityError(false)
+  }
+
   const commitCapacity = (): void => {
+    if (skipCapacityCommit.current) {
+      skipCapacityCommit.current = false
+      return
+    }
     if (address === null || !editable) return
     const action = capacityAction(capacityDraft, contextField.value, address.contextWindow, parseContext)
     switch (action.kind) {
@@ -230,7 +309,7 @@ export function SettingsMenu({
   }
 
   const pickEffort = (effort: string | undefined): void => {
-    if (route === null || reasoning === undefined) return
+    if (route === null || reasoning === undefined || busy) return
     if ((activeEffort ?? undefined) === effort) return
     onSelect({
       provider: route.provider,
@@ -258,79 +337,135 @@ export function SettingsMenu({
       id={`${idPrefix}-settings`}
       className="dmp-menu dmp-settings"
       style={position === null ? MEASURE_STYLE : { ...position, maxHeight }}
-      role="group"
+      role="dialog"
       aria-label={t('settings.aria', { model: modelLabel })}
       aria-busy={writing || busy}
       tabIndex={-1}
       onKeyDown={onKeyDown}
     >
       <div className="dmp-settings-head">
-        <p className="dmp-settings-title">{modelLabel}</p>
+        <p className="dmp-settings-title" title={modelLabel}>{model?.name ?? route.model}</p>
+        <p className="dmp-settings-provider" title={providerName}>{providerName}</p>
       </div>
       {notice}
 
       <div className="dmp-settings-body">
         {showsInputSection(address, capability) && (
           <div className="dmp-settings-section">
-            <span className="zmd-label">{t('settings.input.title')}</span>
-            <div className="dmp-settings-row">
-              <span className="dmp-settings-name">{t('settings.input.text')}</span>
-              <Switch
-                className="dmp-settings-switch"
-                checked={shownInput.includes('text')}
-                label={t('settings.input.text')}
-                disabled={!editable}
-                onChange={(next) => { toggleModality('text', next) }}
-              />
+            <div className="dmp-settings-readout" data-no-value={inputValue === null ? '' : undefined}>
+              <span className="zmd-label" id={inputLabelId}>{t('settings.input.title')}</span>
+              {inputValue !== null && <span className="dmp-settings-value" title={inputValue}>{inputValue}</span>}
+              <span className="dmp-settings-source">{t(FACT_SOURCE_KEYS[inputSource])}</span>
             </div>
-            <div className="dmp-settings-row">
-              <span className="dmp-settings-name">{t('settings.input.image')}</span>
-              <Switch
-                className="dmp-settings-switch"
-                checked={shownInput.includes('image')}
-                label={t('settings.input.image')}
-                disabled={!editable}
-                onChange={(next) => { toggleModality('image', next) }}
-              />
+            <div className="dmp-settings-toggles" role="group" aria-labelledby={inputLabelId}>
+              <span className="dmp-settings-toggle">
+                <span className="dmp-settings-toggle-name">{t('settings.input.text')}</span>
+                <Switch
+                  className="dmp-settings-switch"
+                  checked={shownInput.includes('text')}
+                  label={t('settings.input.text')}
+                  disabled={!editable}
+                  onChange={(next) => { toggleModality('text', next) }}
+                />
+              </span>
+              <span className="dmp-settings-toggle">
+                <span className="dmp-settings-toggle-name">{t('settings.input.image')}</span>
+                <Switch
+                  className="dmp-settings-switch"
+                  checked={shownInput.includes('image')}
+                  label={t('settings.input.image')}
+                  disabled={!editable}
+                  onChange={(next) => { toggleModality('image', next) }}
+                />
+              </span>
             </div>
-            {inputHint !== null && <div className="dmp-settings-hint">{inputHint}</div>}
           </div>
         )}
 
         {showsContextField(address, capability) && (
           <div className="dmp-settings-section">
-            <span className="zmd-label">{t('settings.context.title')}</span>
-            <div className="dmp-settings-row">
-              <Input
-                className={capacityError ? 'dmp-settings-input dmp-settings-input-bad' : 'dmp-settings-input'}
-                type="text"
-                inputMode="numeric"
-                disabled={!editable}
-                aria-label={t('settings.context.title')}
-                aria-invalid={capacityError || undefined}
-                placeholder={contextField.placeholder}
-                value={capacity}
-                onChange={(event) => {
-                  setCapacityDraft(event.target.value)
-                  setCapacityError(false)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  event.stopPropagation()
-                  commitCapacity()
-                }}
-                onBlur={() => { commitCapacity() }}
-              />
+            <div className="dmp-settings-readout" data-no-value={contextValue === null ? '' : undefined}>
+              <span className="zmd-label" id={contextLabelId}>{t('settings.context.title')}</span>
+              {contextValue !== null && (
+                <span
+                  className="dmp-settings-value zmd-num"
+                  data-empty={contextFact.value === undefined ? '' : undefined}
+                  title={contextFact.value === undefined ? undefined : formatContext(contextFact.value)}
+                >
+                  {contextValue}
+                </span>
+              )}
+              <span className="dmp-settings-source">{t(FACT_SOURCE_KEYS[contextFact.source])}</span>
             </div>
-            {contextHint !== null && <div className="dmp-settings-hint">{contextHint}</div>}
+            <div className="dmp-context-presets" role="group" aria-label={t('settings.context.presets')}>
+              {CONTEXT_PRESETS.map(preset => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className="dmp-context-preset"
+                  aria-pressed={!customMode && declaredContext === preset.value}
+                  disabled={!editable}
+                  onMouseDown={presetPointerDown}
+                  onClick={() => { choosePreset(preset.value) }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="dmp-context-preset"
+                aria-pressed={customMode}
+                disabled={!editable}
+                onMouseDown={presetPointerDown}
+                onClick={toggleCustom}
+              >
+                {t('settings.context.custom')}
+              </button>
+            </div>
+            {customMode && (
+              <>
+                <div className="dmp-settings-field">
+                  <Input
+                    ref={capacityRef}
+                    type="text"
+                    inputMode="numeric"
+                    disabled={!editable}
+                    aria-label={t('settings.context.title')}
+                    aria-labelledby={contextLabelId}
+                    aria-invalid={capacityError || undefined}
+                    aria-describedby={capacityError ? `${idPrefix}-settings-context-error` : undefined}
+                    placeholder={contextPlaceholder}
+                    value={capacity}
+                    onChange={(event) => {
+                      setCapacityDraft(event.target.value)
+                      setCapacityError(false)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter') return
+                      event.preventDefault()
+                      event.stopPropagation()
+                      commitCapacity()
+                    }}
+                    onBlur={() => { commitCapacity() }}
+                  />
+                </div>
+                {capacityError && (
+                  <p className="dmp-settings-error" id={`${idPrefix}-settings-context-error`} role="alert">
+                    {t('settings.context.invalid')}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
 
         {reasoning !== undefined && (
           <div className="dmp-settings-section">
-            <span className="zmd-label">{t('settings.effort.title')}</span>
-            <div className="dmp-effort-list" role="radiogroup" aria-label={t('settings.effort.title')}>
+            <div className="dmp-settings-readout" data-no-value="">
+              <span className="zmd-label" id={effortLabelId}>{t('settings.effort.title')}</span>
+              <span className="dmp-settings-source">{t('settings.source.session')}</span>
+            </div>
+            <div className="dmp-effort-list" role="radiogroup" aria-labelledby={effortLabelId}>
               {choices.map(choice => (
                 <button
                   key={choice.key}
@@ -338,48 +473,35 @@ export function SettingsMenu({
                   role="radio"
                   aria-checked={choice.effort === activeEffort}
                   className="dmp-effort-item"
-                  disabled={busy}
+                  aria-disabled={busy || undefined}
                   onClick={() => { pickEffort(choice.effort) }}
                 >
-                  <span className="dmp-effort-name">{choice.label}</span>
-                  <span
-                    className="dmp-effort-check"
-                    data-on={choice.effort === activeEffort ? '' : undefined}
-                  >
-                    {choice.effort === activeEffort ? <IconCheckOutlineRegular /> : null}
-                  </span>
+                  {choice.label}
                 </button>
               ))}
             </div>
           </div>
         )}
-
-        {address !== null && (
-          <div className="dmp-settings-target">
-            <span className="dmp-settings-target-label">{t('settings.targetLabel')}</span>
-            <span className="dmp-settings-target-value">
-              {t('settings.target', { ns: address.ns, path: address.entryPath.join('.') })}
-            </span>
-          </div>
-        )}
-
-        <div className="dmp-settings-note">
-          <IconInfoOutlineRegular className="dmp-settings-note-icon" />
-          <span>{t('settings.note')}</span>
-        </div>
       </div>
 
       <div className="dmp-settings-foot">
-        <span className="dmp-settings-hint">{t('settings.scope')}</span>
-        <button
-          type="button"
-          className="zmd-btn-ghost"
-          aria-label={t('settings.resetAria', { model: modelLabel })}
-          disabled={!editable || address === null || !address.declared}
-          onClick={restoreDefaults}
+        <span
+          className="dmp-settings-hint"
+          title={address === null ? undefined : t('settings.target', { ns: address.ns, path: address.entryPath.join('.') })}
         >
-          {t('settings.reset')}
-        </button>
+          {t('settings.scope')}
+        </span>
+        {address !== null && address.declared && snapshot.writable && (
+          <button
+            type="button"
+            className="zmd-btn-ghost"
+            aria-label={t('settings.resetAria', { model: modelLabel })}
+            disabled={!editable}
+            onClick={restoreDefaults}
+          >
+            {t('settings.reset')}
+          </button>
+        )}
       </div>
     </MenuSurface>,
     document.body,

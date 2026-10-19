@@ -47,14 +47,6 @@ export function ProviderRail({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.nativeEvent.isComposing) return
-    if (/^[1-9]$/.test(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      const target = options[Number(event.key) - 1]
-      if (target === undefined || target.failed) return
-      event.preventDefault()
-      event.stopPropagation()
-      refs.current[Number(event.key) - 1]?.focus()
-      return
-    }
     switch (event.key) {
       case 'ArrowDown':
       case 'ArrowUp':

@@ -5,7 +5,8 @@ import type {
   SettingsOp, WriteOutcome,
 } from './contract.ts'
 import {
-  ACCOUNT_ROUTE, apiKeyEnvOf, credentialRefFor, isAdded, isRemovable, joinProviderDirectory,
+  ACCOUNT_ROUTE, apiKeyEnvOf, credentialRefFor, credentialRefsOf, isAdded, isRemovable,
+  joinProviderDirectory,
 } from './modelConfigModel.ts'
 
 export interface ModelConfigFaces {
@@ -91,9 +92,17 @@ export class ModelConfigStore {
         this.publish({ ...this.snapshot, status: 'error', error: settingsAnswer.error.message })
         return
       }
+      if (!registeredAnswer.ok) {
+        this.publish({ ...this.snapshot, status: 'error', error: registeredAnswer.error.message })
+        return
+      }
+      if (!directoryAnswer.ok) {
+        this.publish({ ...this.snapshot, status: 'error', error: directoryAnswer.error.message })
+        return
+      }
       described = settingsAnswer.value
-      registered = registeredAnswer.ok ? registeredAnswer.value : []
-      directory = directoryAnswer.ok ? directoryAnswer.value : []
+      registered = registeredAnswer.value
+      directory = directoryAnswer.value
     } catch (error: unknown) {
       if (generation !== this.generation) return
       this.publish({
@@ -125,7 +134,7 @@ export class ModelConfigStore {
 
     const draft = entries.map(entry => this.rowFor(entry, namespaces.get(entry.settingsNs), accountAvailable))
 
-    const refs = [...new Set(draft.map(credentialRefFor).filter((ref): ref is string => ref !== undefined))]
+    const refs = [...new Set(draft.flatMap(credentialRefsOf))]
 
     let credentials: Record<string, CredentialInfo> = {}
     let credentialError: string | null = null
@@ -146,7 +155,13 @@ export class ModelConfigStore {
     if (generation !== this.generation) return
 
     const rows = entries
-      .map(entry => this.withCredential(entry, namespaces.get(entry.settingsNs), credentials, accountAvailable))
+      .map(entry => this.withCredential(
+        entry,
+        namespaces.get(entry.settingsNs),
+        credentials,
+        accountAvailable,
+        credentialError === null,
+      ))
       .filter(row => row.entry.provider !== ACCOUNT_ROUTE || row.accountAvailable === true)
     this.publish({
       status: 'ready',
@@ -183,17 +198,22 @@ export class ModelConfigStore {
     namespace: SettingsNamespaceView | undefined,
     credentials: Readonly<Record<string, CredentialInfo>>,
     accountAvailable: boolean | undefined,
+    checked: boolean,
   ): ModelConfigRow {
     const base = this.rowFor(entry, namespace, accountAvailable)
     const ref = credentialRefFor(base)
     const info = ref === undefined ? undefined : credentials[ref]
-    return base.apiKeyEnv !== undefined
-      ? { ...base, credential: info }
+    const credential = base.apiKeyEnv !== undefined
+      ? { credential: info }
       : {
-          ...base,
           credential: undefined,
           ...info === undefined ? {} : { derivedCredential: info },
         }
+    return {
+      ...base,
+      ...credential,
+      ...checked ? { credentialChecks: nativeCredentialChecks(base, credentials) } : {},
+    }
   }
 
   async write(ns: string, ops: readonly SettingsOp[], expectedRevision: number | undefined): Promise<WriteOutcome> {
@@ -271,6 +291,19 @@ export class ModelConfigStore {
   namespace(ns: string): SettingsNamespaceView | undefined {
     return this.snapshot.namespaces.get(ns)
   }
+}
+
+function nativeCredentialChecks(
+  row: ModelConfigRow,
+  credentials: Readonly<Record<string, CredentialInfo>>,
+): Readonly<Record<string, CredentialInfo>> {
+  const refs = row.apiKeyEnv === undefined ? row.entry.nativeAuth?.env ?? [] : [row.apiKeyEnv]
+  const checks: Record<string, CredentialInfo> = {}
+  for (const ref of refs) {
+    const info = credentials[ref]
+    if (info !== undefined) checks[ref] = info
+  }
+  return checks
 }
 
 function hasProfile(namespace: SettingsNamespaceView, settingsPath: readonly string[]): boolean {

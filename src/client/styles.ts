@@ -175,20 +175,10 @@ const CSS = `
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
   flex: 0 0 auto;
   min-width: 0;
   padding: 6px 10px 6px 12px;
   border-bottom: 0.5px solid var(--zmd-line);
-}
-
-.dmp-card-count {
-  flex: 0 0 auto;
-  color: var(--zmd-ink-mute);
-  font-size: 12px;
-  line-height: 18px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .dmp-card-body {
@@ -686,8 +676,7 @@ const CSS = `
   white-space: nowrap;
 }
 
-.dmp-card-foot-providers,
-.dmp-card-foot-keys {
+.dmp-card-foot-providers {
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -708,16 +697,18 @@ const CSS = `
 
 .dmp-settings-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
   flex: 0 0 auto;
-  padding: 12px 14px 10px;
+  padding: 10px 14px;
   border-bottom: 0.5px solid var(--zmd-line);
+  text-align: left;
 }
 
 .dmp-settings-title {
-  flex: 1 1 auto;
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   color: var(--zmd-ink);
@@ -728,10 +719,21 @@ const CSS = `
   white-space: nowrap;
 }
 
+.dmp-settings-provider {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zmd-ink-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dmp-settings-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
   padding: 12px 14px;
@@ -744,30 +746,74 @@ const CSS = `
   gap: 6px;
 }
 
-.dmp-settings-row {
+.dmp-settings-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dmp-settings-readout .zmd-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dmp-settings-value {
+  flex: 0 1 auto;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zmd-ink);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dmp-settings-value[data-empty] {
+  color: var(--zmd-ink-secondary);
+  font-weight: 400;
+}
+
+.dmp-settings-source {
+  flex: 0 0 auto;
+  min-width: 88px;
+  color: var(--zmd-ink-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dmp-settings-readout[data-no-value] .dmp-settings-source {
+  margin-left: auto;
+}
+
+.dmp-settings-toggles {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 18px;
   min-height: 28px;
 }
 
-.dmp-settings-name {
-  min-width: 0;
+.dmp-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dmp-settings-toggle-name {
   color: var(--zmd-ink);
   font-size: 14px;
   line-height: 22px;
 }
 
-.dmp-settings-hint {
-  color: var(--zmd-ink-secondary);
-  font-size: 12px;
-  line-height: 18px;
-  text-wrap: pretty;
-}
-
 .dmp-settings-notice {
-  padding: 0 14px 8px;
+  padding: 10px 14px 0;
   color: var(--zmd-ink-secondary);
   font-size: 12px;
   line-height: 18px;
@@ -778,7 +824,7 @@ const CSS = `
   align-items: flex-start;
   gap: 8px;
   margin: 0;
-  padding: 0 14px 8px;
+  padding: 10px 14px 0;
   color: var(--zmd-danger);
   font-size: 12px;
   line-height: 18px;
@@ -790,26 +836,12 @@ const CSS = `
   color: var(--zmd-danger);
 }
 
-.dmp-settings-target {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 10px;
-  border-top: 0.5px solid var(--zmd-line);
-}
-
-.dmp-settings-target-label {
-  color: var(--zmd-ink-mute);
+.dmp-settings-error {
+  margin: 0;
+  color: var(--zmd-danger);
   font-size: 12px;
   line-height: 18px;
-}
-
-.dmp-settings-target-value {
-  color: var(--zmd-ink-secondary);
-  font-size: 12px;
-  line-height: 18px;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .dmp-settings .dmp-settings-switch {
@@ -842,6 +874,7 @@ const CSS = `
 }
 
 .dmp-settings .dmp-settings-switch[aria-checked='true'] > span {
+  background: var(--zmd-on-primary);
   transform: translateX(16px);
 }
 
@@ -850,60 +883,21 @@ const CSS = `
   cursor: default;
 }
 
-.dmp-settings-input {
-  box-sizing: border-box;
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 0.5px solid var(--zmd-line-control);
-  border-radius: var(--zmd-radius-control);
-  background: var(--zmd-field);
-  transition: border-color var(--zmd-fast) var(--zmd-ease);
-}
-
-.dmp-settings-input:focus-within {
-  border-color: var(--zmd-accent);
-}
-
-.dmp-settings-input input {
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--zmd-ink);
-  font-family: var(--zmd-font);
-  font-size: 14px;
-  line-height: 20px;
-  font-variant-numeric: tabular-nums;
-  outline: none;
-}
-
-.dmp-settings-input input::placeholder {
-  color: var(--zmd-ink-dim);
-}
-
-.dmp-settings-input-bad {
-  border-color: var(--zmd-danger);
-}
-
-.dmp-settings-note {
+.dmp-settings-field {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding-top: 10px;
-  border-top: 0.5px solid var(--zmd-line);
-  color: var(--zmd-ink-secondary);
-  font-size: 12px;
-  line-height: 18px;
-  text-wrap: pretty;
+  width: 100%;
+  min-width: 0;
 }
 
-.dmp-settings-note-icon {
-  flex: 0 0 12px;
-  margin-top: 3px;
-  color: var(--zmd-ink-caption);
+.dmp-settings-field > input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.dmp-settings-field > input[aria-invalid='true'] {
+  border-color: var(--zmd-danger);
 }
 
 .dmp-settings-foot {
@@ -911,74 +905,78 @@ const CSS = `
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  box-sizing: border-box;
   flex: 0 0 auto;
+  min-height: 44px;
   padding: 8px 14px;
   border-top: 0.5px solid var(--zmd-line);
 }
 
-.dmp-effort-list {
+.dmp-settings-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zmd-ink-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dmp-effort-list,
+.dmp-context-presets {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 2px;
 }
 
-.dmp-effort-item {
-  position: relative;
+.dmp-effort-item,
+.dmp-context-preset {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 32px;
-  padding: 4px 8px;
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 28px;
+  padding: 2px 10px;
   border: 0;
   border-radius: var(--zmd-radius-compact);
   outline: none;
   background: transparent;
-  color: inherit;
+  color: var(--zmd-ink-secondary);
   font-family: var(--zmd-font);
   font-size: 13px;
   line-height: 20px;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
   transition: background-color var(--zmd-fast) var(--zmd-ease);
 }
 
 .dmp-effort-item:hover:not(:disabled),
-.dmp-effort-item:focus-visible {
+.dmp-effort-item:focus-visible,
+.dmp-context-preset:hover:not(:disabled),
+.dmp-context-preset:focus-visible {
   background: var(--zmd-hover);
 }
 
-.dmp-effort-item[aria-checked='true'] {
+.dmp-effort-item[aria-checked='true'],
+.dmp-context-preset[aria-pressed='true'] {
   background: var(--zmd-hover);
+  color: var(--zmd-ink);
   font-weight: 500;
 }
 
-.dmp-effort-item:disabled {
+.dmp-effort-item:disabled,
+.dmp-context-preset:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.dmp-effort-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dmp-effort-check {
-  display: grid;
-  place-items: center;
-  flex: 0 0 14px;
-  width: 14px;
-  height: 14px;
-  color: var(--zmd-ink);
-}
-
-.dmp-effort-check svg {
-  width: 14px;
-  height: 14px;
+.dmp-effort-item[aria-disabled='true'] {
+  cursor: default;
 }
 
 .dmp-root .dmp-trigger:focus-visible,
@@ -986,6 +984,7 @@ const CSS = `
 .dmp-menu .dmp-rail-row:focus-visible,
 .dmp-menu .dmp-row:focus-visible,
 .dmp-menu .dmp-effort-item:focus-visible,
+.dmp-menu .dmp-context-preset:focus-visible,
 .dmp-menu .dmp-search-clear:focus-visible,
 .dmp-menu .dmp-retry:focus-visible,
 .dmp-menu .dmp-filter-clear:focus-visible,
@@ -998,11 +997,6 @@ const CSS = `
   .dmp-card {
     height: auto;
     max-height: min(560px, calc(100vh - 96px));
-  }
-
-  .dmp-card-head {
-    gap: 6px;
-    padding: 6px 10px 6px 12px;
   }
 
   .dmp-card-head .dmp-search {
@@ -1072,13 +1066,13 @@ const CSS = `
   .dmp-row,
   .dmp-rail-row,
   .dmp-effort-item,
+  .dmp-context-preset,
   .dmp-search-clear,
   .dmp-retry,
   .dmp-filter-clear,
   .dmp-settings-switch,
   .dmp-settings-switch > span,
   .dmp-card-head .dmp-search,
-  .dmp-settings-input,
   .dmp-chevron {
     transition: none;
   }

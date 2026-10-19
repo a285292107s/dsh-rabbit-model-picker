@@ -213,11 +213,11 @@ export function RetryEditor(props: RetryEditorProps): ReactElement {
       <div className="dmc-retry-actions">
         <button
           type="button"
-          className="zmd-btn-primary"
+          className="zmd-btn-secondary"
           disabled={!editable || !dirty}
           onClick={() => { void commit() }}
         >
-          {busy ? t(KEYS['config.applying']) : t(KEYS['config.apply'])}
+          {busy ? t(KEYS['config.applying']) : t(KEYS['config.retryPolicy.apply'])}
         </button>
         <button
           type="button"

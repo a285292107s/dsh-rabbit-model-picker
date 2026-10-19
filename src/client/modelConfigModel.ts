@@ -6,6 +6,20 @@ import type {
 export const ACCOUNT_ROUTE = 'deepseek-account'
 const OFFICIAL_ROUTE = 'deepseek-official'
 
+export type ProviderFamily = 'pi-ai' | 'deepseek' | 'unknown'
+
+export function providerFamilyOf(settingsNs: string): ProviderFamily {
+  if (settingsNs.startsWith('llm-deepseek')) return 'deepseek'
+  if (settingsNs.startsWith('llm-pi-ai')) return 'pi-ai'
+  return 'unknown'
+}
+
+export function inputFieldOf(family: ProviderFamily): 'input' | 'inputModalities' | undefined {
+  if (family === 'pi-ai') return 'input'
+  if (family === 'deepseek') return 'inputModalities'
+  return undefined
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -26,6 +40,7 @@ export function joinProviderDirectory(
     ...entry.declared === undefined ? {} : { declared: entry.declared },
     ...entry.defaultBaseURL === undefined ? {} : { defaultBaseURL: entry.defaultBaseURL },
     ...entry.baseURLEnv === undefined ? {} : { baseURLEnv: entry.baseURLEnv },
+    ...entry.nativeAuth === undefined ? {} : { nativeAuth: entry.nativeAuth },
     ...entry.error === undefined ? {} : { error: entry.error },
   }))
 
@@ -188,6 +203,14 @@ export function customProviderHost(
   return undefined
 }
 
+export interface CustomModelDraft {
+  readonly id: string
+  readonly name?: string
+  readonly contextWindow?: number
+  readonly maxTokens?: number
+  readonly input?: readonly string[]
+}
+
 export function customProviderOps(
   route: string,
   draft: {
@@ -195,7 +218,7 @@ export function customProviderOps(
     readonly baseURL: string
     readonly api: string
     readonly keyRef: string | undefined
-    readonly models: readonly string[]
+    readonly models: readonly CustomModelDraft[]
   },
 ): readonly SettingsOp[] {
   const id = route.trim()
@@ -206,7 +229,13 @@ export function customProviderOps(
     ...draft.keyRef === undefined ? {} : { apiKeyEnv: draft.keyRef },
     api: draft.api,
     ...base === '' ? {} : { baseURL: base },
-    models: draft.models.map(model => ({ id: model })),
+    models: draft.models.map(model => ({
+      id: model.id,
+      ...model.name === undefined || model.name === '' ? {} : { name: model.name },
+      ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
+      ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
+      ...model.input === undefined || model.input.length === 0 ? {} : { input: [...model.input] },
+    })),
   }
   return [{ op: 'set', path: ['providers', id], value: profile }]
 }
@@ -248,11 +277,26 @@ export function retryCapable(
   namespace: SettingsNamespaceView | undefined,
   settingsPath: readonly string[],
 ): boolean {
+  return profileDeclaresField(namespace, settingsPath, 'retryPolicy')
+}
+
+export function displayNameEditable(
+  namespace: SettingsNamespaceView | undefined,
+  settingsPath: readonly string[],
+): boolean {
+  return profileDeclaresField(namespace, settingsPath, 'displayName')
+}
+
+function profileDeclaresField(
+  namespace: SettingsNamespaceView | undefined,
+  settingsPath: readonly string[],
+  field: string,
+): boolean {
   const refs = schemaRefsOf(namespace)
   if (refs === undefined) return false
   const profile = schemaNodeAt(refs, namespace, settingsPath)
   if (profile === undefined) return false
-  return stepDict(refs, profile, 'retryPolicy') !== undefined
+  return stepDict(refs, profile, field) !== undefined
 }
 
 function schemaNodeAt(
@@ -369,4 +413,50 @@ export function credentialRefFor(row: ModelConfigRow): string | undefined {
   if (row.apiKeyEnv !== undefined) return row.apiKeyEnv
   if (row.entry.settingsNs === '' && row.entry.settingsPath.length === 0) return undefined
   return deriveKeyRef(row.entry.provider)
+}
+
+export function credentialRefsOf(row: ModelConfigRow): readonly string[] {
+  if (row.entry.provider === ACCOUNT_ROUTE) return []
+  if (row.apiKeyEnv !== undefined) return [row.apiKeyEnv]
+  const derived = row.entry.settingsNs === '' && row.entry.settingsPath.length === 0
+    ? []
+    : [deriveKeyRef(row.entry.provider)]
+  return [...new Set([...derived, ...(row.entry.nativeAuth?.env ?? [])])]
+}
+
+const ENV_LINE = /^[A-Z][A-Z0-9_]*=[^=]/
+const LEGAL_API_KEY = /^[\x21-\x7E]+$/
+
+export function apiKeyProblem(value: string): 'blank' | 'illegal' | undefined {
+  if (value.length === 0) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return 'blank'
+  const first = trimmed[0]
+  const quoted = (first === '"' || first === "'" || first === '`')
+    && trimmed.length > 1
+    && trimmed.endsWith(first)
+  if (ENV_LINE.test(trimmed) || quoted || !LEGAL_API_KEY.test(trimmed)) return 'illegal'
+  return undefined
+}
+
+const TOKEN_COUNT = /^(\d+(?:\.\d+)?)([KM])?$/
+
+export function parseTokenCount(raw: string): number | null {
+  const text = raw.trim().replace(/[\s_]/g, '').toUpperCase()
+  const match = TOKEN_COUNT.exec(text)
+  if (match === null) return null
+  const scale = match[2] === 'M' ? 1_000_000 : match[2] === 'K' ? 1_000 : 1
+  const tokens = Math.round(Number(match[1]) * scale)
+  return Number.isFinite(tokens) && tokens > 0 ? tokens : null
+}
+
+export function catalogAddProfile(
+  provider: string,
+  draft: { readonly baseURL: string; readonly bindKey: boolean },
+): Record<string, unknown> {
+  const base = draft.baseURL.trim()
+  return {
+    ...base === '' ? {} : { baseURL: base },
+    ...draft.bindKey ? { apiKeyEnv: deriveKeyRef(provider) } : {},
+  }
 }

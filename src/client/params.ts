@@ -8,8 +8,6 @@ export const MIN_CONTEXT = 1_024
 
 export const MAX_CONTEXT = 10_485_760
 
-export const CONTEXT_PLACEHOLDER = '128K'
-
 export const PANEL_MODALITIES = ['text', 'image'] as const
 
 const INPUT_FIELD_BY_NS: Record<string, string> = {

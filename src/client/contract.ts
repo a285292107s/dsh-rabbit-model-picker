@@ -84,6 +84,11 @@ export interface LlmProviderInfo {
   readonly name: string
 }
 
+export interface NativeAuth {
+  readonly env: readonly string[]
+  readonly oauth?: boolean
+}
+
 export interface ProviderDirectoryEntry {
   readonly provider: string
   readonly displayName: string
@@ -93,6 +98,7 @@ export interface ProviderDirectoryEntry {
   readonly declared?: boolean
   readonly defaultBaseURL?: string
   readonly baseURLEnv?: readonly string[]
+  readonly nativeAuth?: NativeAuth
   readonly error?: string
 }
 
@@ -110,6 +116,7 @@ export interface ModelConfigRow {
   readonly apiKeyEnv: string | undefined
   readonly credential: CredentialInfo | undefined
   readonly derivedCredential?: CredentialInfo
+  readonly credentialChecks?: Readonly<Record<string, CredentialInfo>>
   readonly accountAvailable?: boolean
 }
 
@@ -160,6 +167,7 @@ export interface ConfigurableProvider {
   readonly error?: string
   readonly defaultBaseURL?: string
   readonly baseURLEnv?: readonly string[]
+  readonly nativeAuth?: NativeAuth
 }
 
 export type RetryPolicyMode = 'normal' | 'always'

@@ -6,11 +6,12 @@ import type {
 } from './contract.ts'
 import type { ModelConfigStore } from './modelConfigStore.ts'
 import {
-  hasPath, modelsOf, pathOps, readPath, reasoningLevelChoices, validateModels,
+  hasPath, inputFieldOf, modelsOf, parseTokenCount, pathOps, providerFamilyOf, readPath,
+  reasoningLevelChoices, validateModels,
 } from './modelConfigModel.ts'
 import { KEYS, VALIDATION_KEYS } from './modelConfigCopy.ts'
 import type { ConfigKey } from './modelConfigCopy.ts'
-import { formatContext, parseContext } from './params.ts'
+import { formatContext } from './params.ts'
 import { formatWindowStatement } from './format.ts'
 import { injectCatalogStyles } from './catalogStyles.ts'
 
@@ -18,6 +19,10 @@ const OFF_LEVEL = 'off'
 const INITIAL_LEVELS: readonly string[] = [OFF_LEVEL, 'low', 'medium', 'high']
 
 const EDITED_FIELDS: readonly string[] = ['id', 'name', 'contextWindow', 'maxTokens', 'reasoningEfforts']
+
+const INPUT_MODALITIES: readonly string[] = ['text', 'image']
+
+const DEFAULT_INPUT_MODALITIES: readonly string[] = ['text']
 
 const MODEL_ROW_SELECTOR = '.dmc-model-row'
 
@@ -36,6 +41,29 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return isRecordValue(value) ? value : undefined
 }
 
+function modalitySeedOf(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined
+  const modalities = value.filter((item): item is string => typeof item === 'string')
+  return modalities.length === value.length ? modalities : undefined
+}
+
+function orderedModalities(list: readonly string[]): readonly string[] {
+  const present = new Set(list)
+  const known = INPUT_MODALITIES.filter(modality => present.has(modality))
+  const extras = list.filter(modality => !INPUT_MODALITIES.includes(modality))
+  return [...known, ...new Set(extras)]
+}
+
+function withoutImageBudget(
+  extra: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  if (!('imagePixelBudget' in extra) && !('imageMaxBytes' in extra)) return extra
+  const next = { ...extra }
+  delete next.imagePixelBudget
+  delete next.imageMaxBytes
+  return next
+}
+
 interface DraftReasoning {
   readonly level: string
   readonly value: string
@@ -49,6 +77,7 @@ interface DraftModel {
   readonly name: string
   readonly contextWindow: string
   readonly maxTokens: string
+  readonly input: readonly string[] | undefined
   readonly storedWindow: number | undefined
   readonly storedTokens: number | undefined
   readonly reasoning: readonly DraftReasoning[] | undefined
@@ -61,6 +90,8 @@ interface ModelEdit {
   readonly name?: string
   readonly contextWindow?: string
   readonly maxTokens?: string
+  readonly input?: readonly string[]
+  readonly extra?: Readonly<Record<string, unknown>>
   readonly reasoning?: readonly DraftReasoning[] | null
   readonly open?: boolean
 }
@@ -76,7 +107,6 @@ type Discovery =
       readonly candidates: readonly DiscoveredModel[]
       readonly selected: ReadonlySet<string>
       readonly query: string
-      readonly note: string | null
     }
 
 function rawModelsOf(value: unknown, settingsPath: readonly string[]): readonly unknown[] {
@@ -106,10 +136,16 @@ function withoutReasoningField(
   return next
 }
 
-function seedModel(raw: Record<string, unknown>, key: string): DraftModel {
+function seedModel(
+  raw: Record<string, unknown>,
+  key: string,
+  inputField: 'input' | 'inputModalities' | undefined,
+): DraftModel {
+  const input = inputField === undefined ? undefined : modalitySeedOf(raw[inputField])
   const extra: Record<string, unknown> = {}
   for (const [field, value] of Object.entries(raw)) {
     if (EDITED_FIELDS.includes(field)) continue
+    if (field === inputField && input !== undefined) continue
     extra[field] = value
   }
   const rawReasoning = raw.reasoningEfforts
@@ -123,6 +159,7 @@ function seedModel(raw: Record<string, unknown>, key: string): DraftModel {
     name: typeof raw.name === 'string' ? raw.name : '',
     contextWindow: typeof raw.contextWindow === 'number' ? formatContext(raw.contextWindow) : '',
     maxTokens: typeof raw.maxTokens === 'number' ? formatContext(raw.maxTokens) : '',
+    input,
     storedWindow: typeof raw.contextWindow === 'number' ? raw.contextWindow : undefined,
     storedTokens: typeof raw.maxTokens === 'number' ? raw.maxTokens : undefined,
     reasoning,
@@ -131,11 +168,14 @@ function seedModel(raw: Record<string, unknown>, key: string): DraftModel {
   }
 }
 
-function seedModels(raw: readonly unknown[]): readonly DraftModel[] {
+function seedModels(
+  raw: readonly unknown[],
+  inputField: 'input' | 'inputModalities' | undefined,
+): readonly DraftModel[] {
   const models: DraftModel[] = []
   raw.forEach((item, index) => {
     if (!isRecordValue(item)) return
-    models.push(seedModel(item, `m${index}`))
+    models.push(seedModel(item, `m${index}`, inputField))
   })
   return models
 }
@@ -147,6 +187,7 @@ function seedCandidate(candidate: DiscoveredModel): DraftModel {
     name: candidate.name ?? '',
     contextWindow: candidate.contextWindow === undefined ? '' : formatContext(candidate.contextWindow),
     maxTokens: candidate.maxTokens === undefined ? '' : formatContext(candidate.maxTokens),
+    input: modalitySeedOf(candidate.inputModalities),
     storedWindow: candidate.contextWindow,
     storedTokens: candidate.maxTokens,
     reasoning: undefined,
@@ -180,7 +221,7 @@ function groupByPrefix(candidates: readonly DiscoveredModel[]): readonly Candida
 function capacityOf(text: string, stored: number | undefined): number | null | undefined {
   const trimmed = text.trim()
   if (trimmed === '') return undefined
-  const parsed = parseContext(trimmed)
+  const parsed = parseTokenCount(trimmed)
   if (parsed !== null) return parsed
   if (stored !== undefined && trimmed === formatContext(stored)) return stored
   return null
@@ -223,7 +264,10 @@ function reasoningEntriesOf(
   return entries
 }
 
-function storedValueOf(model: DraftModel): Record<string, unknown> {
+function storedValueOf(
+  model: DraftModel,
+  inputField: 'input' | 'inputModalities' | undefined,
+): Record<string, unknown> {
   const { contextWindow, maxTokens } = capacitiesOf(model)
   const reasoning = reasoningEntriesOf(model.reasoning)
   const name = model.name.trim()
@@ -233,6 +277,7 @@ function storedValueOf(model: DraftModel): Record<string, unknown> {
     ...name === '' ? {} : { name },
     ...contextWindow === undefined ? {} : { contextWindow },
     ...maxTokens === undefined ? {} : { maxTokens },
+    ...inputField === undefined || model.input === undefined ? {} : { [inputField]: model.input },
     ...reasoning === undefined ? {} : { reasoningEfforts: reasoning },
   }
 }
@@ -300,6 +345,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
   const settingsNs = row.entry.settingsNs
   const settingsPath = row.entry.settingsPath
+  const inputField = inputFieldOf(providerFamilyOf(settingsNs))
   const modelsPath = useMemo(() => [...settingsPath, 'models'], [settingsPath])
   const namespace = snapshot.namespaces.get(settingsNs)
   const writable = snapshot.writable
@@ -320,7 +366,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   )
 
   const raw = useMemo(() => rawModelsOf(namespace?.value, settingsPath), [namespace, settingsPath])
-  const seed = useMemo(() => seedModels(raw), [raw])
+  const seed = useMemo(() => seedModels(raw, inputField), [raw, inputField])
   const storedModels = useMemo(() => modelsOf(namespace?.value, settingsPath), [namespace, settingsPath])
 
   const [draft, setDraft] = useState<readonly DraftModel[] | null>(null)
@@ -328,9 +374,24 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [discovery, setDiscovery] = useState<Discovery>({ kind: 'idle' })
+  const [catalogInputs, setCatalogInputs] = useState<ReadonlyMap<string, readonly string[]> | undefined>(undefined)
+
+  useEffect(() => {
+    if (inputField !== 'input' || row.entry.declared === true || namespace === undefined) return
+    let alive = true
+    void store.discover(settingsNs, { provider: row.entry.provider }).then((answer) => {
+      if (!alive || !answer.ok) return
+      const found = new Map<string, readonly string[]>()
+      for (const candidate of answer.models) {
+        if (candidate.inputModalities !== undefined) found.set(candidate.id, candidate.inputModalities)
+      }
+      setCatalogInputs(found)
+    })
+    return () => { alive = false }
+  }, [inputField, namespace, row.entry.declared, row.entry.provider, settingsNs, store])
 
   const baseline = useMemo(() => canonical(raw.filter(isRecordValue)), [raw])
-  const dirty = canonical(models.map(storedValueOf)) !== baseline
+  const dirty = canonical(models.map(model => storedValueOf(model, inputField))) !== baseline
   const problems = useMemo(
     () => problemsOf(models, t, levelChoices.length > 0),
     [models, t, levelChoices],
@@ -380,15 +441,15 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
   }
 
   const updateModel = (model: DraftModel, edit: ModelEdit): void => {
-    const extra = edit.reasoning === null
-      ? withoutReasoningField(model.extra)
-      : model.extra
+    const extra = edit.extra
+      ?? (edit.reasoning === null ? withoutReasoningField(model.extra) : model.extra)
     const next: DraftModel = {
       key: model.key,
       id: edit.id ?? model.id,
       name: edit.name ?? model.name,
       contextWindow: edit.contextWindow ?? model.contextWindow,
       maxTokens: edit.maxTokens ?? model.maxTokens,
+      input: edit.input ?? model.input,
       storedWindow: model.storedWindow,
       storedTokens: model.storedTokens,
       reasoning: edit.reasoning === undefined
@@ -407,6 +468,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       name: '',
       contextWindow: '',
       maxTokens: '',
+      input: undefined,
       storedWindow: undefined,
       storedTokens: undefined,
       reasoning: undefined,
@@ -511,10 +573,31 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     })
   }
 
+  const settleModelId = (model: DraftModel): void => {
+    const id = model.id.trim()
+    if (id === model.id) return
+    updateModel(model, { id })
+  }
+
+  const toggleInput = (model: DraftModel, modality: string, checked: boolean): void => {
+    const current = model.input ?? DEFAULT_INPUT_MODALITIES
+    const next = checked
+      ? orderedModalities([...current, modality])
+      : current.filter(item => item !== modality)
+    if (next.length === 0) return
+    updateModel(model, {
+      input: next,
+      ...next.includes('image') ? {} : { extra: withoutImageBudget(model.extra) },
+    })
+  }
+
   const writeModels = async (next: readonly DraftModel[]): Promise<boolean> => {
     if (namespace === undefined) return false
     const profile = asRecord(readPath(namespace.value, settingsPath)) ?? {}
-    const ops = pathOps(settingsPath, profile, { ...profile, models: next.map(storedValueOf) })
+    const ops = pathOps(settingsPath, profile, {
+      ...profile,
+      models: next.map(model => storedValueOf(model, inputField)),
+    })
     setBusy(true)
     setNote(null)
     const outcome = await store.write(settingsNs, ops, namespace.revision)
@@ -581,7 +664,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       setDiscovery({ kind: 'empty' })
       return
     }
-    setDiscovery({ kind: 'ready', candidates, selected: new Set<string>(), query: '', note: null })
+    setDiscovery({ kind: 'ready', candidates, selected: new Set<string>(), query: '' })
   }
 
   const toggleCandidate = (id: string, checked: boolean): void => {
@@ -589,10 +672,10 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     const selected = new Set(discovery.selected)
     if (checked) selected.add(id)
     else selected.delete(id)
-    setDiscovery({ ...discovery, selected, note: null })
+    setDiscovery({ ...discovery, selected })
   }
 
-  const adopt = async (): Promise<void> => {
+  const adopt = (): void => {
     if (discovery.kind !== 'ready' || busy || !writable) return
     const existing = new Set(models.map(model => model.id))
     const additions: DraftModel[] = []
@@ -603,21 +686,16 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       additions.push(seedCandidate(candidate))
     }
     if (additions.length === 0) return
-    const merged = [...models, ...additions]
-    const firstProblem = [...problemsOf(merged, t, levelChoices.length > 0).values()][0]
-    if (firstProblem !== undefined) {
-      setDiscovery({ ...discovery, note: firstProblem })
-      return
-    }
-    const written = await writeModels(merged)
-    if (written && mounted.current) setDiscovery({ kind: 'idle' })
+    patch(rows => [...rows, ...additions])
+    setNote(t(KEYS['config.fetch.addedToDraft']))
+    setDiscovery({ kind: 'idle' })
   }
 
   const catalogHead = (
     <div className="dmc-catalog-head">
       <h2 className="dmc-catalog-title">{t(KEYS['config.models.label'])}</h2>
       <span className="dmc-catalog-status">
-        {storedModels.length > 0
+        {hasPath(namespace?.user, modelsPath)
           ? t(KEYS['config.models.customized'])
           : t(KEYS['config.models.inherited'])}
       </span>
@@ -701,7 +779,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
       if (checked) selected.add(candidate.id)
       else selected.delete(candidate.id)
     }
-    setDiscovery({ ...discovery, selected, note: null })
+    setDiscovery({ ...discovery, selected })
   }
 
   const modelRow = (model: DraftModel): ReactElement => {
@@ -711,6 +789,8 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
     const alias = model.name.trim()
     const context = formatWindowStatement(model.contextWindow, model.storedWindow)
     const output = formatWindowStatement(model.maxTokens, model.storedTokens)
+    const modalities = model.input ?? catalogInputs?.get(model.id) ?? DEFAULT_INPUT_MODALITIES
+    const selectedModalities = INPUT_MODALITIES.filter(modality => modalities.includes(modality))
     const reasoningUsed = new Set((model.reasoning ?? []).map(entry => entry.level))
     return (
       <li
@@ -779,6 +859,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
                   disabled={disabled}
                   data-invalid={message === undefined ? undefined : 'true'}
                   onChange={(event) => { updateModel(model, { id: event.target.value }) }}
+                  onBlur={() => { settleModelId(model) }}
                 />
               </div>
               <div className="dmc-model-field">
@@ -832,6 +913,38 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
                 />
               </div>
             </div>
+
+            {inputField === undefined ? null : (
+              <div className="dmc-input-types">
+                <span className="zmd-label">{t(KEYS['config.model.inputTypes'])}</span>
+                <div
+                  className="dmc-input-options"
+                  role="group"
+                  aria-label={t(KEYS['config.model.inputTypes'])}
+                >
+                  {INPUT_MODALITIES.map((modality) => {
+                    const checked = selectedModalities.includes(modality)
+                    return (
+                      <label className="dmc-input-option" key={modality}>
+                        <input
+                          className="dmc-input-check"
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled || (checked && selectedModalities.length === 1)}
+                          onChange={(event) => { toggleInput(model, modality, event.target.checked) }}
+                        />
+                        <span>
+                          {t(modality === 'text'
+                            ? KEYS['config.model.inputText']
+                            : KEYS['config.model.inputImage'])}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="dmc-model-hint">{t(KEYS['config.model.inputHint'])}</p>
+              </div>
+            )}
 
             {levelChoices.length === 0 ? null : (
               <div className="dmc-reasoning">
@@ -934,7 +1047,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
         <button
           type="button"
           className="zmd-btn-ghost dmc-discover"
-          disabled={busy || discovery.kind === 'fetching'}
+          disabled={!writable || busy || discovery.kind === 'fetching'}
           onClick={() => { void fetchModels() }}
         >
           {t(KEYS['config.fetch.action'])}
@@ -957,7 +1070,7 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
             aria-label={t(KEYS['config.fetch.search'])}
             placeholder={t(KEYS['config.fetch.search'])}
             value={discovery.query}
-            onChange={(event) => { setDiscovery({ ...discovery, query: event.target.value, note: null }) }}
+            onChange={(event) => { setDiscovery({ ...discovery, query: event.target.value }) }}
           />
           <div className="dmc-discover-tools">
             <span className="dmc-catalog-status">
@@ -1023,13 +1136,12 @@ export function ModelCatalog(props: ModelCatalogProps): ReactElement {
               ))}
             </ul>
           )}
-          {discovery.note === null ? null : <p className="dmc-catalog-error">{discovery.note}</p>}
           <div className="dmc-catalog-tools">
             <button
               type="button"
               className="zmd-btn-primary"
               disabled={!writable || busy || selectedAddable.length === 0}
-              onClick={() => { void adopt() }}
+              onClick={() => { adopt() }}
             >
               {busy ? t(KEYS['config.applying']) : t(KEYS['config.fetch.adopt'])}
             </button>

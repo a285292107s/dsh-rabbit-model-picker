@@ -7,6 +7,7 @@ const CSS = `
 .dmc-model-row,
 .dmc-model-well,
 .dmc-model-input,
+.dmc-input-check,
 .dmc-discover-search,
 .dmc-discover-check {
   box-sizing: border-box;
@@ -272,6 +273,57 @@ const CSS = `
   overflow-wrap: anywhere;
 }
 
+.dmc-input-types {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--zmd-line-strong);
+}
+
+.dmc-input-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+.dmc-input-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--zmd-ink);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.dmc-input-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--zmd-fill-primary);
+  cursor: pointer;
+}
+
+.dmc-input-check:disabled {
+  cursor: default;
+}
+
+.dmc-input-check:disabled + span {
+  color: var(--zmd-ink-mute);
+}
+
+.dmc-model-hint {
+  margin: 0;
+  color: var(--zmd-ink-mute);
+  font-size: 12px;
+  line-height: 18px;
+  text-wrap: pretty;
+}
+
 .dmc-reasoning {
   display: flex;
   flex-direction: column;
@@ -496,6 +548,7 @@ const CSS = `
 .dmc-catalog-panel .zmd-btn-primary:focus-visible,
 .dmc-catalog-panel .zmd-btn-danger:focus-visible,
 .dmc-catalog-panel .dmc-model-input:focus-visible,
+.dmc-catalog-panel .dmc-input-check:focus-visible,
 .dmc-catalog-panel .dmc-reasoning-select:focus-visible,
 .dmc-catalog-panel .dmc-reasoning-value:focus-visible,
 .dmc-catalog-panel .dmc-discover-search:focus-visible,
@@ -578,15 +631,33 @@ const CSS = `
 }
 `
 
-export function injectCatalogStyles(): () => void {
-  if (typeof document === 'undefined') return () => {}
-  document.getElementById(STYLE_ELEMENT_ID)?.remove()
+let styleReferenceCount = 0
+
+function catalogStyleElement(): HTMLStyleElement {
+  const current = document.getElementById(STYLE_ELEMENT_ID)
+  if (current instanceof HTMLStyleElement) {
+    if (current.textContent !== CSS) current.textContent = CSS
+    return current
+  }
+  current?.remove()
   const element = document.createElement('style')
   element.id = STYLE_ELEMENT_ID
   element.textContent = CSS
   document.head.append(element)
+  return element
+}
+
+export function injectCatalogStyles(): () => void {
+  if (typeof document === 'undefined') return () => {}
+  styleReferenceCount += 1
+  catalogStyleElement()
+  let active = true
   return () => {
-    if (element.isConnected) element.remove()
+    if (!active) return
+    active = false
+    styleReferenceCount = Math.max(0, styleReferenceCount - 1)
+    if (styleReferenceCount > 0) return
+    document.getElementById(STYLE_ELEMENT_ID)?.remove()
   }
 }
 

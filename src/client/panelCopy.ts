@@ -1,4 +1,4 @@
-import { CONTEXT_PLACEHOLDER, PANEL_MODALITIES, formatContext } from './params.ts'
+import { PANEL_MODALITIES, formatContext } from './params.ts'
 import type { ParamsSnapshot, RouteAddress, RouteCapability, Translate } from './contract.ts'
 
 export interface CopyLine {
@@ -10,14 +10,16 @@ export interface PanelCopyState {
   readonly address: RouteAddress | null
   readonly capability: RouteCapability | null
   readonly snapshot: Pick<ParamsSnapshot, 'status' | 'error' | 'writable'>
-  readonly busy: boolean
   readonly capacityError: boolean
 }
 
-export interface PanelCopy {
-  readonly notice: string | null
-  readonly inputHint: string
-  readonly contextHint: string | null
+export type FactSource = 'declared' | 'catalog' | 'default' | 'none'
+
+export const FACT_SOURCE_KEYS: Readonly<Record<FactSource, string>> = {
+  declared: 'settings.source.declared',
+  catalog: 'settings.source.catalog',
+  default: 'settings.source.default',
+  none: 'settings.source.none',
 }
 
 export function modalityLabel(modalities: readonly string[], t: Translate): string {
@@ -48,7 +50,6 @@ export function noticeOf(state: PanelCopyState): CopyLine | null {
 }
 
 export function noticeKeyOf(state: PanelCopyState): CopyLine | null {
-  if (state.busy) return { key: 'settings.busy' }
   if (state.snapshot.status === 'loading' || state.snapshot.status === 'idle') {
     return { key: 'settings.loading' }
   }
@@ -59,54 +60,33 @@ export function noticeKeyOf(state: PanelCopyState): CopyLine | null {
   return null
 }
 
-export function inputHintOf(state: PanelCopyState, t: Translate): CopyLine | null {
-  const address = state.address
-  const published = publishedInputOf(state.capability)
-  if (address !== null && address.input.length > 0) {
-    return noticeOf(state) === null
-      ? { key: 'settings.input.declared', params: { list: modalityLabel(address.input, t) } }
-      : null
-  }
-  if (published !== undefined) {
-    return { key: 'settings.input.capability', params: { list: modalityLabel(published, t) } }
-  }
-  if (noticeOf(state) !== null) return null
-  if (address === null) return null
-  if (address.defaultInput.length > 0) {
-    return { key: 'settings.input.default', params: { list: modalityLabel(address.defaultInput, t) } }
-  }
-  return { key: 'settings.input.defaultUnknown' }
-}
-
-export function contextHintOf(state: PanelCopyState): CopyLine | null {
-  if (state.capacityError) return { key: 'settings.context.invalid' }
-  const address = state.address
-  const published = state.capability?.contextWindow
-  if (address !== null && address.contextWindow !== undefined) {
-    return noticeOf(state) === null ? { key: 'settings.context.declared' } : null
-  }
-  if (published !== undefined) {
-    return { key: 'settings.context.capability', params: { value: formatContext(published) } }
-  }
-  if (noticeOf(state) !== null) return null
-  if (address === null) return null
-  if (address.defaultContextWindow !== undefined) {
-    return { key: 'settings.context.default', params: { value: formatContext(address.defaultContextWindow) } }
-  }
-  return { key: 'settings.context.unset' }
-}
-
-export function contextFieldOf(
+export function inputSourceOf(
   address: RouteAddress | null, capability: RouteCapability | null = null,
-): { value: string, placeholder: string } {
-  const declared = address?.contextWindow
-  const fallback = capability?.contextWindow ?? address?.defaultContextWindow
-  return {
-    value: declared === undefined ? '' : formatContext(declared),
-    placeholder: declared === undefined
-      ? fallback === undefined ? CONTEXT_PLACEHOLDER : formatContext(fallback)
-      : formatContext(declared),
+): FactSource {
+  if (address !== null && address.input.length > 0) return 'declared'
+  if (publishedInputOf(capability) !== undefined) return 'catalog'
+  if (address !== null && address.defaultInput.length > 0) return 'default'
+  return 'none'
+}
+
+export function contextFactOf(
+  address: RouteAddress | null, capability: RouteCapability | null = null,
+): { readonly value: number | undefined; readonly source: FactSource } {
+  if (address !== null && address.contextWindow !== undefined) {
+    return { value: address.contextWindow, source: 'declared' }
   }
+  if (capability?.contextWindow !== undefined) {
+    return { value: capability.contextWindow, source: 'catalog' }
+  }
+  if (address !== null && address.defaultContextWindow !== undefined) {
+    return { value: address.defaultContextWindow, source: 'default' }
+  }
+  return { value: undefined, source: 'none' }
+}
+
+export function contextFieldOf(address: RouteAddress | null): { readonly value: string } {
+  const declared = address?.contextWindow
+  return { value: declared === undefined ? '' : formatContext(declared) }
 }
 
 export function shownInputOf(
@@ -123,13 +103,6 @@ export function showsInputSection(
   address: RouteAddress | null, capability: RouteCapability | null = null,
 ): boolean {
   return address !== null || publishedInputOf(capability) !== undefined
-}
-
-export function restoreIsEmpty(state: PanelCopyState): boolean {
-  const address = state.address
-  if (address === null) return false
-  if (noticeKeyOf(state) !== null) return false
-  return address.input.length === 0 && address.contextWindow === undefined
 }
 
 export function showsContextField(

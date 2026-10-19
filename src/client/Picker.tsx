@@ -311,7 +311,7 @@ export function Picker(props: PickerProps) {
     }
     const rect = settingsButtonRef.current?.getBoundingClientRect()
     if (rect !== undefined) {
-      const estimated = 330
+      const estimated = 400
       const below = window.innerHeight - rect.bottom
       const top = below < estimated && rect.top > below ? 'top' : 'bottom'
       setSettingsSide(top)
@@ -337,10 +337,13 @@ export function Picker(props: PickerProps) {
     setToast({ seq: toastSeq.current, text })
   }
 
-  const settleSelection = (result: Awaited<ReturnType<PickerProps['select']>>): void => {
+  const settleSelection = (
+    result: Awaited<ReturnType<PickerProps['select']>>,
+    closeOnSuccess = true,
+  ): void => {
     if (result === undefined) return
     if (result.ok) {
-      if (rootRef.current !== null) closeAfterSelection()
+      if (closeOnSuccess && rootRef.current !== null) closeAfterSelection()
       return
     }
     const { error } = result
@@ -354,6 +357,13 @@ export function Picker(props: PickerProps) {
     setSelectionFocus(true)
     triggerRef.current?.focus()
     void select(selection).then(settleSelection).catch((error: unknown) => {
+      showFailure(t('error.action', { message: error instanceof Error ? error.message : String(error) }))
+    })
+  }
+
+  const changeEffort = (selection: ModelSelection): void => {
+    lastActionRef.current = 'select'
+    void select(selection).then(result => settleSelection(result, false)).catch((error: unknown) => {
       showFailure(t('error.action', { message: error instanceof Error ? error.message : String(error) }))
     })
   }
@@ -495,7 +505,6 @@ export function Picker(props: PickerProps) {
       ? `${t('settings.open')} · ${t('settings.openDeclared')}`
       : t('settings.open')
 
-  const scopeCount = t('card.count', { count: String(rows.length) })
   const hiddenRows = Math.max(0, catalogRows.length - rows.length)
   const footNote = hiddenRows === 0
     ? t('card.footTotal', { count: String(rows.length) })
@@ -503,10 +512,6 @@ export function Picker(props: PickerProps) {
   const footKeys = groups.length > 1
     ? t('card.footProviders', { count: String(groups.length) })
     : ''
-  const railKeys = providerOptions.filter(option => !option.failed).length > 1
-    ? t('card.railKeys')
-    : ''
-
   rowRefs.current = []
 
   return (
@@ -558,7 +563,7 @@ export function Picker(props: PickerProps) {
           aria-label={state.current === null
             ? t('settings.openNoModel')
             : t('settings.openAria', { model: modelName })}
-          aria-haspopup="menu"
+          aria-haspopup="dialog"
           aria-expanded={settingsAt}
           aria-controls={settingsAt ? `${id}-settings` : undefined}
           data-selection-focus={settingsAt ? '' : undefined}
@@ -581,7 +586,6 @@ export function Picker(props: PickerProps) {
           aria-busy={state.status === 'loading' || busy}
         >
           <div className="dmp-card-head">
-            <span className="dmp-card-count zmd-num">{scopeCount}</span>
             <Input
               ref={searchRef}
               className="dmp-search"
@@ -761,7 +765,6 @@ export function Picker(props: PickerProps) {
           <div className="dmp-card-foot">
             <span className="dmp-card-foot-note zmd-num">{footNote}</span>
             <span className="dmp-card-foot-providers zmd-num">{footKeys}</span>
-            {railKeys === '' ? null : <span className="dmp-card-foot-keys">{railKeys}</span>}
           </div>
         </MenuSurface>,
         document.body,
@@ -779,7 +782,7 @@ export function Picker(props: PickerProps) {
           busy={busy}
           maxHeight={settingsBudget}
           t={t}
-          onSelect={(selection) => { submit(selection) }}
+          onSelect={changeEffort}
           onClose={closeSettings}
         />,
         document.body,
